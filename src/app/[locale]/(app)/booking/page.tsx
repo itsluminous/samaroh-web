@@ -1,7 +1,7 @@
-import { useTranslations } from 'next-intl';
-import PlaceholderScreen from '@/components/PlaceholderScreen';
+import BookingScreen from './components/BookingScreen';
 
+// Booking tab (§4.1): month calendar home. All interactivity lives in the
+// client component; this stays a server component for the App Router.
 export default function BookingPage() {
-  const t = useTranslations('common.nav');
-  return <PlaceholderScreen feature={t('booking')} />;
+  return <BookingScreen />;
 }

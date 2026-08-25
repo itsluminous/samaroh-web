@@ -2,9 +2,11 @@
 // status-styled pills; cancelled hidden; agenda shows cancelled struck through).
 
 import { render, screen } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import en from '../messages/en.json';
+import theme from '@/theme/theme';
 import AgendaList from '@/app/[locale]/(app)/booking/components/AgendaList';
 import CalendarGrid from '@/app/[locale]/(app)/booking/components/CalendarGrid';
 import SummaryCard from '@/app/[locale]/(app)/booking/components/SummaryCard';
@@ -22,7 +24,24 @@ describe('SummaryCard', () => {
   it('shows localized received/pending amounts with Indian grouping', () => {
     wrap(<SummaryCard received={106511} pending={50000} />);
     expect(screen.getByText(en.booking.summary.this_month)).toBeInTheDocument();
-    expect(screen.getByText('Received \u20B91,06,511 \u00B7 Pending \u20B950,000')).toBeInTheDocument();
+    expect(screen.getByText('Received \u20B91,06,511')).toBeInTheDocument();
+    expect(screen.getByText('Pending \u20B950,000')).toBeInTheDocument();
+  });
+
+  it('colors received green (success) and pending red (error)', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <SummaryCard received={106511} pending={50000} />
+        </NextIntlClientProvider>
+      </ThemeProvider>,
+    );
+    expect(screen.getByText('Received \u20B91,06,511')).toHaveStyle({
+      color: 'var(--mui-palette-success-main)',
+    });
+    expect(screen.getByText('Pending \u20B950,000')).toHaveStyle({
+      color: 'var(--mui-palette-error-main)',
+    });
   });
 });
 

@@ -13,7 +13,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import Fab from '@mui/material/Fab';
+import GlassFab from '@/components/GlassFab';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -357,14 +357,14 @@ export default function BookingScreen() {
 
       {ctx.permissions.create ? (
         <Tooltip title={t('booking.calendar.add')}>
-          <Fab
+          <GlassFab
             color="primary"
             aria-label={t('booking.calendar.add')}
             onClick={() => setForm({ mode: 'add', booking: null, initialDate: null })}
             sx={{ position: 'fixed', bottom: { xs: 76, md: 24 }, right: 24 }}
           >
             <AddIcon />
-          </Fab>
+          </GlassFab>
         </Tooltip>
       ) : null}
 

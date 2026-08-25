@@ -6,7 +6,7 @@ import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CircularProgress from '@mui/material/CircularProgress';
-import Fab from '@mui/material/Fab';
+import GlassFab from '@/components/GlassFab';
 import List from '@mui/material/List';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -200,7 +200,7 @@ export default function ExpensesHome() {
         </List>
       )}
 
-      <Fab
+      <GlassFab
         color="primary"
         variant="extended"
         aria-label={t('home.add_person')}
@@ -209,7 +209,7 @@ export default function ExpensesHome() {
       >
         <PersonAddAlt1Icon sx={{ mr: 1 }} />
         {t('home.add_person')}
-      </Fab>
+      </GlassFab>
 
       <AddPersonDialog
         open={addOpen}

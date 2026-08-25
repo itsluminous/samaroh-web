@@ -1,9 +1,11 @@
 'use client';
 
-// Header summary card (§4.1): "This month: Received ₹X · Pending ₹Y".
+// Header summary card (§4.1): "This month" with received/pending amounts.
+// Colors match Android: received is green (success/moneyIn), pending is red (error).
 
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { formatRupees } from '@/lib/booking/money';
@@ -16,12 +18,14 @@ export default function SummaryCard({ received, pending }: { received: number; p
         <Typography variant="overline" color="text.secondary" component="div">
           {t('this_month')}
         </Typography>
-        <Typography variant="subtitle1" fontWeight={600}>
-          {t('received_pending', {
-            received: formatRupees(received),
-            pending: formatRupees(pending),
-          })}
-        </Typography>
+        <Stack direction="row" spacing={2}>
+          <Typography variant="subtitle1" fontWeight={600} color="success.main">
+            {t('received', { amount: formatRupees(received) })}
+          </Typography>
+          <Typography variant="subtitle1" fontWeight={600} color="error.main">
+            {t('pending', { amount: formatRupees(pending) })}
+          </Typography>
+        </Stack>
       </CardContent>
     </Card>
   );

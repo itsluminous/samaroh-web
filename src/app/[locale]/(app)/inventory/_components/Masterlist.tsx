@@ -15,7 +15,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
-import Fab from '@mui/material/Fab';
+import GlassFab from '@/components/GlassFab';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -212,7 +212,7 @@ export default function Masterlist() {
         </List>
       )}
 
-      <Fab
+      <GlassFab
         color="primary"
         variant="extended"
         aria-label={t('master.add_item')}
@@ -224,7 +224,7 @@ export default function Masterlist() {
       >
         <AddIcon sx={{ mr: 1 }} />
         {t('master.add_item')}
-      </Fab>
+      </GlassFab>
 
       <MasterItemDialog
         open={dialogOpen}

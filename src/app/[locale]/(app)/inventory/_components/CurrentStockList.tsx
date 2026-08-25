@@ -8,7 +8,7 @@ import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
-import Fab from '@mui/material/Fab';
+import GlassFab from '@/components/GlassFab';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -197,7 +197,7 @@ export default function CurrentStockList() {
         </List>
       )}
 
-      <Fab
+      <GlassFab
         color="primary"
         variant="extended"
         aria-label={t('stock.record_transaction')}
@@ -206,7 +206,7 @@ export default function CurrentStockList() {
       >
         <AddIcon sx={{ mr: 1 }} />
         {t('stock.record_transaction')}
-      </Fab>
+      </GlassFab>
 
       <RecordTransactionDialog
         open={txnOpen}

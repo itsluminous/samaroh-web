@@ -57,12 +57,21 @@ export function formatAmount(value: number, options: FormatAmountOptions = {}): 
   return showSymbol ? `₹${formatted}` : formatted;
 }
 
+export interface ParseAmountOptions {
+  /**
+   * Accept 0 as a valid amount (default false). Ledger entries are always
+   * positive (direction carries the sign), but booking totals/deposits/advance
+   * legitimately default to ₹0.
+   */
+  allowZero?: boolean;
+}
+
 /**
- * Parses user amount input (tolerates ₹, commas, whitespace) into a positive
- * decimal-rupee number rounded to 2 places. Returns null when invalid or ≤ 0 —
- * amounts in this app are always positive (direction carries the sign).
+ * Parses user amount input (tolerates ₹, commas, whitespace) into a
+ * non-negative decimal-rupee number rounded to 2 places. Returns null when
+ * invalid, negative, or — unless `allowZero` — zero.
  */
-export function parseAmount(input: string): number | null {
+export function parseAmount(input: string, options: ParseAmountOptions = {}): number | null {
   if (typeof input !== 'string') {
     return null;
   }
@@ -71,7 +80,7 @@ export function parseAmount(input: string): number | null {
     return null;
   }
   const value = Number.parseFloat(clean);
-  if (!Number.isFinite(value) || value <= 0) {
+  if (!Number.isFinite(value) || value < 0 || (value === 0 && !options.allowZero)) {
     return null;
   }
   return round2(value);

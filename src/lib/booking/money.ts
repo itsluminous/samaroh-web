@@ -1,27 +1,9 @@
-// Shared amount formatting (§5 + shared/invoice/layout-spec.md):
-// Indian digit grouping (₹1,06,51,161 — last 3 digits, then groups of 2),
-// two decimals only when paise are non-zero, ₹ immediately before the number.
-// One central implementation — never raw toLocaleString() elsewhere.
+// Booking-facing money helpers — a thin façade over the single shared
+// Indian-grouping formatter in `@/lib/format/amount` (§5 +
+// shared/invoice/layout-spec.md). One central implementation — never raw
+// toLocaleString() elsewhere.
 
-const RUPEE = '\u20B9';
-
-/** Groups an unsigned integer string the Indian way: 1065116 → 10,65,116. */
-function groupIndian(digits: string): string {
-  if (digits.length <= 3) {
-    return digits;
-  }
-  const last3 = digits.slice(-3);
-  let head = digits.slice(0, -3);
-  const parts: string[] = [];
-  while (head.length > 2) {
-    parts.unshift(head.slice(-2));
-    head = head.slice(0, -2);
-  }
-  if (head.length > 0) {
-    parts.unshift(head);
-  }
-  return `${parts.join(',')},${last3}`;
-}
+import { formatAmount, parseAmount as parseAmountCore } from '@/lib/format/amount';
 
 /**
  * Formats decimal rupees, e.g. 106511 → "₹1,06,511", 500.5 → "₹500.50",
@@ -29,24 +11,17 @@ function groupIndian(digits: string): string {
  * clamp before calling — negative amounts never appear on invoices).
  */
 export function formatRupees(amount: number): string {
-  const negative = amount < 0;
-  // Work in paise to dodge float noise (numeric(12,2) fits comfortably).
-  const paise = Math.round(Math.abs(amount) * 100);
-  const whole = Math.floor(paise / 100);
-  const frac = paise % 100;
-  let text = `${RUPEE}${groupIndian(String(whole))}`;
-  if (frac > 0) {
-    text += `.${String(frac).padStart(2, '0')}`;
+  if (amount < 0) {
+    return `-${formatAmount(Math.abs(amount))}`;
   }
-  return negative ? `-${text}` : text;
+  return formatAmount(amount);
 }
 
-/** Parses a user-typed amount ("1,06,511.50" / "1500") into decimal rupees, or null. */
+/**
+ * Parses a user-typed amount ("1,06,511.50" / "1500") into decimal rupees,
+ * or null. Unlike the ledger parser, ₹0 is valid here — booking totals,
+ * deposits and advances default to zero.
+ */
 export function parseAmount(input: string): number | null {
-  const cleaned = input.replace(/[,\s\u20B9]/g, '');
-  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) {
-    return null;
-  }
-  const value = Number(cleaned);
-  return Number.isFinite(value) ? value : null;
+  return parseAmountCore(input, { allowZero: true });
 }

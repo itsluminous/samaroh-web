@@ -1,7 +1,6 @@
-import { useTranslations } from 'next-intl';
-import PlaceholderScreen from '@/components/PlaceholderScreen';
+import CurrentStockList from './_components/CurrentStockList';
 
+// Inventory current stock (spec §4.3): FIFO stock/value list + record transaction.
 export default function InventoryPage() {
-  const t = useTranslations('common.nav');
-  return <PlaceholderScreen feature={t('inventory')} />;
+  return <CurrentStockList />;
 }

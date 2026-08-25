@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# generated i18n messages (run `npm run gen:i18n`)
+messages/
+
+# env files (never commit real keys)
+.env
+.env.*
+!.env.local.example
+
+# test & build output
+coverage/
+build.log
+*.tsbuildinfo
+
+# misc
+.DS_Store
+npm-debug.log*

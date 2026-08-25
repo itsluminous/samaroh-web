@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint, type-check, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate i18n messages from shared catalog
+        run: npm run gen:i18n
+      - name: Lint (includes react/jsx-no-literals as error)
+        run: npm run lint
+      - name: Type-check
+        run: npm run type-check
+      - name: Unit tests (catalog parity + shell render en/hi)
+        run: npm test -- --ci
+      - name: Build (must succeed without Supabase env vars)
+        run: npm run build
+
+  legal-hygiene:
+    name: Legal-hygiene denylist check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run denylist scan
+        run: bash scripts/legal-check.sh
+
+  # Playwright e2e is deferred to WW-2 (see AGENTS.md); it will run here
+  # against a local Supabase stack once the feature tracks land.

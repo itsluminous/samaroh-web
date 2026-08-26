@@ -193,7 +193,7 @@ export default function BookingScreen() {
       return;
     }
     if (form.mode === 'edit' && form.booking) {
-      await updateBooking(db, form.booking.id, ctx.userId, input);
+      await updateBooking(db, form.booking, ctx.userId, input);
     } else {
       await createBooking(db, ctx.business.id, ctx.userId, input, advance);
     }
@@ -220,7 +220,7 @@ export default function BookingScreen() {
     if (!db || !ctx || !detailBooking) {
       return;
     }
-    await cancelBooking(db, detailBooking.id, ctx.userId);
+    await cancelBooking(db, detailBooking, ctx.userId);
     setDetailId(null);
     reload();
   }
@@ -415,7 +415,11 @@ export default function BookingScreen() {
             reload();
           }}
           onRemove={async (id) => {
-            await removeDateBlock(db, id);
+            const block = data.blocks.find((b) => b.id === id);
+            if (!block) {
+              return;
+            }
+            await removeDateBlock(db, block);
             reload();
           }}
           onClose={() => setBlockOpen(false)}

@@ -6,6 +6,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
+import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
 
 export interface PartyRecord {
   id: string;
@@ -121,10 +122,7 @@ export async function createParty(
     name: name.trim(),
     phone: phone?.trim() || null,
   };
-  const { error } = await supabase.from('parties').insert(record);
-  if (error) {
-    throw new Error(error.message);
-  }
+  await insertWithOutbox(supabase, { module: 'expenses', table: 'parties', row: record, label: record.name });
   return { id: record.id, name: record.name, phone: record.phone, created_at: new Date().toISOString() };
 }
 
@@ -149,19 +147,22 @@ export async function createExpense(
   attachments: NewAttachmentInput[],
 ): Promise<void> {
   const expenseId = crypto.randomUUID();
-  const { error } = await supabase.from('expenses').insert({
-    id: expenseId,
-    business_id: businessId,
-    party_id: partyId,
-    direction: input.direction,
-    amount: input.amount,
-    expense_date: input.expenseDate,
-    notes: input.notes,
-    created_by: userId,
+  await insertWithOutbox(supabase, {
+    module: 'expenses',
+    table: 'expenses',
+    row: {
+      id: expenseId,
+      business_id: businessId,
+      party_id: partyId,
+      direction: input.direction,
+      amount: input.amount,
+      expense_date: input.expenseDate,
+      notes: input.notes,
+      created_by: userId,
+    },
+    // The ledger entry itself is the label (amount is formatted at display time).
+    label: input.notes ?? input.expenseDate,
   });
-  if (error) {
-    throw new Error(error.message);
-  }
   await insertAttachments(supabase, businessId, expenseId, attachments);
 }
 
@@ -173,17 +174,19 @@ export async function updateExpense(
   newAttachments: NewAttachmentInput[],
   removedAttachmentIds: string[],
 ): Promise<void> {
-  const { error } = await supabase
-    .from('expenses')
-    .update({
+  await updateWithOutbox(supabase, {
+    module: 'expenses',
+    table: 'expenses',
+    entityId: expenseId,
+    patch: {
       amount: input.amount,
       expense_date: input.expenseDate,
       notes: input.notes,
-    })
-    .eq('id', expenseId);
-  if (error) {
-    throw new Error(error.message);
-  }
+      updated_at: new Date().toISOString(),
+    },
+    baseUpdatedAt: null,
+    label: input.notes ?? input.expenseDate,
+  });
   await insertAttachments(supabase, businessId, expenseId, newAttachments);
   if (removedAttachmentIds.length > 0) {
     const { error: attachmentError } = await supabase

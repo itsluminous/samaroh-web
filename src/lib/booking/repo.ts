@@ -5,6 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatInvoiceNumber } from '@/lib/invoice/number';
+import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
 import { todayIso } from './calendar';
 import type {
   Booking,
@@ -153,7 +154,12 @@ export interface BookingInput {
   status: BookingStatus;
 }
 
-/** Creates a booking; a positive advance becomes booking_payments row #1 dated today (§4.1). */
+/**
+ * Creates a booking; a positive advance becomes booking_payments row #1 dated
+ * today (§4.1). Writes go through the offline-aware data layer: when the
+ * network is down the rows are queued in the Dexie outbox (client UUIDs make
+ * the replay idempotent) and the optimistic local row is returned.
+ */
 export async function createBooking(
   db: SupabaseClient,
   businessId: string,
@@ -161,58 +167,80 @@ export async function createBooking(
   input: BookingInput,
   advance: number,
 ): Promise<Booking> {
-  const { data, error } = await db
-    .from('bookings')
-    .insert({ ...input, business_id: businessId, created_by: userId })
-    .select(BOOKING_COLUMNS)
-    .single();
-  if (error) {
-    throw error;
-  }
-  const booking = data as Booking;
+  const now = new Date().toISOString();
+  const row = {
+    id: crypto.randomUUID(),
+    ...input,
+    business_id: businessId,
+    created_by: userId,
+  };
+  await insertWithOutbox(db, {
+    module: 'booking',
+    table: 'bookings',
+    row,
+    label: input.customer_name,
+  });
+  const booking: Booking = {
+    ...row,
+    invoice_number: null,
+    updated_by: null,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
   if (advance > 0) {
-    const { error: payError } = await db.from('booking_payments').insert({
-      booking_id: booking.id,
-      business_id: businessId,
-      amount: advance,
-      paid_on: todayIso(),
-      method: 'cash' satisfies PaymentMethod,
-      created_by: userId,
+    await insertWithOutbox(db, {
+      module: 'booking',
+      table: 'booking_payments',
+      row: {
+        id: crypto.randomUUID(),
+        booking_id: booking.id,
+        business_id: businessId,
+        amount: advance,
+        paid_on: todayIso(),
+        method: 'cash' satisfies PaymentMethod,
+        created_by: userId,
+      },
+      label: input.customer_name,
     });
-    if (payError) {
-      throw payError;
-    }
   }
   return booking;
 }
 
+/**
+ * Updates a booking through the offline-aware data layer. Takes the full
+ * booking snapshot so the queued op carries its `updated_at` as the
+ * last-write-wins base (spec §8). Returns the optimistic merged row.
+ */
 export async function updateBooking(
   db: SupabaseClient,
-  bookingId: string,
+  booking: Booking,
   userId: string,
   input: BookingInput,
 ): Promise<Booking> {
-  const { data, error } = await db
-    .from('bookings')
-    .update({ ...input, updated_by: userId, updated_at: new Date().toISOString() })
-    .eq('id', bookingId)
-    .select(BOOKING_COLUMNS)
-    .single();
-  if (error) {
-    throw error;
-  }
-  return data as Booking;
+  const now = new Date().toISOString();
+  const patch = { ...input, updated_by: userId, updated_at: now };
+  await updateWithOutbox(db, {
+    module: 'booking',
+    table: 'bookings',
+    entityId: booking.id,
+    patch,
+    baseUpdatedAt: booking.updated_at,
+    label: input.customer_name,
+  });
+  return { ...booking, ...patch };
 }
 
 /** Cancel = status transition (releases the date); the row stays for the list view. */
-export async function cancelBooking(db: SupabaseClient, bookingId: string, userId: string): Promise<void> {
-  const { error } = await db
-    .from('bookings')
-    .update({ status: 'cancelled', updated_by: userId, updated_at: new Date().toISOString() })
-    .eq('id', bookingId);
-  if (error) {
-    throw error;
-  }
+export async function cancelBooking(db: SupabaseClient, booking: Booking, userId: string): Promise<void> {
+  await updateWithOutbox(db, {
+    module: 'booking',
+    table: 'bookings',
+    entityId: booking.id,
+    patch: { status: 'cancelled', updated_by: userId, updated_at: new Date().toISOString() },
+    baseUpdatedAt: booking.updated_at,
+    label: booking.customer_name,
+  });
 }
 
 export async function recordPayment(
@@ -221,15 +249,18 @@ export async function recordPayment(
   userId: string,
   input: { amount: number; paid_on: string; method: PaymentMethod; notes: string | null },
 ): Promise<void> {
-  const { error } = await db.from('booking_payments').insert({
-    booking_id: booking.id,
-    business_id: booking.business_id,
-    ...input,
-    created_by: userId,
+  await insertWithOutbox(db, {
+    module: 'booking',
+    table: 'booking_payments',
+    row: {
+      id: crypto.randomUUID(),
+      booking_id: booking.id,
+      business_id: booking.business_id,
+      ...input,
+      created_by: userId,
+    },
+    label: booking.customer_name,
   });
-  if (error) {
-    throw error;
-  }
 }
 
 export async function createDateBlock(
@@ -238,23 +269,24 @@ export async function createDateBlock(
   userId: string,
   input: { start_date: string; end_date: string; reason: string | null },
 ): Promise<void> {
-  const { error } = await db
-    .from('date_blocks')
-    .insert({ ...input, business_id: businessId, created_by: userId });
-  if (error) {
-    throw error;
-  }
+  await insertWithOutbox(db, {
+    module: 'booking',
+    table: 'date_blocks',
+    row: { id: crypto.randomUUID(), ...input, business_id: businessId, created_by: userId },
+    label: input.reason ?? input.start_date,
+  });
 }
 
 /** Soft delete (tombstone) — the shared convention for removals. */
-export async function removeDateBlock(db: SupabaseClient, blockId: string): Promise<void> {
-  const { error } = await db
-    .from('date_blocks')
-    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq('id', blockId);
-  if (error) {
-    throw error;
-  }
+export async function removeDateBlock(db: SupabaseClient, block: DateBlock): Promise<void> {
+  await updateWithOutbox(db, {
+    module: 'booking',
+    table: 'date_blocks',
+    entityId: block.id,
+    patch: { deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    baseUpdatedAt: null,
+    label: block.reason ?? block.start_date,
+  });
 }
 
 /** Server-side overlap checks for the save-time conflict warning / block gate. */

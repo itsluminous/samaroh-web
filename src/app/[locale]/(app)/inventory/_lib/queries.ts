@@ -13,6 +13,7 @@ import {
   type FifoTransaction,
   type OpenLot,
 } from '@/lib/inventory/fifo';
+import { insertWithOutbox } from '@/lib/outbox/mutate';
 
 export const INVENTORY_IMAGES_BUCKET = 'inventory-images';
 
@@ -149,21 +150,26 @@ export async function recordAddTransaction(
   quantity: number,
   unitPrice: number,
   notes: string | null,
+  itemName?: string,
 ): Promise<void> {
-  const { error } = await supabase.from('inventory_transactions').insert({
-    id: crypto.randomUUID(),
-    business_id: businessId,
-    master_item_id: masterItemId,
-    transaction_type: 'add',
-    quantity,
-    unit_price: unitPrice,
-    remaining_quantity: quantity,
-    notes,
-    created_by: userId,
+  // Add transactions are self-contained, so they queue offline; removes need
+  // a live read of open FIFO lots and stay online-only (docs/decisions.md).
+  await insertWithOutbox(supabase, {
+    module: 'inventory',
+    table: 'inventory_transactions',
+    row: {
+      id: crypto.randomUUID(),
+      business_id: businessId,
+      master_item_id: masterItemId,
+      transaction_type: 'add',
+      quantity,
+      unit_price: unitPrice,
+      remaining_quantity: quantity,
+      notes,
+      created_by: userId,
+    },
+    label: itemName ?? notes ?? masterItemId,
   });
-  if (error) {
-    throw new Error(error.message);
-  }
 }
 
 /** Raised when a remove exceeds the stock covered by open FIFO lots. */

@@ -149,6 +149,7 @@ export default function RecordTransactionDialog({
           qty,
           price,
           notes.trim() || null,
+          selectedItem.name,
         );
       } else {
         await recordRemoveTransaction(

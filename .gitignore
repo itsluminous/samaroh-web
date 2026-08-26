@@ -18,6 +18,10 @@ messages/
 coverage/
 build.log
 *.tsbuildinfo
+playwright.log
+test-results/
+playwright-report/
+.swc/
 
 # misc
 .DS_Store

@@ -12,7 +12,12 @@ const config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/', '<rootDir>/shared/'],
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/',
+    '<rootDir>/.next/',
+    '<rootDir>/shared/',
+    '<rootDir>/e2e/', // Playwright specs — run via `npx playwright test`
+  ],
 };
 
 // next/jest ignores node_modules for transformation (allowlisting only a few

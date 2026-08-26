@@ -57,6 +57,8 @@ in `docs/decisions.md`.
 | `npm test` | Jest + React Testing Library |
 | `npm run build` | Production build — must pass **without** Supabase env vars |
 | `npm run legal-check` | Legal-hygiene denylist scan |
+| `npx playwright test` | Playwright e2e (chromium) — builds/starts its own prod server WITHOUT Supabase env (hermetic; see playwright.config.ts) |
+| `./scripts/gen-icons.sh` | Regenerate PWA icons from `shared/brand/logo.svg` (requires librsvg; PNGs are committed) |
 
 Full local gate (same as CI):
 `npm run gen:i18n && npm run lint && npm run type-check && npm test && npm run build && npm run legal-check`
@@ -85,10 +87,27 @@ degrade gracefully, middleware skips protection). Never remove that guard.
 | **WW-0** (done) | This scaffold: app shell, theme, i18n, auth plumbing, CI, tests |
 | **WW-1a** | `src/app/[locale]/(app)/booking/` — calendar month grid + invoice PDF (pdf-lib, per `shared/invoice/layout-spec.md`). Owns `booking.*` keys |
 | **WW-1b** | `expenses/` + `inventory/` sections. Owns `expenses.*`, `inventory.*` keys |
-| **WW-2** | `menu/` (settings incl. language switcher, members, reports), PWA offline outbox (Dexie), **Playwright e2e (deferred from WW-0 — add to CI)**, Vercel deploy config. Owns `menu.*`, `settings.*`, `reports.*` keys |
+| **WW-2** (done) | `menu/` (settings incl. language switcher, members, reports), PWA offline outbox (Dexie, `src/lib/outbox/` + `src/lib/permissions/`), Playwright e2e (`e2e/`, CI job), Vercel deploy config. Owns `menu.*`, `settings.*`, `reports.*` keys |
 
 No two concurrent agents edit the same directory. Shared components
 (`src/components/`) change via the integrator.
+
+## Offline & PWA (WW-2)
+- Mutations must go through the offline-aware data layer
+  (`src/lib/outbox/mutate.ts` — `insertWithOutbox`/`updateWithOutbox`): online they
+  write straight to Supabase, offline they queue in the Dexie outbox and replay FIFO
+  on reconnect with a last-write-wins guard on `updated_at` (spec §8). Creates MUST
+  use client-generated UUIDs so replay is idempotent. Never bypass this for the
+  booking/expenses/inventory tables.
+- The service worker (`public/sw.js`) provides the READ-only offline cache and must
+  never intercept non-GET or cross-origin (Supabase) requests. Registered in
+  production builds only. Rationale in docs/decisions.md.
+
+## Vercel deployment
+- Env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (build succeeds
+  without them by contract). `vercel.json` only adds SW/manifest headers.
+- Vercel clones submodules over HTTPS: `shared/` must point at the public GitHub URL in
+  `.gitmodules` (see README → Deploying for the private-repo workaround).
 
 ## Conventions
 - Conventional Commits, imperative, ≤50-char subject. Commit after every completed

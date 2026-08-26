@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { msg, type Locale } from './helpers';
+import { authConfigured, msg, type Locale } from './helpers';
+
+// Hermetic-only: these routes need no session only while Supabase is
+// unconfigured; in authenticated mode the middleware redirects to /sign-in.
+test.skip(authConfigured, 'hermetic-only: route protection is active in authenticated mode');
 
 // App shell navigation in both locales: the 4 sections render in the nav,
 // and clicking through lands on localized pages (§1.2 — same 4 sections as

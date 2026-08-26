@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { msg } from './helpers';
+import { authConfigured, msg } from './helpers';
+
+// Hermetic-only (see shell-nav.spec.ts): needs the shell without a session.
+test.skip(authConfigured, 'hermetic-only: route protection is active in authenticated mode');
 
 // Offline smoke (§8 / §1.2 read-only offline cache): after one online visit
 // the service worker (public/sw.js) must serve the app shell from cache.

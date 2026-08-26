@@ -1,11 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { msg } from './helpers';
-
-const authConfigured =
-  !!process.env.E2E_SUPABASE_URL &&
-  !!process.env.E2E_SUPABASE_ANON_KEY &&
-  !!process.env.E2E_EMAIL &&
-  !!process.env.E2E_PASSWORD;
+import { authConfigured, msg } from './helpers';
 
 test('booking page renders (hermetic: graceful empty state)', async ({ page }) => {
   test.skip(authConfigured, 'covered by the authenticated calendar test');

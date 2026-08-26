@@ -8,6 +8,19 @@ import { join } from 'node:path';
 
 export type Locale = 'en' | 'hi';
 
+/**
+ * True when the suite runs in authenticated mode (E2E_* env set — see
+ * playwright.config.ts). Hermetic-only specs that rely on the app being
+ * reachable WITHOUT a session (route protection is skipped when Supabase
+ * isn't configured) must skip in this mode: the middleware would redirect
+ * them to /sign-in.
+ */
+export const authConfigured =
+  !!process.env.E2E_SUPABASE_URL &&
+  !!process.env.E2E_SUPABASE_ANON_KEY &&
+  !!process.env.E2E_EMAIL &&
+  !!process.env.E2E_PASSWORD;
+
 type Messages = Record<string, unknown>;
 
 const cache = new Map<Locale, Messages>();

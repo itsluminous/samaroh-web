@@ -40,5 +40,33 @@ jobs:
       - name: Run denylist scan
         run: bash scripts/legal-check.sh
 
-  # Playwright e2e is deferred to WW-2 (see AGENTS.md); it will run here
-  # against a local Supabase stack once the feature tracks land.
+  # e2e is a SEPARATE job so the fast quality gate stays required for branch
+  # protection while e2e (a full production build + browser run) can start as
+  # optional and be promoted to required once it has a stable track record.
+  # It runs hermetically: the Playwright webServer builds and starts the app
+  # WITHOUT Supabase env vars (the app degrades gracefully by contract), so
+  # no Supabase stack or secrets are needed in CI.
+  e2e:
+    name: Playwright e2e (chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run e2e suite (builds the app itself, without Supabase env)
+        run: npx playwright test
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

@@ -103,6 +103,28 @@ No two concurrent agents edit the same directory. Shared components
   never intercept non-GET or cross-origin (Supabase) requests. Registered in
   production builds only. Rationale in docs/decisions.md.
 
+## Guest mode ("try without an account")
+- Entry: the sign-in page's "continue offline" button sets the `samaroh_guest`
+  cookie (`src/lib/guest/guest.ts`) and runs the same create-business form against
+  the local store (`src/lib/guest/seed.ts`). The middleware lets guest-cookie
+  requests through route protection; a real session supersedes and clears the flag.
+- Data layer: `createClient()` (`src/lib/supabase/client.ts`) returns the Dexie-backed
+  local client (`src/lib/guest/localClient.ts`) while in guest mode — a PostgREST-subset
+  builder over IndexedDB (`src/lib/guest/localDb.ts`), so feature screens work
+  unchanged and **no data ever leaves the device**. The auth/sign-up flow must use
+  `createRemoteClient()` (never swapped).
+- The local client implements only the query surface the app uses (see the header
+  comment in `localClient.ts`) — grep call sites before extending it.
+- Outbox: the local client is detectable (`isLocalClient`); `mutate.ts` never treats
+  it as offline and `replayOutbox` refuses to replay into it (queued items belong to
+  a signed-in session and must only land on the server).
+- UI: `GuestBanner` (mounted in the `(app)` layout, all screens incl. reports) shows
+  a persistent localized this-device-only notice + sign-in CTA. Strings live in the
+  shared `web-auth` fragment (`guest.banner.*`).
+- Exit: sign-out clears the guest cookie (local data stays in IndexedDB and is
+  reused on re-entry); signing in for real also ends guest mode. Guest data is NOT
+  migrated to the account (out of scope, see docs/decisions.md).
+
 ## Vercel deployment
 - Env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (build succeeds
   without them by contract). `vercel.json` only adds SW/manifest headers.

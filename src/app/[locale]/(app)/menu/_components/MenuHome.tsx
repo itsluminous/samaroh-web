@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * Menu tab home (§4.4): section list — Settings, Reports, Members (owner
- * only), About. Members is hidden (not just disabled) for employees.
+ * Menu tab home (§4.4): identity row (who is signed in) followed by the
+ * section list — Settings, Reports, Members (owner only), About. Members is
+ * hidden (not just disabled) for employees.
  */
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import GroupIcon from '@mui/icons-material/Group';
@@ -19,6 +20,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { useMembership } from '@/lib/permissions/useMembership';
+import MenuIdentityRow from './MenuIdentityRow';
 
 export default function MenuHome({ title }: { title: string }) {
   const t = useTranslations('menu.section');
@@ -38,6 +40,7 @@ export default function MenuHome({ title }: { title: string }) {
       </Typography>
       <Paper variant="outlined" sx={{ maxWidth: 640 }}>
         <List disablePadding>
+          <MenuIdentityRow />
           {rows
             .filter((row) => row.show)
             .map((row) => (

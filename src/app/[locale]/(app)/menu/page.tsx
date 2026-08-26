@@ -1,7 +1,10 @@
 import { useTranslations } from 'next-intl';
-import PlaceholderScreen from '@/components/PlaceholderScreen';
+import MenuHome from './_components/MenuHome';
 
+// Menu tab home (§4.4): Settings, Reports, Members (owner only), About.
 export default function MenuPage() {
-  const t = useTranslations('common.nav');
-  return <PlaceholderScreen feature={t('menu')} />;
+  // Server component wrapper keeps the page statically renderable; the
+  // owner-only Members row is resolved client-side in MenuHome.
+  const t = useTranslations('menu.home');
+  return <MenuHome title={t('title')} />;
 }

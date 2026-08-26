@@ -11,6 +11,7 @@
  * Network failures stop the run (remaining items stay queued for next time).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isLocalClient } from '@/lib/guest/localClient';
 import type { OutboxItem, OutboxModule, OutboxOperation } from './db';
 import { outboxDb, setLastSyncAt } from './db';
 
@@ -76,7 +77,10 @@ let replaying = false;
  */
 export async function replayOutbox(db: SupabaseClient): Promise<ReplayResult> {
   const result: ReplayResult = { applied: 0, conflicts: 0, errors: 0, offline: false };
-  if (replaying) {
+  // Never replay into the guest-mode local client: queued items belong to a
+  // signed-in session and must only ever land on the server. Replaying them
+  // locally would dequeue (lose) them.
+  if (replaying || isLocalClient(db)) {
     return result;
   }
   replaying = true;

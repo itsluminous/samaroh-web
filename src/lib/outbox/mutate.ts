@@ -7,12 +7,17 @@
  * optimistically applied.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isLocalClient } from '@/lib/guest/localClient';
 import type { OutboxModule } from './db';
 import { enqueue, isNetworkError } from './outbox';
 
 export type WriteOutcome = 'applied' | 'queued';
 
-function browserSaysOffline(): boolean {
+function browserSaysOffline(db: SupabaseClient): boolean {
+  // The guest-mode local client writes to IndexedDB — "offline" never applies.
+  if (isLocalClient(db)) {
+    return false;
+  }
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
@@ -40,7 +45,7 @@ export async function insertWithOutbox(db: SupabaseClient, spec: InsertSpec): Pr
       payload: spec.row,
       label: spec.label,
     });
-  if (browserSaysOffline()) {
+  if (browserSaysOffline(db)) {
     await queue();
     return 'queued';
   }
@@ -82,7 +87,7 @@ export async function updateWithOutbox(db: SupabaseClient, spec: UpdateSpec): Pr
       baseUpdatedAt: spec.baseUpdatedAt,
       label: spec.label,
     });
-  if (browserSaysOffline()) {
+  if (browserSaysOffline(db)) {
     await queue();
     return 'queued';
   }

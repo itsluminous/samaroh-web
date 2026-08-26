@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import createIntlMiddleware from 'next-intl/middleware';
 import { routing } from '@/i18n/routing';
+import { GUEST_COOKIE } from '@/lib/guest/guest';
 import { getSupabaseEnv } from '@/lib/supabase/env';
 
 const handleI18n = createIntlMiddleware(routing);
@@ -68,8 +69,15 @@ export default async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const bare = stripLocale(pathname);
   const isPublic = PUBLIC_PATHS.some((p) => bare === p || bare.startsWith(`${p}/`));
+  const isGuest = request.cookies.get(GUEST_COOKIE)?.value === '1';
 
-  if (!user && !isPublic) {
+  // A real session supersedes guest mode — drop the stale flag so the data
+  // layer switches back to Supabase.
+  if (user && isGuest) {
+    response.cookies.set(GUEST_COOKIE, '', { maxAge: 0, path: '/' });
+  }
+
+  if (!user && !isPublic && !isGuest) {
     const url = request.nextUrl.clone();
     url.pathname = `/${localeOf(pathname)}/sign-in`;
     url.search = '';

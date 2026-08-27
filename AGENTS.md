@@ -38,14 +38,14 @@ in `docs/decisions.md`.
   `docs/decisions.md` entry and integrator sign-off.
 
 ## Submodule procedure
-- `shared/` is a git submodule of the `samaroh-shared` repo.
+- `shared/` is a git submodule of the `samaroh-shared` repo, registered at the GitHub
+  URL (`https://github.com/itsluminous/samaroh-shared.git`).
 - Fresh clone: `git submodule update --init --recursive`.
-- It is currently registered with a **local path URL**
-  (`/Users/kupraki/repo/Samaroh/samaroh-shared`). **TODO: re-point to the GitHub URL**
-  (`git submodule set-url shared <github-url>` + commit `.gitmodules`) once the shared
-  repo is pushed. Local-path cloning needs `git -c protocol.file.allow=always`.
-- To pick up new shared commits: `cd shared && git pull origin main && cd .. &&
-  git add shared && git commit` (Conventional Commit, e.g. `chore: bump shared contracts`).
+- To pick up new shared commits: commit **and push** in `samaroh-shared` first (pull
+  `--ff-only` there before pushing — the Android track bumps it too), then
+  `cd shared && git pull origin main && cd .. && git add shared && git commit`
+  (Conventional Commit, e.g. `chore: bump shared contracts`). Never bump to a commit
+  that only exists locally — CI and Vercel can't resolve it.
 
 ## Commands
 | Command | Purpose |
@@ -73,20 +73,30 @@ degrade gracefully, middleware skips protection). Never remove that guard.
 ## Architecture map
 - `src/i18n/` — next-intl routing (`en`, `hi`; cookie-persisted), request config, navigation helpers.
 - `src/middleware.ts` — i18n negotiation + Supabase session refresh + route protection
-  (public: `/sign-in`; everything else needs a session when Supabase is configured).
-- `src/lib/supabase/` — guarded browser/server client factories.
+  (public: `/sign-in`; everything else needs a session when Supabase is configured;
+  guest cookie passes through).
+- `src/lib/supabase/` — guarded browser/server client factories (guest mode swaps in the
+  local client).
+- `src/lib/` — domain logic: `booking/`, `expenses/`, `inventory/` (FIFO), `reports/`,
+  `invoice/` (pdf-lib renderer), `outbox/` (Dexie offline outbox: `mutate.ts`,
+  `outbox.ts` with `isReplaying()` + sync-state events, `useOutbox.ts`), `guest/`
+  (local client + seed), `permissions/`, `format/`, `fuzzy.ts`, `images/`.
 - `src/theme/theme.ts` — Material-You-like MUI theme from `shared/brand/palette.md`
   (light/dark/system via CSS variables).
-- `src/components/AppShell.tsx` — responsive nav: left rail (desktop) / bottom nav (mobile).
-- `src/app/[locale]/(app)/{booking,expenses,inventory,menu}/` — the 4 sections.
+- `src/components/` — `AppShell` (left rail / bottom nav + toolbar with
+  `SyncIndicator`), `ChipRow` (scrollable single-line filter pills), `GuestBanner`,
+  `GlassFab`, `LocaleSwitcher`, `SignInForm`, `ServiceWorkerRegistrar`.
+- `src/app/[locale]/(app)/{booking,expenses,inventory,menu}/` — the 4 sections
+  (inventory includes the per-item detail page with permission-gated edit/delete via
+  the shared `MasterItemDialog`).
 - `src/app/auth/sign-out/` — non-localized sign-out POST route.
 
 ## Ownership map (parallel tracks)
 | Track | Scope |
 |---|---|
 | **WW-0** (done) | This scaffold: app shell, theme, i18n, auth plumbing, CI, tests |
-| **WW-1a** | `src/app/[locale]/(app)/booking/` — calendar month grid + invoice PDF (pdf-lib, per `shared/invoice/layout-spec.md`). Owns `booking.*` keys |
-| **WW-1b** | `expenses/` + `inventory/` sections. Owns `expenses.*`, `inventory.*` keys |
+| **WW-1a** (done) | `src/app/[locale]/(app)/booking/` — calendar month grid + invoice PDF (pdf-lib, per `shared/invoice/layout-spec.md`). Owns `booking.*` keys |
+| **WW-1b** (done) | `expenses/` + `inventory/` sections. Owns `expenses.*`, `inventory.*` keys |
 | **WW-2** (done) | `menu/` (settings incl. language switcher, members, reports), PWA offline outbox (Dexie, `src/lib/outbox/` + `src/lib/permissions/`), Playwright e2e (`e2e/`, CI job), Vercel deploy config. Owns `menu.*`, `settings.*`, `reports.*` keys |
 
 No two concurrent agents edit the same directory. Shared components
@@ -136,3 +146,16 @@ No two concurrent agents edit the same directory. Shared components
   task. Never force-push. Never push without being asked.
 - Run the full local gate before every commit.
 - TypeScript strict; no `any` escapes without a comment explaining why.
+- **Fragments per namespace**: new string keys go in the shared repo's
+  `strings/fragments/<namespace>.{en,hi}.json` (web-specific keys in the `web-*`
+  fragments). Never edit another feature's fragment or the base catalog.
+- **Decision log**: web-specific contract interpretations (offline scope, reports
+  semantics, guest mode, deploy ordering for shared migrations) are recorded in
+  `docs/decisions.md` — add an entry whenever you interpret the spec or extend a
+  contract.
+- **Shared-push coordination**: `samaroh-shared` is pushed to by multiple tracks —
+  `git pull --ff-only` there before pushing, and only bump the submodule to commits on
+  the shared remote.
+- **Anti-stall**: wrap long-running commands (builds, Playwright, dev servers) in
+  timeouts and write output to log files (`build.log`) instead of blocking on
+  interactive output.

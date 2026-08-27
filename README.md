@@ -6,12 +6,17 @@ Supabase project with the Android app, so data is live-identical across both cli
 
 ## Sections
 
-| Section | Status |
-|---|---|
-| 📅 Booking — calendar-first booking management, invoice PDF | ✅ |
-| 📒 Expenses — party ledger | ✅ |
-| 📦 Inventory — stock items & transactions | ✅ |
-| ☰ Menu — settings (language/theme/business/sync), reports (9), members, about | ✅ |
+| Section | Highlights | Status |
+|---|---|---|
+| 📅 Booking | calendar-first booking management, payments & dues, date blocks, invoice PDF (shared layout contract) | ✅ |
+| 📒 Expenses | party ledger ("You gave / You got"), business/personal party flag, party edit + cascade delete, scrollable filter chips | ✅ |
+| 📦 Inventory | stock, transactions, masterlist with fuzzy duplicate chips, per-item detail page with history + permission-gated edit/delete, square photo crop | ✅ |
+| ☰ Menu | settings (language/theme/business/sync status), 9 reports incl. personal expenses + TOTAL rows + machine-readable CSV, members, about | ✅ |
+| 🔐 Auth | email sign-in + **sign-up** with first-run business creation, **guest mode** ("try without an account") | ✅ |
+
+An animated cloud **sync indicator** in the app bar shows pending offline writes and
+spins while the outbox replays (static fallback under reduced motion); it links to
+Menu → Settings → Sync status.
 
 ## Tech
 
@@ -71,6 +76,23 @@ gate (see `.github/workflows/ci.yml`).
   resolution on `updated_at` (spec §8). Pending items, per-item errors and conflicts are
   visible under **Menu → Settings → Sync status**, with a *Sync now* button.
 
+## Sign-up & guest mode
+
+- **Sign-up**: the sign-in page has a sign-up mode (Supabase email auth). With email
+  confirmation enabled a localized confirm-email notice is shown; after the first
+  session, the same screen collects business name/type/address/owner and creates the
+  business + owner membership.
+- **Guest mode**: "Continue offline" runs the entire app against a local
+  IndexedDB-backed client — no account, no data leaves the device. A persistent banner
+  on every screen states the this-device-only scope with a sign-in CTA. Signing in for
+  real ends guest mode (guest data stays on the device and is not migrated). Guest
+  gaps: sync, members and storage uploads are account features and stay dormant.
+
+## Screenshots
+
+<!-- TODO: add screenshots (booking calendar, party ledger, inventory item detail,
+reports, guest banner, sync indicator) in en + hi, desktop + mobile widths. -->
+
 ## i18n
 
 Every user-visible string comes from `shared/strings/catalog.{en,hi}.json` via
@@ -96,7 +118,4 @@ in its own script). New strings are added in the `samaroh-shared` repo only.
      `GITHUB_TOKEN` env var plus an `installCommand` that rewrites the submodule URL:
      `git config submodule.shared.url https://$GITHUB_TOKEN@github.com/<org>/samaroh-shared.git
      && git submodule update --init` before `npm ci`).
-   - Note: `.gitmodules` currently points at a **local path** (Wave-0 bootstrap);
-     re-point it to the GitHub URL before the first Vercel deploy
-     (`git submodule set-url shared <github-url>`).
 4. Production deploys happen on merge to `main`; every PR gets a preview URL.

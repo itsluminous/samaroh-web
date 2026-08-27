@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Reports hub (§4.4): list of the 9 reports. Access gated on
+ * Reports hub (§4.4): list of the 10 reports. Access gated on
  * `reports.view` (owners pass implicitly); RLS is the real boundary.
  */
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';

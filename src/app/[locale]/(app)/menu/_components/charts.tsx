@@ -3,7 +3,7 @@
 /**
  * Hand-rolled SVG/MUI charts for the Reports section (§4.4) — deliberately
  * dependency-free, in the spirit of the finance-dashboard charts referenced
- * by the spec. Three primitives cover all 9 reports:
+ * by the spec. Three primitives cover all 10 reports:
  *   - BarChart:   vertical bars, optionally stacked (non-negative values)
  *   - LineChart:  one or more series, supports negative values (zero line)
  *   - HBarList:   labelled horizontal bars for top-N breakdowns

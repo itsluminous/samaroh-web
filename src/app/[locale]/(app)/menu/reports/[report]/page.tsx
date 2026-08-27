@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import ReportScreen from '../../_components/ReportScreen';
 import { isReportKey, REPORT_KEYS } from '@/lib/reports/types';
 
-// One dynamic route serves all 9 reports (§4.4); unknown keys 404.
+// One dynamic route serves all 10 reports (§4.4); unknown keys 404.
 export function generateStaticParams() {
   return REPORT_KEYS.map((report) => ({ report }));
 }

@@ -29,6 +29,12 @@ export interface ReportExpense {
 export interface ReportParty {
   id: string;
   name: string;
+  /**
+   * true = counts in the financial reports; false = personal party, shown
+   * only in the personal-expenses report. Missing server/guest values are
+   * normalized to true at fetch time.
+   */
+  business_related: boolean;
 }
 
 /**
@@ -48,7 +54,7 @@ export interface DateRange {
   end: string;
 }
 
-/** The 9 report keys (§4.4) — also the dynamic route segment. */
+/** The 10 report keys (§4.4 + personal expenses) — also the dynamic route segment. */
 export const REPORT_KEYS = [
   'revenue',
   'dues_aging',
@@ -57,6 +63,7 @@ export const REPORT_KEYS = [
   'sources',
   'expense_summary',
   'profit',
+  'personal_expenses',
   'inventory_valuation',
   'collection',
 ] as const;

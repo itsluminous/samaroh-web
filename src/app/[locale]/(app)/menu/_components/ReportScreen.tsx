@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * One screen renders all 9 reports (§4.4), keyed by the dynamic route
+ * One screen renders all 10 reports (§4.4), keyed by the dynamic route
  * segment: fetch → pure compute (src/lib/reports/compute) → hand-rolled
  * chart + table + CSV download. Access is gated on `reports.view`
  * (owners implicitly pass).
@@ -36,13 +36,18 @@ import {
   monthOf,
   occupancyByMonth,
   outstandingDues,
+  partitionExpensesByParty,
+  personalSpendByMonth,
+  personalSpendByParty,
   profitByMonth,
+  profitTotals,
   revenueByMonth,
   sourceBreakdown,
+  sumBy,
   topPartiesBySpend,
   type AgingBucket,
 } from '@/lib/reports/compute';
-import { downloadCsv, toCsv } from '@/lib/reports/csv';
+import { csvAmount, downloadCsv, toCsvSections, type CsvSection } from '@/lib/reports/csv';
 import {
   fetchBookingsWithPayments,
   fetchExpensesInRange,
@@ -67,11 +72,25 @@ interface ReportModel {
   legend: { label: string; color: ChartColor }[];
   headers: string[];
   rows: string[][];
-  /** Secondary titled table rendered below the main one (not in the CSV). */
-  extraTable?: { title: string; headers: string[]; rows: string[][] };
+  /**
+   * Screen-formatted TOTAL row (first cell is the total label) — present on
+   * every money table, absent on non-money tables (occupancy, collection).
+   */
+  totalRow?: string[];
+  /** Secondary titled table rendered below the main one. */
+  extraTable?: { title: string; headers: string[]; rows: string[][]; totalRow?: string[] };
+  /**
+   * CSV export sections: plain decimal numbers (no ₹, no digit grouping) and
+   * unambiguous dates (yyyy-mm months, yyyy-mm-dd dates), with the same TOTAL
+   * rows as on screen.
+   */
+  csv: CsvSection[];
   /** Optional headline (e.g. overall average) rendered above the chart. */
   headline: string | null;
   empty: boolean;
+  /** Report-specific empty state (falls back to the generic reports.empty.*). */
+  emptyTitle?: string;
+  emptyMessage?: string;
 }
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
@@ -92,10 +111,22 @@ async function buildModel(
   percent: (v: number) => string,
 ): Promise<ReportModel> {
   const money = (v: number) => formatAmount(v);
+  const totalLabel = t('reports.table.total_row');
   switch (key) {
     case 'revenue': {
       const { bookings, payments } = await fetchBookingsWithPayments(db, businessId, range);
       const rows = revenueByMonth(bookings, payments, range);
+      const totals = {
+        collected: sumBy(rows, (r) => r.collected),
+        outstanding: sumBy(rows, (r) => r.outstanding),
+        total: sumBy(rows, (r) => r.total),
+      };
+      const headers = [
+        t('reports.table.month'),
+        t('reports.table.collected'),
+        t('reports.table.outstanding'),
+        t('reports.table.total'),
+      ];
       return {
         chart: {
           kind: 'bars',
@@ -111,13 +142,18 @@ async function buildModel(
           { label: t('reports.legend.collected'), color: 'success' },
           { label: t('reports.legend.outstanding'), color: 'warning' },
         ],
-        headers: [
-          t('reports.table.month'),
-          t('reports.table.collected'),
-          t('reports.table.outstanding'),
-          t('reports.table.total'),
-        ],
+        headers,
         rows: rows.map((r) => [monthLabel(r.month), money(r.collected), money(r.outstanding), money(r.total)]),
+        totalRow: [totalLabel, money(totals.collected), money(totals.outstanding), money(totals.total)],
+        csv: [
+          {
+            headers,
+            rows: [
+              ...rows.map((r) => [r.month, csvAmount(r.collected), csvAmount(r.outstanding), csvAmount(r.total)]),
+              [totalLabel, csvAmount(totals.collected), csvAmount(totals.outstanding), csvAmount(totals.total)],
+            ],
+          },
+        ],
         headline: null,
         empty: rows.every((r) => r.total === 0),
       };
@@ -126,6 +162,16 @@ async function buildModel(
       const { bookings, payments } = await fetchBookingsWithPayments(db, businessId, range);
       const dues = outstandingDues(bookings, payments, todayIso());
       const buckets = duesByBucket(dues);
+      const totalDue = sumBy(dues, (d) => d.due);
+      const headers = [
+        t('reports.table.customer'),
+        t('reports.table.event'),
+        t('reports.table.end_date'),
+        t('reports.table.due'),
+        t('reports.table.days_overdue'),
+      ];
+      const eventLabel = (d: (typeof dues)[number]) =>
+        isBuiltInEventType(d.eventType) ? t(`booking.event_type.${d.eventType}`) : d.eventType;
       return {
         chart: {
           kind: 'bars',
@@ -135,20 +181,24 @@ async function buildModel(
           })),
         },
         legend: [{ label: t('reports.legend.outstanding'), color: 'error' }],
-        headers: [
-          t('reports.table.customer'),
-          t('reports.table.event'),
-          t('reports.table.end_date'),
-          t('reports.table.due'),
-          t('reports.table.days_overdue'),
-        ],
+        headers,
         rows: dues.map((d) => [
           d.customer,
-          `${d.eventIcon} ${isBuiltInEventType(d.eventType) ? t(`booking.event_type.${d.eventType}`) : d.eventType}`,
+          `${d.eventIcon} ${eventLabel(d)}`,
           d.endDate,
           money(d.due),
           String(d.daysOverdue),
         ]),
+        totalRow: [totalLabel, '', '', money(totalDue), ''],
+        csv: [
+          {
+            headers,
+            rows: [
+              ...dues.map((d) => [d.customer, eventLabel(d), d.endDate, csvAmount(d.due), d.daysOverdue]),
+              [totalLabel, '', '', csvAmount(totalDue), ''],
+            ],
+          },
+        ],
         headline: null,
         empty: dues.length === 0,
       };
@@ -156,6 +206,7 @@ async function buildModel(
     case 'occupancy': {
       const { bookings } = await fetchBookingsWithPayments(db, businessId, range);
       const rows = occupancyByMonth(bookings, range);
+      const headers = [t('reports.table.month'), t('reports.table.booked_days'), t('reports.table.utilization')];
       return {
         chart: {
           kind: 'bars',
@@ -165,8 +216,14 @@ async function buildModel(
           })),
         },
         legend: [{ label: t('reports.legend.booked_days'), color: 'primary' }],
-        headers: [t('reports.table.month'), t('reports.table.booked_days'), t('reports.table.utilization')],
+        headers,
         rows: rows.map((r) => [monthLabel(r.month), String(r.bookedDays), percent(r.utilization)]),
+        csv: [
+          {
+            headers,
+            rows: rows.map((r) => [r.month, r.bookedDays, (r.utilization * 100).toFixed(1)]),
+          },
+        ],
         headline: null,
         empty: rows.every((r) => r.bookedDays === 0),
       };
@@ -181,18 +238,31 @@ async function buildModel(
             ? t(`booking.event_type.${rowKey}`)
             : rowKey
           : t(`booking.source.${rowKey}`);
+      const totalCount = sumBy(rows, (r) => r.count);
+      const totalRevenue = sumBy(rows, (r) => r.revenue);
+      const headers = [
+        key === 'event_types' ? t('reports.table.event_type') : t('reports.table.source'),
+        t('reports.table.bookings'),
+        t('reports.table.revenue'),
+      ];
       return {
         chart: {
           kind: 'hbars',
           rows: rows.map((r) => ({ label: labelOf(r.key), value: r.revenue, display: money(r.revenue) })),
         },
         legend: [{ label: t('reports.legend.revenue'), color: 'primary' }],
-        headers: [
-          key === 'event_types' ? t('reports.table.event_type') : t('reports.table.source'),
-          t('reports.table.bookings'),
-          t('reports.table.revenue'),
-        ],
+        headers,
         rows: rows.map((r) => [labelOf(r.key), String(r.count), money(r.revenue)]),
+        totalRow: [totalLabel, String(totalCount), money(totalRevenue)],
+        csv: [
+          {
+            headers,
+            rows: [
+              ...rows.map((r) => [labelOf(r.key), r.count, csvAmount(r.revenue)]),
+              [totalLabel, totalCount, csvAmount(totalRevenue)],
+            ],
+          },
+        ],
         headline: null,
         empty: rows.length === 0,
       };
@@ -203,9 +273,22 @@ async function buildModel(
         fetchPartyNames(db, businessId),
         fetchInventoryPurchasesInRange(db, businessId, range),
       ]);
-      const monthly = expenseSummaryByMonth(expenses, purchases, range);
-      const top = topPartiesBySpend(expenses, parties);
+      // Personal parties are excluded — their spend lives in the personal-expenses report.
+      const { business } = partitionExpensesByParty(expenses, parties);
+      const monthly = expenseSummaryByMonth(business, purchases, range);
+      const top = topPartiesBySpend(business, parties);
       const inventoryLabel = t('reports.expense.inventory_purchases_label');
+      const totals = {
+        ledger: sumBy(monthly, (r) => r.ledger),
+        inventory: sumBy(monthly, (r) => r.inventory),
+        total: sumBy(monthly, (r) => r.total),
+      };
+      const headers = [
+        t('reports.table.month'),
+        t('reports.table.expenses'),
+        inventoryLabel,
+        t('reports.table.total'),
+      ];
       return {
         chart: {
           kind: 'bars',
@@ -221,13 +304,18 @@ async function buildModel(
           { label: t('reports.legend.spend'), color: 'secondary' },
           { label: inventoryLabel, color: 'warning' },
         ],
-        headers: [
-          t('reports.table.month'),
-          t('reports.table.expenses'),
-          inventoryLabel,
-          t('reports.table.total'),
-        ],
+        headers,
         rows: monthly.map((r) => [monthLabel(r.month), money(r.ledger), money(r.inventory), money(r.total)]),
+        totalRow: [totalLabel, money(totals.ledger), money(totals.inventory), money(totals.total)],
+        csv: [
+          {
+            headers,
+            rows: [
+              ...monthly.map((r) => [r.month, csvAmount(r.ledger), csvAmount(r.inventory), csvAmount(r.total)]),
+              [totalLabel, csvAmount(totals.ledger), csvAmount(totals.inventory), csvAmount(totals.total)],
+            ],
+          },
+        ],
         extraTable: {
           title: t('reports.report.expense_summary_subtitle'),
           headers: [t('reports.table.party'), t('reports.table.spend')],
@@ -238,12 +326,22 @@ async function buildModel(
       };
     }
     case 'profit': {
-      const [payments, expenses, purchases] = await Promise.all([
+      const [payments, expenses, parties, purchases] = await Promise.all([
         fetchPaymentsInRange(db, businessId, range),
         fetchExpensesInRange(db, businessId, range),
+        fetchPartyNames(db, businessId),
         fetchInventoryPurchasesInRange(db, businessId, range),
       ]);
-      const rows = profitByMonth(payments, expenses, purchases, range);
+      // Personal-party ledger entries stay out of the P&L in both directions.
+      const { business } = partitionExpensesByParty(expenses, parties);
+      const rows = profitByMonth(payments, business, purchases, range);
+      const totals = profitTotals(rows);
+      const headers = [
+        t('reports.table.month'),
+        t('reports.table.income'),
+        t('reports.table.expenses'),
+        t('reports.table.net'),
+      ];
       return {
         chart: {
           kind: 'lines',
@@ -259,28 +357,97 @@ async function buildModel(
           { label: t('reports.table.expenses'), color: 'error' },
           { label: t('reports.legend.net'), color: 'primary' },
         ],
-        headers: [
-          t('reports.table.month'),
-          t('reports.table.income'),
-          t('reports.table.expenses'),
-          t('reports.table.net'),
-        ],
+        headers,
         rows: rows.map((r) => [monthLabel(r.month), money(r.income), money(r.spend), money(r.net)]),
+        totalRow: [totalLabel, money(totals.income), money(totals.spend), money(totals.net)],
+        csv: [
+          {
+            headers,
+            rows: [
+              ...rows.map((r) => [r.month, csvAmount(r.income), csvAmount(r.spend), csvAmount(r.net)]),
+              [totalLabel, csvAmount(totals.income), csvAmount(totals.spend), csvAmount(totals.net)],
+            ],
+          },
+        ],
         headline: null,
         empty: rows.every((r) => r.income === 0 && r.spend === 0),
+      };
+    }
+    case 'personal_expenses': {
+      const [expenses, parties] = await Promise.all([
+        fetchExpensesInRange(db, businessId, range),
+        fetchPartyNames(db, businessId),
+      ]);
+      const monthly = personalSpendByMonth(expenses, parties, range);
+      const byParty = personalSpendByParty(expenses, parties);
+      const totalSpend = sumBy(monthly, (r) => r.spend);
+      const headers = [t('reports.table.month'), t('reports.table.spend')];
+      const partyHeaders = [t('reports.table.party'), t('reports.table.spend')];
+      const partyTitle = t('reports.report.personal_expenses_subtitle');
+      return {
+        chart: {
+          kind: 'bars',
+          data: monthly.map((r) => ({
+            label: monthLabel(r.month),
+            segments: [{ value: r.spend, color: 'secondary' }],
+          })),
+        },
+        legend: [{ label: t('reports.legend.spend'), color: 'secondary' }],
+        headers,
+        rows: monthly.map((r) => [monthLabel(r.month), money(r.spend)]),
+        totalRow: [totalLabel, money(totalSpend)],
+        extraTable: {
+          title: partyTitle,
+          headers: partyHeaders,
+          rows: byParty.map((r) => [r.name, money(r.spend)]),
+          totalRow: [totalLabel, money(totalSpend)],
+        },
+        csv: [
+          {
+            headers,
+            rows: [
+              ...monthly.map((r) => [r.month, csvAmount(r.spend)]),
+              [totalLabel, csvAmount(totalSpend)],
+            ],
+          },
+          {
+            title: partyTitle,
+            headers: partyHeaders,
+            rows: [
+              ...byParty.map((r) => [r.name, csvAmount(r.spend)]),
+              [totalLabel, csvAmount(totalSpend)],
+            ],
+          },
+        ],
+        headline: null,
+        empty: totalSpend === 0 && byParty.length === 0,
+        emptyTitle: t('reports.personal_expenses.empty_title'),
+        emptyMessage: t('reports.personal_expenses.empty_message'),
       };
     }
     case 'inventory_valuation': {
       const inventory = await fetchCurrentInventory(db, businessId);
       const held = inventory.filter((r) => r.currentQuantity > 0).sort((a, b) => b.currentValue - a.currentValue);
+      const totalValue = sumBy(held, (r) => r.currentValue);
+      const headers = [t('reports.table.item'), t('reports.table.quantity'), t('reports.table.value')];
       return {
         chart: {
           kind: 'hbars',
           rows: held.map((r) => ({ label: r.name, value: r.currentValue, display: money(r.currentValue) })),
         },
         legend: [{ label: t('reports.legend.value'), color: 'primary' }],
-        headers: [t('reports.table.item'), t('reports.table.quantity'), t('reports.table.value')],
+        headers,
         rows: held.map((r) => [r.name, `${r.currentQuantity} ${r.unit}`, money(r.currentValue)]),
+        totalRow: [totalLabel, '', money(totalValue)],
+        csv: [
+          {
+            headers,
+            rows: [
+              ...held.map((r) => [r.name, `${r.currentQuantity} ${r.unit}`, csvAmount(r.currentValue)]),
+              [totalLabel, '', csvAmount(totalValue)],
+            ],
+          },
+        ],
         headline: null,
         empty: held.length === 0,
       };
@@ -298,6 +465,12 @@ async function buildModel(
         byMonth.set(m, agg);
       }
       const months = [...byMonth.keys()].sort();
+      const headers = [
+        t('reports.table.customer'),
+        t('reports.table.end_date'),
+        t('reports.table.paid_on'),
+        t('reports.table.days_to_pay'),
+      ];
       return {
         chart: {
           kind: 'bars',
@@ -310,13 +483,14 @@ async function buildModel(
           }),
         },
         legend: [{ label: t('reports.legend.avg_days'), color: 'primary' }],
-        headers: [
-          t('reports.table.customer'),
-          t('reports.table.end_date'),
-          t('reports.table.paid_on'),
-          t('reports.table.days_to_pay'),
-        ],
+        headers,
         rows: summary.rows.map((r) => [r.customer, r.endDate, r.paidOn, String(r.daysToPay)]),
+        csv: [
+          {
+            headers,
+            rows: summary.rows.map((r) => [r.customer, r.endDate, r.paidOn, r.daysToPay]),
+          },
+        ],
         headline:
           summary.averageDays === null
             ? null
@@ -425,7 +599,7 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
   const colorOf = (c: ChartColor) => theme.palette[c].main;
 
   const handleDownload = () => {
-    downloadCsv(`${reportKey}-${range.start}-${range.end}.csv`, toCsv(model.headers, model.rows));
+    downloadCsv(`${reportKey}-${range.start}-${range.end}.csv`, toCsvSections(model.csv));
   };
 
   return (
@@ -452,8 +626,8 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
 
       {model.empty ? (
         <Alert severity="info">
-          <Typography variant="subtitle2">{t('reports.empty.title')}</Typography>
-          {t('reports.empty.message')}
+          <Typography variant="subtitle2">{model.emptyTitle ?? t('reports.empty.title')}</Typography>
+          {model.emptyMessage ?? t('reports.empty.message')}
         </Alert>
       ) : (
         <>
@@ -516,6 +690,13 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
                     ))}
                   </TableRow>
                 ))}
+                {model.totalRow ? (
+                  <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: 2, borderColor: 'divider' } }}>
+                    {model.totalRow.map((cell, j) => (
+                      <TableCell key={j}>{cell}</TableCell>
+                    ))}
+                  </TableRow>
+                ) : null}
               </TableBody>
             </Table>
           </TableContainer>
@@ -542,6 +723,13 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
                         ))}
                       </TableRow>
                     ))}
+                    {model.extraTable.totalRow ? (
+                      <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: 2, borderColor: 'divider' } }}>
+                        {model.extraTable.totalRow.map((cell, j) => (
+                          <TableCell key={j}>{cell}</TableCell>
+                        ))}
+                      </TableRow>
+                    ) : null}
                   </TableBody>
                 </Table>
               </TableContainer>

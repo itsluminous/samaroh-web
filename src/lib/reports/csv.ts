@@ -23,6 +23,39 @@ export function toCsv(headers: CsvCell[], rows: CsvCell[][]): string {
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
+/**
+ * Machine-readable money for CSV cells: plain decimal rupees with exactly two
+ * decimals — no ₹ symbol, no digit grouping (a comma would need quoting and
+ * confuse numeric parsing in spreadsheet imports).
+ */
+export function csvAmount(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0.00';
+  }
+  const fixed = value.toFixed(2);
+  return fixed === '-0.00' ? '0.00' : fixed;
+}
+
+export interface CsvSection {
+  /** Optional single-cell title line above the section's header row. */
+  title?: string;
+  headers: CsvCell[];
+  rows: CsvCell[][];
+}
+
+/**
+ * Multi-table CSV: sections separated by a blank line, each optionally
+ * preceded by a title line (used by reports that export more than one table,
+ * e.g. personal expenses by month + by party).
+ */
+export function toCsvSections(sections: CsvSection[]): string {
+  const blocks = sections.map((section) => {
+    const lines = [...(section.title ? [[section.title]] : []), section.headers, ...section.rows];
+    return lines.map((row) => row.map(escapeCell).join(',')).join('\r\n');
+  });
+  return `\uFEFF${blocks.join('\r\n\r\n')}\r\n`;
+}
+
 /** Triggers a client-side download of the CSV (no server round-trip). */
 export function downloadCsv(filename: string, csv: string): void {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

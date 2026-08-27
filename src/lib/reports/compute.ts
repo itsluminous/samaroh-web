@@ -1,5 +1,5 @@
 /**
- * Pure computations behind the 9 reports (§4.4). Everything here is
+ * Pure computations behind the 10 reports (§4.4). Everything here is
  * deterministic on its inputs (unit-tested) — data fetching and rendering
  * live elsewhere. Cancelled bookings are excluded from every report.
  *
@@ -230,6 +230,27 @@ function groupBreakdown(bookings: ReportBooking[], keyOf: (b: ReportBooking) => 
   return [...map.values()].sort((a, b) => b.revenue - a.revenue);
 }
 
+// --- business vs personal parties -------------------------------------------
+
+/**
+ * Splits expenses on the owning party's business_related flag. Business
+ * expenses feed the financial reports (expense summary, profit); personal
+ * ones only appear in the personal-expenses report. An expense whose party
+ * is unknown counts as business — true is the column default.
+ */
+export function partitionExpensesByParty(
+  expenses: ReportExpense[],
+  parties: ReportParty[],
+): { business: ReportExpense[]; personal: ReportExpense[] } {
+  const personalIds = new Set(parties.filter((p) => !p.business_related).map((p) => p.id));
+  const business: ReportExpense[] = [];
+  const personal: ReportExpense[] = [];
+  for (const e of expenses) {
+    (personalIds.has(e.party_id) ? personal : business).push(e);
+  }
+  return { business, personal };
+}
+
 // --- 6. Expense summary -------------------------------------------------------
 
 export interface ExpenseMonthRow {
@@ -321,6 +342,26 @@ export function topPartiesBySpend(
     .map(([partyId, total]) => ({ partyId, name: names.get(partyId) ?? partyId, spend: total }))
     .sort((a, b) => b.spend - a.spend)
     .slice(0, limit);
+}
+
+// --- Personal expenses report -------------------------------------------------
+
+/** Monthly 'paid' spend on personal (non-business) parties. */
+export function personalSpendByMonth(
+  expenses: ReportExpense[],
+  parties: ReportParty[],
+  range: DateRange,
+): ExpenseMonthRow[] {
+  return expenseSpendByMonth(partitionExpensesByParty(expenses, parties).personal, range);
+}
+
+/** Per-party 'paid' spend on personal parties, largest first (no limit). */
+export function personalSpendByParty(
+  expenses: ReportExpense[],
+  parties: ReportParty[],
+): PartySpendRow[] {
+  const { personal } = partitionExpensesByParty(expenses, parties);
+  return topPartiesBySpend(personal, parties, Number.POSITIVE_INFINITY);
 }
 
 // --- 7. Profit view -----------------------------------------------------------
@@ -433,4 +474,24 @@ export function collectionEfficiency(
   const averageDays =
     rows.length === 0 ? null : rows.reduce((sum, r) => sum + r.daysToPay, 0) / rows.length;
   return { rows, averageDays };
+}
+
+// --- Totals (the TOTAL row under every money table) ---------------------------
+
+/** Sums a numeric projection over rows — the TOTAL-row building block. */
+export function sumBy<T>(rows: T[], value: (row: T) => number): number {
+  return rows.reduce((sum, row) => sum + value(row), 0);
+}
+
+export interface ProfitTotals {
+  income: number;
+  spend: number;
+  net: number;
+}
+
+/** Range totals for the profit table: total income, total expense, total net. */
+export function profitTotals(rows: ProfitMonthRow[]): ProfitTotals {
+  const income = sumBy(rows, (r) => r.income);
+  const spend = sumBy(rows, (r) => r.spend);
+  return { income, spend, net: income - spend };
 }

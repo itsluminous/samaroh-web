@@ -61,3 +61,20 @@ repo interprets it where the spec leaves web-specific latitude.)
   signed-in session). A real session supersedes guest mode; local guest data
   stays on-device and is NOT migrated to the account (revisit post-Wave-2 if
   demanded). Strings live in the shared `web-auth` fragment.
+- **Personal parties & report totals (web, mirrors Android).** `parties` gains
+  `business_related boolean not null default true` (shared migration
+  `004_party_business_flag.sql`). The add-party dialog asks
+  "Associated with {business}?" as a yes/no pill (default yes); the flag is
+  editable from the party ledger header and personal parties carry a
+  "Personal" tag on rows. Personal-party ledger entries are excluded from the
+  Expense summary and Profit reports in both directions and surface in a new
+  "Personal expenses" report (monthly + by-party, date-range filtered, CSV).
+  Every tabular money report now ends in a TOTAL row on screen and in the CSV
+  (profit: total income/expense/net). CSV exports switched to
+  machine-readable cells: plain decimal rupees with two decimals (no ₹, no
+  digit grouping) and unambiguous dates (`yyyy-mm` months, `yyyy-mm-dd`
+  dates); the on-screen tables keep locale formatting. **Deploy ordering:**
+  the server column only exists once the owner applies migration 004
+  (`supabase db push`) — apply it BEFORE deploying this app version, since
+  the app selects/writes `business_related`. Reads still normalize a
+  missing/null value to `true` (pre-flag guest-mode rows).

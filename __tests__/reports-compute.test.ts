@@ -176,8 +176,8 @@ describe('expenses + profit', () => {
   });
   it('ranks top parties by spend', () => {
     const top = topPartiesBySpend(expenses, [
-      { id: 'p1', name: 'Tent House' },
-      { id: 'p2', name: 'Caterer' },
+      { id: 'p1', name: 'Tent House', business_related: true },
+      { id: 'p2', name: 'Caterer', business_related: true },
     ]);
     expect(top.map((r) => r.name)).toEqual(['Tent House', 'Caterer']);
     expect(top[0]!.spend).toBe(800);

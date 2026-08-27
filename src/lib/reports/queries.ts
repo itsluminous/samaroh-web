@@ -120,13 +120,24 @@ export async function fetchInventoryPurchasesInRange(
   );
 }
 
+/**
+ * All parties of the business with their business/personal flag. The column
+ * ships in shared migration 004 — apply it before deploying this app version.
+ * Missing/null values (pre-flag guest rows) normalize to true.
+ */
 export async function fetchPartyNames(db: SupabaseClient, businessId: string): Promise<ReportParty[]> {
   const { data, error } = await db
     .from('parties')
-    .select('id, name')
+    .select('id, name, business_related')
     .eq('business_id', businessId);
   if (error) {
     throw new Error(error.message);
   }
-  return (data ?? []) as ReportParty[];
+  return ((data ?? []) as { id: string; name: string; business_related?: boolean | null }[]).map(
+    (row) => ({
+      id: row.id,
+      name: row.name,
+      business_related: row.business_related !== false,
+    }),
+  );
 }

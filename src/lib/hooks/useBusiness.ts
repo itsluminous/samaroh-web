@@ -9,6 +9,8 @@ export interface BusinessContextValue {
   supabase: SupabaseClient | null;
   /** Active business id (first membership; multi-business switcher is Menu scope). */
   businessId: string | null;
+  /** Active business display name (for strings interpolating {business}). */
+  businessName: string | null;
   /** Signed-in user id, needed for `created_by` columns. */
   userId: string | null;
   loading: boolean;
@@ -22,6 +24,7 @@ export interface BusinessContextValue {
 export function useBusiness(): BusinessContextValue {
   const supabase = useMemo(() => createClient(), []);
   const [businessId, setBusinessId] = useState<string | null>(null);
+  const [businessName, setBusinessName] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +48,7 @@ export function useBusiness(): BusinessContextValue {
       setUserId(userData.user.id);
       const { data, error: bizError } = await supabase
         .from('businesses')
-        .select('id')
+        .select('id, name')
         .is('deleted_at', null)
         .order('created_at', { ascending: true })
         .limit(1);
@@ -55,7 +58,9 @@ export function useBusiness(): BusinessContextValue {
       if (bizError) {
         setError(bizError.message);
       } else {
-        setBusinessId((data?.[0] as { id: string } | undefined)?.id ?? null);
+        const row = data?.[0] as { id: string; name: string | null } | undefined;
+        setBusinessId(row?.id ?? null);
+        setBusinessName(row?.name ?? null);
       }
       setLoading(false);
     })();
@@ -64,5 +69,5 @@ export function useBusiness(): BusinessContextValue {
     };
   }, [supabase]);
 
-  return { supabase, businessId, userId, loading, error };
+  return { supabase, businessId, businessName, userId, loading, error };
 }

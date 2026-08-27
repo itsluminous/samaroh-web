@@ -12,7 +12,22 @@ export interface PartyRecord {
   id: string;
   name: string;
   phone: string | null;
+  /**
+   * true (default) = counts in the financial reports; false = personal party,
+   * shown only in the personal-expenses report. Server column added by shared
+   * migration 004 — apply it before deploying this app version.
+   */
+  business_related: boolean;
   created_at: string;
+}
+
+/**
+ * Coalesces a missing/null business_related to true: guest-mode rows created
+ * before the flag existed have no such field (the local client projects it as
+ * null), and true is the column default.
+ */
+export function normalizeBusinessRelated(value: unknown): boolean {
+  return value !== false;
 }
 
 export interface ExpenseAttachmentRecord {
@@ -44,14 +59,17 @@ export async function fetchParties(
 ): Promise<PartyRecord[]> {
   const { data, error } = await supabase
     .from('parties')
-    .select('id, name, phone, created_at')
+    .select('id, name, phone, business_related, created_at')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('name', { ascending: true });
   if (error) {
     throw new Error(error.message);
   }
-  return (data ?? []) as PartyRecord[];
+  return ((data ?? []) as PartyRecord[]).map((row) => ({
+    ...row,
+    business_related: normalizeBusinessRelated(row.business_related),
+  }));
 }
 
 export async function fetchParty(
@@ -60,14 +78,15 @@ export async function fetchParty(
 ): Promise<PartyRecord | null> {
   const { data, error } = await supabase
     .from('parties')
-    .select('id, name, phone, created_at')
+    .select('id, name, phone, business_related, created_at')
     .eq('id', partyId)
     .is('deleted_at', null)
     .maybeSingle();
   if (error) {
     throw new Error(error.message);
   }
-  return (data as PartyRecord | null) ?? null;
+  const row = data as PartyRecord | null;
+  return row ? { ...row, business_related: normalizeBusinessRelated(row.business_related) } : null;
 }
 
 /** All live expenses of the business (party aggregation happens client-side). */
@@ -115,15 +134,39 @@ export async function createParty(
   businessId: string,
   name: string,
   phone: string | null,
+  businessRelated: boolean,
 ): Promise<PartyRecord> {
   const record = {
     id: crypto.randomUUID(),
     business_id: businessId,
     name: name.trim(),
     phone: phone?.trim() || null,
+    business_related: businessRelated,
   };
   await insertWithOutbox(supabase, { module: 'expenses', table: 'parties', row: record, label: record.name });
-  return { id: record.id, name: record.name, phone: record.phone, created_at: new Date().toISOString() };
+  return {
+    id: record.id,
+    name: record.name,
+    phone: record.phone,
+    business_related: record.business_related,
+    created_at: new Date().toISOString(),
+  };
+}
+
+/** Flips the business/personal flag on a party (editable per spec). */
+export async function updatePartyBusinessRelated(
+  supabase: SupabaseClient,
+  party: PartyRecord,
+  businessRelated: boolean,
+): Promise<void> {
+  await updateWithOutbox(supabase, {
+    module: 'expenses',
+    table: 'parties',
+    entityId: party.id,
+    patch: { business_related: businessRelated, updated_at: new Date().toISOString() },
+    baseUpdatedAt: null,
+    label: party.name,
+  });
 }
 
 export interface NewAttachmentInput {

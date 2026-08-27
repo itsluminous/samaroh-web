@@ -22,9 +22,11 @@ import { partyInitials, toLedgerEntry } from '../_lib/view';
 import {
   fetchParty,
   fetchPartyExpenses,
+  updatePartyBusinessRelated,
   type ExpenseRecord,
   type PartyRecord,
 } from '../_lib/queries';
+import BusinessRelatedPill from './BusinessRelatedPill';
 import EntryDialog from './EntryDialog';
 
 /**
@@ -36,7 +38,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   const tCommon = useTranslations('common');
   const format = useFormatter();
   const router = useRouter();
-  const { supabase, businessId, loading: businessLoading, error: businessError } = useBusiness();
+  const { supabase, businessId, businessName, loading: businessLoading, error: businessError } = useBusiness();
 
   const [party, setParty] = useState<PartyRecord | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -92,6 +94,21 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
     setDialogOpen(true);
   };
 
+  /** Flips business/personal on the party — optimistic, reverted on failure. */
+  const handleBusinessRelatedChange = async (next: boolean) => {
+    if (!supabase || !party || party.business_related === next) {
+      return;
+    }
+    const previous = party;
+    setParty({ ...party, business_related: next });
+    try {
+      await updatePartyBusinessRelated(supabase, party, next);
+    } catch {
+      setParty(previous);
+      setLoadError(true);
+    }
+  };
+
   const openEdit = (record: ExpenseRecord) => {
     setDialogDirection(record.direction);
     setDialogEntry(record);
@@ -116,15 +133,20 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
 
   return (
     <Box sx={{ pb: 12 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
         <IconButton aria-label={t('ledger.back')} onClick={() => router.push('/expenses')}>
           <ArrowBackIcon />
         </IconButton>
         <Avatar>{partyInitials(party.name)}</Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="h6" noWrap>
-            {party.name}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            <Typography variant="h6" noWrap>
+              {party.name}
+            </Typography>
+            {!party.business_related && (
+              <Chip size="small" variant="outlined" label={t('party.personal_tag')} />
+            )}
+          </Box>
           {party.phone && (
             <Typography variant="body2" color="text.secondary">
               {party.phone}
@@ -146,6 +168,14 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                 : t('ledger.settled')}
           </Typography>
         </Box>
+      </Box>
+
+      <Box sx={{ mb: 2, ml: 7 }}>
+        <BusinessRelatedPill
+          value={party.business_related}
+          businessName={businessName ?? ''}
+          onChange={(next) => void handleBusinessRelatedChange(next)}
+        />
       </Box>
 
       {ledgerRows.length === 0 ? (

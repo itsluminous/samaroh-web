@@ -5,6 +5,7 @@ import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import GlassFab from '@/components/GlassFab';
 import List from '@mui/material/List';
@@ -171,7 +172,14 @@ export default function ExpensesHome() {
                 <Avatar>{partyInitials(party.name)}</Avatar>
               </ListItemAvatar>
               <ListItemText
-                primary={party.name}
+                primary={
+                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                    {party.name}
+                    {!party.business_related && (
+                      <Chip size="small" variant="outlined" label={t('party.personal_tag')} />
+                    )}
+                  </Box>
+                }
                 secondary={
                   lastEntryAt
                     ? format.relativeTime(new Date(lastEntryAt))

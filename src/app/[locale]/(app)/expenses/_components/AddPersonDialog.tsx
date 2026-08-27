@@ -1,6 +1,7 @@
 'use client';
 
 import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -19,6 +20,7 @@ import { useBusiness } from '@/lib/hooks/useBusiness';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { partyInitials } from '../_lib/view';
 import { createParty, type PartyRecord } from '../_lib/queries';
+import BusinessRelatedPill from './BusinessRelatedPill';
 
 interface AddPersonDialogProps {
   open: boolean;
@@ -30,8 +32,10 @@ interface AddPersonDialogProps {
 }
 
 /**
- * Add-person dialog (spec §4.2): name with a 300ms-debounced fuzzy type-ahead
- * of existing parties (duplicate steering), optional phone.
+ * Add-party dialog (spec §4.2): name with a 300ms-debounced fuzzy type-ahead
+ * of existing parties (duplicate steering), optional phone, and a yes/no
+ * pill asking whether the party is associated with the business (default
+ * yes; "no" marks it personal — excluded from the financial reports).
  */
 export default function AddPersonDialog({
   open,
@@ -42,10 +46,11 @@ export default function AddPersonDialog({
 }: AddPersonDialogProps) {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
-  const { supabase, businessId } = useBusiness();
+  const { supabase, businessId, businessName } = useBusiness();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [businessRelated, setBusinessRelated] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const debouncedName = useDebouncedValue(name);
@@ -58,6 +63,7 @@ export default function AddPersonDialog({
   const reset = () => {
     setName('');
     setPhone('');
+    setBusinessRelated(true);
     setError(null);
     setSaving(false);
   };
@@ -83,7 +89,7 @@ export default function AddPersonDialog({
     }
     setSaving(true);
     try {
-      const party = await createParty(supabase, businessId, trimmed, phone || null);
+      const party = await createParty(supabase, businessId, trimmed, phone || null, businessRelated);
       reset();
       onCreated(party);
     } catch {
@@ -136,6 +142,13 @@ export default function AddPersonDialog({
           value={phone}
           onChange={(event) => setPhone(event.target.value)}
         />
+        <Box sx={{ mt: 1 }}>
+          <BusinessRelatedPill
+            value={businessRelated}
+            onChange={setBusinessRelated}
+            businessName={businessName ?? ''}
+          />
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>{tCommon('action.cancel')}</Button>

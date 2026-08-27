@@ -15,6 +15,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import ChipRow from '@/components/ChipRow';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -346,7 +347,7 @@ export default function BookingForm({
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
               {t('booking.form.source')}
             </Typography>
-            <Stack direction="row" spacing={1}>
+            <ChipRow>
               {SOURCES.map((s) => (
                 <Chip
                   key={s}
@@ -356,7 +357,7 @@ export default function BookingForm({
                   onClick={() => setSource(source === s ? null : s)}
                 />
               ))}
-            </Stack>
+            </ChipRow>
           </Box>
 
           <TextField

@@ -10,6 +10,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
+import ChipRow from '@/components/ChipRow';
 import TextField from '@mui/material/TextField';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
@@ -79,7 +80,7 @@ export default function RecordPaymentDialog({
             InputLabelProps={{ shrink: true }}
             fullWidth
           />
-          <Stack direction="row" spacing={1} flexWrap="wrap" rowGap={1} aria-label={t('method')}>
+          <ChipRow aria-label={t('method')}>
             {METHODS.map((m) => (
               <Chip
                 key={m}
@@ -89,7 +90,7 @@ export default function RecordPaymentDialog({
                 onClick={() => setMethod(m)}
               />
             ))}
-          </Stack>
+          </ChipRow>
           <TextField
             label={tForm('notes')}
             value={notes}

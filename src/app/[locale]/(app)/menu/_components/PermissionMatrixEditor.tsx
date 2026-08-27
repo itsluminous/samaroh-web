@@ -12,6 +12,7 @@ import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
+import ChipRow from '@/components/ChipRow';
 import type { MemberPermissions, PermissionModule, PresetKey } from '@/lib/permissions/permissions';
 import { hasPerm, matchingPreset, PERMISSION_MATRIX, presetPermissions } from '@/lib/permissions/permissions';
 
@@ -39,7 +40,7 @@ export default function PermissionMatrixEditor({
         <Typography variant="caption" color="text.secondary">
           {t('presets_label')}
         </Typography>
-        <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+        <ChipRow sx={{ mt: 0.5 }}>
           {PRESETS.map((preset) => (
             <Chip
               key={preset}
@@ -49,7 +50,7 @@ export default function PermissionMatrixEditor({
               onClick={() => onChange(presetPermissions(preset))}
             />
           ))}
-        </Stack>
+        </ChipRow>
       </Box>
 
       {PERMISSION_MATRIX.map(({ module, actions }) => (

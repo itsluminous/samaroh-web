@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import ChipRow from '@/components/ChipRow';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import type { DateRange } from '@/lib/reports/types';
@@ -47,7 +48,7 @@ export default function DateRangeFilter({
 
   return (
     <Box>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+      <ChipRow>
         {presets.map((p) => (
           <Chip
             key={p}
@@ -63,7 +64,7 @@ export default function DateRangeFilter({
           variant={preset === 'custom' ? 'filled' : 'outlined'}
           onClick={() => onChange(custom, 'custom')}
         />
-      </Stack>
+      </ChipRow>
       {preset === 'custom' ? (
         <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
           <TextField

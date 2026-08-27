@@ -2,9 +2,9 @@
 
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
+import ChipRow from '@/components/ChipRow';
 
 interface BusinessRelatedPillProps {
   /** true = business-related (default), false = personal. */
@@ -48,10 +48,10 @@ export default function BusinessRelatedPill({
       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.75 }}>
         {t('add_person.business_question', { business: businessName })}
       </Typography>
-      <Stack direction="row" spacing={1}>
+      <ChipRow>
         {pill(true, tCommon('action.yes'))}
         {pill(false, tCommon('action.no'))}
-      </Stack>
+      </ChipRow>
     </Box>
   );
 }

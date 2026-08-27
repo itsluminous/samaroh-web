@@ -28,8 +28,17 @@ export interface BusinessContext {
   memberNames: Record<string, string>;
 }
 
-const BOOKING_COLUMNS =
-  'id, business_id, event_type, event_icon, customer_name, customer_phone, start_date, end_date, start_time, end_time, total_amount, security_deposit, source, notes, status, invoice_number, created_by, updated_by, created_at, updated_at, deleted_at';
+// Bookings are read with `select('*')` so reads keep working while the
+// database schema lags the app (e.g. bookings.color before migration 005 is
+// applied) — newly added optional columns simply come back absent and are
+// normalized below instead of erroring the whole query.
+const BOOKING_COLUMNS = '*';
+
+/** Fills schema-lag gaps: columns the app knows but the server may not have yet. */
+function normalizeBooking(row: Record<string, unknown>): Booking {
+  const b = row as unknown as Booking;
+  return { ...b, color: b.color ?? null };
+}
 
 /** Resolves the signed-in member's business, role and booking permissions. */
 export async function fetchBusinessContext(db: SupabaseClient): Promise<BusinessContext | null> {
@@ -116,7 +125,7 @@ export async function fetchMonthData(
   if (blocksRes.error) {
     throw blocksRes.error;
   }
-  const bookings = (bookingsRes.data ?? []) as Booking[];
+  const bookings = ((bookingsRes.data ?? []) as Record<string, unknown>[]).map(normalizeBooking);
   const blocks = (blocksRes.data ?? []) as DateBlock[];
 
   const paymentsByBooking: Record<string, BookingPayment[]> = {};
@@ -152,6 +161,8 @@ export interface BookingInput {
   source: BookingSource | null;
   notes: string | null;
   status: BookingStatus;
+  /** Key from shared/booking-colors.json; null = default themed look. */
+  color: string | null;
 }
 
 /**
@@ -320,7 +331,7 @@ export async function fetchOverlaps(
     throw blocksRes.error;
   }
   return {
-    bookings: (bookingsRes.data ?? []) as Booking[],
+    bookings: ((bookingsRes.data ?? []) as Record<string, unknown>[]).map(normalizeBooking),
     blocks: (blocksRes.data ?? []) as DateBlock[],
   };
 }

@@ -78,3 +78,19 @@ repo interprets it where the spec leaves web-specific latitude.)
   (`supabase db push`) — apply it BEFORE deploying this app version, since
   the app selects/writes `business_related`. Reads still normalize a
   missing/null value to `true` (pre-flag guest-mode rows).
+- **Booking colors (web, shared contract).** `bookings` gains a nullable
+  `color text` column (shared migration `005_booking_color.sql`) holding a
+  key from the new `shared/booking-colors.json` 16-swatch palette
+  (`{ key, hex, on_hex, label_key }`, all pairs WCAG AA). NULL = default
+  themed (purple) look. The booking form shows a "Colour" swatch picker
+  (Default + 16, localized aria-labels from `booking.color.*`, selected
+  ring). Rendering: calendar pills/spanning bars use the palette hex with
+  its `on_hex` text; tentative bookings KEEP the outlined-amber treatment
+  regardless of color; agenda rows show a color dot and the detail drawer a
+  color-name chip. Unknown keys (newer contract than app) degrade to the
+  themed default. **Deploy ordering:** apply migration 005 to the live
+  Supabase project (`supabase db push`) BEFORE deploying this app version —
+  writes include `color` and would fail against the old schema. Reads are
+  tolerant either way: booking selects switched to `select('*')` and a
+  normalizer maps an absent/missing `color` to null (also covers legacy
+  guest-mode Dexie rows).

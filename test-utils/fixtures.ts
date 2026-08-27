@@ -22,6 +22,7 @@ export function makeBooking(overrides: Partial<Booking> = {}): Booking {
     source: null,
     notes: null,
     status: 'confirmed',
+    color: null,
     invoice_number: null,
     created_by: 'user-1',
     updated_by: null,

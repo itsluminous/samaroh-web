@@ -1,8 +1,9 @@
 'use client';
 
-// Month calendar grid (§4.1): Sunday-start weeks, status-colored pills
-// (confirmed = filled purple, tentative = outlined amber, cancelled hidden),
-// grey-striped date blocks, multi-day spanning bars, today outlined.
+// Month calendar grid (§4.1): Sunday-start weeks, colored pills (confirmed =
+// booking color or the themed purple default, tentative = outlined amber,
+// cancelled hidden), grey-striped date blocks, multi-day spanning bars,
+// today outlined.
 
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -10,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import { useLocale } from 'next-intl';
 import { useMemo } from 'react';
 import { buildMonthWeeks, todayIso } from '@/lib/booking/calendar';
+import { pillPaint } from '@/lib/booking/bookingColors';
 import { weekdayNarrowNames } from '@/lib/booking/dates';
 import type { Booking, DateBlock } from '@/lib/booking/types';
 import { pillLabel } from './format';
@@ -118,41 +120,49 @@ export default function CalendarGrid({
                 pointerEvents: 'none',
               }}
             >
-              {week.segments.map((seg) => (
-                <ButtonBase
-                  key={`${seg.booking.id}-${seg.startCol}`}
-                  onClick={() => onBookingClick(seg.booking)}
-                  sx={{
-                    pointerEvents: 'auto',
-                    gridColumn: `${seg.startCol + 1} / span ${seg.span}`,
-                    gridRow: seg.lane + 1,
-                    height: LANE_HEIGHT - 3,
-                    justifyContent: 'flex-start',
-                    px: 0.75,
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap',
-                    borderTopLeftRadius: seg.continuesLeft ? 0 : 10,
-                    borderBottomLeftRadius: seg.continuesLeft ? 0 : 10,
-                    borderTopRightRadius: seg.continuesRight ? 0 : 10,
-                    borderBottomRightRadius: seg.continuesRight ? 0 : 10,
-                    ...(seg.booking.status === 'tentative'
-                      ? {
-                          border: 1,
-                          borderColor: 'warning.main',
-                          color: 'warning.main',
-                          bgcolor: 'transparent',
-                        }
-                      : {
-                          bgcolor: 'primary.main',
-                          color: 'primary.contrastText',
-                        }),
-                  }}
-                >
-                  <Typography variant="caption" noWrap sx={{ fontWeight: 600 }}>
-                    {pillLabel(seg.booking)}
-                  </Typography>
-                </ButtonBase>
-              ))}
+              {week.segments.map((seg) => {
+                const paint = pillPaint(seg.booking);
+                return (
+                  <ButtonBase
+                    key={`${seg.booking.id}-${seg.startCol}`}
+                    onClick={() => onBookingClick(seg.booking)}
+                    sx={{
+                      pointerEvents: 'auto',
+                      gridColumn: `${seg.startCol + 1} / span ${seg.span}`,
+                      gridRow: seg.lane + 1,
+                      height: LANE_HEIGHT - 3,
+                      justifyContent: 'flex-start',
+                      px: 0.75,
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      borderTopLeftRadius: seg.continuesLeft ? 0 : 10,
+                      borderBottomLeftRadius: seg.continuesLeft ? 0 : 10,
+                      borderTopRightRadius: seg.continuesRight ? 0 : 10,
+                      borderBottomRightRadius: seg.continuesRight ? 0 : 10,
+                      ...(paint.kind === 'tentative'
+                        ? {
+                            border: 1,
+                            borderColor: 'warning.main',
+                            color: 'warning.main',
+                            bgcolor: 'transparent',
+                          }
+                        : paint.kind === 'custom'
+                          ? {
+                              bgcolor: paint.bg,
+                              color: paint.fg,
+                            }
+                          : {
+                              bgcolor: 'primary.main',
+                              color: 'primary.contrastText',
+                            }),
+                    }}
+                  >
+                    <Typography variant="caption" noWrap sx={{ fontWeight: 600 }}>
+                      {pillLabel(seg.booking)}
+                    </Typography>
+                  </ButtonBase>
+                );
+              })}
             </Box>
           </Box>
         );

@@ -3,6 +3,7 @@
 // Agenda list of the visible month's bookings, below the grid (§4.1).
 // Cancelled bookings stay visible here with strikethrough.
 
+import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -10,6 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { computeDue } from '@/lib/booking/due';
+import { findBookingColor } from '@/lib/booking/bookingColors';
 import { formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment } from '@/lib/booking/types';
@@ -40,6 +42,7 @@ export default function AgendaList({
           {sorted.map((booking) => {
             const cancelled = booking.status === 'cancelled';
             const due = computeDue(booking.total_amount, paymentsByBooking[booking.id] ?? []);
+            const colorDef = findBookingColor(booking.color);
             return (
               <ListItemButton
                 key={booking.id}
@@ -47,6 +50,18 @@ export default function AgendaList({
                 divider
                 sx={{ px: 1 }}
               >
+                {/* Booking color marker (default = themed purple). */}
+                <Box
+                  sx={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    mr: 1,
+                    flexShrink: 0,
+                    bgcolor: colorDef?.hex ?? 'primary.main',
+                    opacity: cancelled ? 0.4 : 1,
+                  }}
+                />
                 <ListItemText
                   primary={formatBookingTitle(booking, t)}
                   secondary={formatDateRange(booking.start_date, booking.end_date, locale)}

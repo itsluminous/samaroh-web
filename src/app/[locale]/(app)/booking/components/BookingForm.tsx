@@ -7,6 +7,7 @@
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -23,6 +24,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { computePaid } from '@/lib/booking/due';
+import { BOOKING_COLORS } from '@/lib/booking/bookingColors';
 import { CUSTOM_EVENT_TYPE_KEY, EVENT_TYPES, findEventType, isBuiltInEventType } from '@/lib/booking/eventTypes';
 import { formatRupees, parseAmount } from '@/lib/booking/money';
 import type { BookingInput } from '@/lib/booking/repo';
@@ -84,6 +86,7 @@ export default function BookingForm({
   );
   const [advance, setAdvance] = useState('');
   const [source, setSource] = useState<BookingSource | null>(initial?.source ?? null);
+  const [color, setColor] = useState<string | null>(initial?.color ?? null);
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const [nameError, setNameError] = useState(false);
@@ -132,6 +135,7 @@ export default function BookingForm({
       source,
       notes: notes.trim() === '' ? null : notes.trim(),
       status,
+      color,
     };
   }
 
@@ -358,6 +362,56 @@ export default function BookingForm({
                 />
               ))}
             </ChipRow>
+          </Box>
+
+          <Box>
+            <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
+              {t('booking.form.color')}
+            </Typography>
+            {/* Native buttons: Tab moves between swatches, Enter/Space selects. */}
+            <Box
+              role="group"
+              aria-label={t('booking.form.color')}
+              sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+            >
+              <ButtonBase
+                aria-label={t('booking.color.default')}
+                aria-pressed={color === null}
+                onClick={() => setColor(null)}
+                sx={(theme) => ({
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  bgcolor: 'primary.main',
+                  border: 1,
+                  borderColor: 'divider',
+                  boxShadow:
+                    color === null
+                      ? `0 0 0 2px ${theme.palette.background.paper}, 0 0 0 4px ${theme.palette.primary.main}`
+                      : 'none',
+                })}
+              />
+              {BOOKING_COLORS.map((c) => (
+                <ButtonBase
+                  key={c.key}
+                  aria-label={t(c.label_key)}
+                  aria-pressed={color === c.key}
+                  onClick={() => setColor(c.key)}
+                  sx={(theme) => ({
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    bgcolor: c.hex,
+                    border: 1,
+                    borderColor: 'divider',
+                    boxShadow:
+                      color === c.key
+                        ? `0 0 0 2px ${theme.palette.background.paper}, 0 0 0 4px ${theme.palette.primary.main}`
+                        : 'none',
+                  })}
+                />
+              ))}
+            </Box>
           </Box>
 
           <TextField

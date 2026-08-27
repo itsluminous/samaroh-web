@@ -22,6 +22,8 @@ export interface Booking {
   source: BookingSource | null;
   notes: string | null;
   status: BookingStatus;
+  /** Key from shared/booking-colors.json; null = default themed look (migration 005). */
+  color: string | null;
   invoice_number: string | null; // frozen after first invoice generation
   created_by: string;
   updated_by: string | null;

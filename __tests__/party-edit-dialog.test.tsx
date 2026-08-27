@@ -6,14 +6,14 @@
  * query paths (fetchParties / updateParty / deleteParty) are exercised.
  */
 import 'fake-indexeddb/auto';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import en from '../messages/en.json';
 import { createLocalClient } from '@/lib/guest/localClient';
 import { guestDb, localTable } from '@/lib/guest/localDb';
 import EditPartyDialog from '@/app/[locale]/(app)/expenses/_components/EditPartyDialog';
-import type { PartyRecord } from '@/app/[locale]/(app)/expenses/_lib/queries';
+import { fetchParties, type PartyRecord } from '@/app/[locale]/(app)/expenses/_lib/queries';
 
 const mockClient = createLocalClient();
 
@@ -85,9 +85,15 @@ describe('EditPartyDialog validation', () => {
         onDeleted={jest.fn()}
       />,
     );
-    // Wait for the sibling-parties load before validating against it.
+    // Flush the dialog's own fetchParties round trip (real local client →
+    // fake IndexedDB) so `others` is populated before validating against it.
+    // Waiting on the raw Dexie row is NOT enough — the component's setOthers
+    // lands on a later task, which raced the save click under suite load.
     await waitFor(async () => {
       expect(await localTable('parties')!.get('p2')).toBeTruthy();
+    });
+    await act(async () => {
+      await fetchParties(mockClient, 'b1');
     });
     fireEvent.change(screen.getByLabelText(en.expenses.person.name_label), {
       target: { value: 'caterer' },

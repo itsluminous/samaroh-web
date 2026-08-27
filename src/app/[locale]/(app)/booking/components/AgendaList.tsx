@@ -11,7 +11,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { computeDue } from '@/lib/booking/due';
-import { findBookingColor } from '@/lib/booking/bookingColors';
+import { effectiveBookingColor } from '@/lib/booking/bookingColors';
 import { formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment } from '@/lib/booking/types';
@@ -42,7 +42,7 @@ export default function AgendaList({
           {sorted.map((booking) => {
             const cancelled = booking.status === 'cancelled';
             const due = computeDue(booking.total_amount, paymentsByBooking[booking.id] ?? []);
-            const colorDef = findBookingColor(booking.color);
+            const colorDef = effectiveBookingColor(booking);
             return (
               <ListItemButton
                 key={booking.id}

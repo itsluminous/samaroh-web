@@ -24,7 +24,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { computePaid } from '@/lib/booking/due';
-import { BOOKING_COLORS } from '@/lib/booking/bookingColors';
+import { BOOKING_COLORS, eventTypeDefaultColor } from '@/lib/booking/bookingColors';
 import { CUSTOM_EVENT_TYPE_KEY, EVENT_TYPES, findEventType, isBuiltInEventType } from '@/lib/booking/eventTypes';
 import { formatRupees, parseAmount } from '@/lib/booking/money';
 import type { BookingInput } from '@/lib/booking/repo';
@@ -102,6 +102,12 @@ export default function BookingForm({
     () => (Math.round(totalNum * 100) - Math.round(paidSoFar * 100)) / 100,
     [totalNum, paidSoFar],
   );
+
+  // "Default" in the color picker means "follow the event type": the swatch
+  // previews the selected type's default calendar color. Custom free-text types
+  // have no type default and keep the themed (primary purple) look.
+  const typeDefaultColor =
+    typeKey === CUSTOM_EVENT_TYPE_KEY ? undefined : eventTypeDefaultColor(typeKey);
 
   function buildInput(): BookingInput | null {
     if (name.trim() === '') {
@@ -382,7 +388,7 @@ export default function BookingForm({
                   width: 32,
                   height: 32,
                   borderRadius: '50%',
-                  bgcolor: 'primary.main',
+                  bgcolor: typeDefaultColor?.hex ?? 'primary.main',
                   border: 1,
                   borderColor: 'divider',
                   boxShadow:

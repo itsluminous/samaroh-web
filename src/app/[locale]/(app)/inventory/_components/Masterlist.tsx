@@ -29,6 +29,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { useBusiness } from '@/lib/hooks/useBusiness';
+import { useMembership } from '@/lib/permissions/useMembership';
 import {
   createImageUrls,
   deleteMasterItem,
@@ -49,6 +50,10 @@ export default function Masterlist() {
   const tCommon = useTranslations('common');
   const router = useRouter();
   const { supabase, businessId, loading: businessLoading, error: businessError } = useBusiness();
+  // Owners always; members need inventory.manage_master_items (RLS enforces
+  // the same rule server-side — this only hides the affordances).
+  const { isOwner, permissions } = useMembership();
+  const canManageItems = isOwner || permissions.inventory.manage_master_items;
 
   const [items, setItems] = useState<MasterItemRecord[]>([]);
   const [itemsWithTxns, setItemsWithTxns] = useState<Set<string>>(new Set());
@@ -178,28 +183,30 @@ export default function Masterlist() {
                 key={item.id}
                 divider
                 secondaryAction={
-                  <Box>
-                    <IconButton
-                      aria-label={tCommon('action.edit')}
-                      onClick={() => {
-                        setEditingItem(item);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <Tooltip title={hasTxns ? t('master.delete_blocked') : tCommon('action.delete')}>
-                      <span>
-                        <IconButton
-                          aria-label={tCommon('action.delete')}
-                          disabled={hasTxns}
-                          onClick={() => setDeletingItem(item)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </Box>
+                  canManageItems ? (
+                    <Box>
+                      <IconButton
+                        aria-label={tCommon('action.edit')}
+                        onClick={() => {
+                          setEditingItem(item);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <Tooltip title={hasTxns ? t('master.delete_blocked') : tCommon('action.delete')}>
+                        <span>
+                          <IconButton
+                            aria-label={tCommon('action.delete')}
+                            disabled={hasTxns}
+                            onClick={() => setDeletingItem(item)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  ) : undefined
                 }
               >
                 <ListItemAvatar>
@@ -214,19 +221,21 @@ export default function Masterlist() {
         </List>
       )}
 
-      <GlassFab
-        color="primary"
-        variant="extended"
-        aria-label={t('master.add_item')}
-        onClick={() => {
-          setEditingItem(null);
-          setDialogOpen(true);
-        }}
-        sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
-      >
-        <AddIcon sx={{ mr: 1 }} />
-        {t('master.add_item')}
-      </GlassFab>
+      {canManageItems && (
+        <GlassFab
+          color="primary"
+          variant="extended"
+          aria-label={t('master.add_item')}
+          onClick={() => {
+            setEditingItem(null);
+            setDialogOpen(true);
+          }}
+          sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
+        >
+          <AddIcon sx={{ mr: 1 }} />
+          {t('master.add_item')}
+        </GlassFab>
+      )}
 
       <MasterItemDialog
         open={dialogOpen}

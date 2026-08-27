@@ -1,6 +1,8 @@
 'use client';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
@@ -9,6 +11,10 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Snackbar from '@mui/material/Snackbar';
 import Table from '@mui/material/Table';
@@ -29,8 +35,10 @@ import {
   computeFifoValue,
   type TransactionType,
 } from '@/lib/inventory/fifo';
+import { useMembership } from '@/lib/permissions/useMembership';
 import {
   createImageUrls,
+  deleteMasterItem,
   fetchItemTransactions,
   fetchMasterItem,
   fetchMasterItems,
@@ -38,6 +46,7 @@ import {
   type MasterItemRecord,
 } from '../_lib/queries';
 import { isBuiltInUnit, unitLabelKey } from '../_lib/units';
+import MasterItemDialog from './MasterItemDialog';
 import RecordTransactionDialog from './RecordTransactionDialog';
 
 /** Transactions revealed per page (Load more windowing). */
@@ -61,6 +70,10 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   const router = useRouter();
   const { supabase, businessId, userId, loading: businessLoading, error: businessError } =
     useBusiness();
+  // Same gate as the master list: owners always; members need
+  // inventory.manage_master_items (shared/permissions/permissions-schema.json).
+  const { isOwner, permissions } = useMembership();
+  const canManageItems = isOwner || permissions.inventory.manage_master_items;
 
   const [item, setItem] = useState<MasterItemRecord | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -74,6 +87,9 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
     open: false,
     type: 'add',
   });
+  const [editOpen, setEditOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);
   const [imageExpanded, setImageExpanded] = useState(false);
 
@@ -162,6 +178,24 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
     [item, currentStock],
   );
 
+  // Delete follows the master-list rule: blocked while the item has any live
+  // transactions (the caller-side guard for the tombstone delete).
+  const hasTransactions = transactions.length > 0;
+
+  const handleDelete = async () => {
+    if (!supabase || !item) {
+      return;
+    }
+    setDeleteError(false);
+    try {
+      await deleteMasterItem(supabase, item.id);
+      setConfirmingDelete(false);
+      router.push('/inventory');
+    } catch {
+      setDeleteError(true);
+    }
+  };
+
   if (businessLoading || loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -193,6 +227,28 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
         <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
           {item.name}
         </Typography>
+        {canManageItems && (
+          <Box>
+            <Tooltip title={tCommon('action.edit')}>
+              <IconButton aria-label={tCommon('action.edit')} onClick={() => setEditOpen(true)}>
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip
+              title={hasTransactions ? t('master.delete_blocked') : tCommon('action.delete')}
+            >
+              <span>
+                <IconButton
+                  aria-label={tCommon('action.delete')}
+                  disabled={hasTransactions}
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
+        )}
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -328,6 +384,48 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
           void reload();
         }}
       />
+
+      <MasterItemDialog
+        open={editOpen}
+        item={item}
+        items={items}
+        currentImageUrl={imageUrl}
+        supabase={supabase}
+        businessId={businessId}
+        onClose={() => setEditOpen(false)}
+        onPickExisting={(existing) => {
+          // A duplicate chip points at another master item — go to its page.
+          setEditOpen(false);
+          router.push(`/inventory/${existing.id}`);
+        }}
+        onSaved={() => {
+          setEditOpen(false);
+          setSnack(t('master.save_success'));
+          void reload();
+        }}
+      />
+
+      <Dialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        maxWidth="xs"
+      >
+        <DialogTitle>{t('master.delete_title')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('master.delete_message')}</DialogContentText>
+          {deleteError && (
+            <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+              {t('error.save_failed')}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmingDelete(false)}>{tCommon('action.cancel')}</Button>
+          <Button color="error" variant="contained" onClick={handleDelete}>
+            {tCommon('action.delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={snack !== null}

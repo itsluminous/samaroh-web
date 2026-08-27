@@ -8,7 +8,14 @@
  * - collected is capped at the booking total; the surplus stays visible in
  *   the booking's own payment history, not in reports.
  */
-import type { DateRange, ReportBooking, ReportExpense, ReportParty, ReportPayment } from './types';
+import type {
+  DateRange,
+  ReportBooking,
+  ReportExpense,
+  ReportInventoryPurchase,
+  ReportParty,
+  ReportPayment,
+} from './types';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -251,6 +258,52 @@ export function expenseSpendByMonth(expenses: ReportExpense[], range: DateRange)
   return [...rows.values()];
 }
 
+/**
+ * Monthly inventory purchases: `add` transactions valued at
+ * quantity × unit_price, bucketed by the month of transaction_date.
+ * These count as expenses in the money reports without creating
+ * expense ledger rows.
+ */
+export function inventoryPurchasesByMonth(
+  purchases: ReportInventoryPurchase[],
+  range: DateRange,
+): ExpenseMonthRow[] {
+  const rows = new Map<string, ExpenseMonthRow>(monthsInRange(range).map((m) => [m, { month: m, spend: 0 }]));
+  for (const p of purchases) {
+    if (!p.transaction_date) {
+      continue; // guest-mode rows may lack a transaction timestamp
+    }
+    const row = rows.get(monthOf(p.transaction_date));
+    if (row) {
+      row.spend += p.quantity * p.unit_price;
+    }
+  }
+  return [...rows.values()];
+}
+
+export interface ExpenseSummaryMonthRow {
+  month: string;
+  /** 'paid' expense ledger entries. */
+  ledger: number;
+  /** Inventory purchases (add transactions, quantity × unit_price). */
+  inventory: number;
+  total: number;
+}
+
+/** Expense summary months: ledger spend + inventory purchases, side by side. */
+export function expenseSummaryByMonth(
+  expenses: ReportExpense[],
+  purchases: ReportInventoryPurchase[],
+  range: DateRange,
+): ExpenseSummaryMonthRow[] {
+  const ledger = expenseSpendByMonth(expenses, range);
+  const inventory = inventoryPurchasesByMonth(purchases, range);
+  return ledger.map((row, i) => {
+    const inv = inventory[i]!.spend;
+    return { month: row.month, ledger: row.spend, inventory: inv, total: row.spend + inv };
+  });
+}
+
 export function topPartiesBySpend(
   expenses: ReportExpense[],
   parties: ReportParty[],
@@ -281,11 +334,13 @@ export interface ProfitMonthRow {
 
 /**
  * Cash-basis profit: payments received in the month minus 'paid' ledger
- * entries in the month ('received' entries count back into income).
+ * entries and inventory purchases in the month ('received' entries count
+ * back into income).
  */
 export function profitByMonth(
   payments: ReportPayment[],
   expenses: ReportExpense[],
+  purchases: ReportInventoryPurchase[],
   range: DateRange,
 ): ProfitMonthRow[] {
   const rows = new Map<string, ProfitMonthRow>(
@@ -307,6 +362,9 @@ export function profitByMonth(
     } else {
       row.income += e.amount;
     }
+  }
+  for (const p of inventoryPurchasesByMonth(purchases, range)) {
+    rows.get(p.month)!.spend += p.spend;
   }
   for (const row of rows.values()) {
     row.net = row.income - row.spend;

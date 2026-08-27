@@ -32,7 +32,7 @@ import {
   collectionEfficiency,
   duesByBucket,
   eventTypeBreakdown,
-  expenseSpendByMonth,
+  expenseSummaryByMonth,
   monthOf,
   occupancyByMonth,
   outstandingDues,
@@ -46,6 +46,7 @@ import { downloadCsv, toCsv } from '@/lib/reports/csv';
 import {
   fetchBookingsWithPayments,
   fetchExpensesInRange,
+  fetchInventoryPurchasesInRange,
   fetchPartyNames,
   fetchPaymentsInRange,
 } from '@/lib/reports/queries';
@@ -66,6 +67,8 @@ interface ReportModel {
   legend: { label: string; color: ChartColor }[];
   headers: string[];
   rows: string[][];
+  /** Secondary titled table rendered below the main one (not in the CSV). */
+  extraTable?: { title: string; headers: string[]; rows: string[][] };
   /** Optional headline (e.g. overall average) rendered above the chart. */
   headline: string | null;
   empty: boolean;
@@ -195,33 +198,52 @@ async function buildModel(
       };
     }
     case 'expense_summary': {
-      const [expenses, parties] = await Promise.all([
+      const [expenses, parties, purchases] = await Promise.all([
         fetchExpensesInRange(db, businessId, range),
         fetchPartyNames(db, businessId),
+        fetchInventoryPurchasesInRange(db, businessId, range),
       ]);
-      const monthly = expenseSpendByMonth(expenses, range);
+      const monthly = expenseSummaryByMonth(expenses, purchases, range);
       const top = topPartiesBySpend(expenses, parties);
+      const inventoryLabel = t('reports.expense.inventory_purchases_label');
       return {
         chart: {
           kind: 'bars',
           data: monthly.map((r) => ({
             label: monthLabel(r.month),
-            segments: [{ value: r.spend, color: 'secondary' }],
+            segments: [
+              { value: r.ledger, color: 'secondary' },
+              { value: r.inventory, color: 'warning' },
+            ],
           })),
         },
-        legend: [{ label: t('reports.legend.spend'), color: 'secondary' }],
-        headers: [t('reports.table.party'), t('reports.table.spend')],
-        rows: top.map((r) => [r.name, money(r.spend)]),
+        legend: [
+          { label: t('reports.legend.spend'), color: 'secondary' },
+          { label: inventoryLabel, color: 'warning' },
+        ],
+        headers: [
+          t('reports.table.month'),
+          t('reports.table.expenses'),
+          inventoryLabel,
+          t('reports.table.total'),
+        ],
+        rows: monthly.map((r) => [monthLabel(r.month), money(r.ledger), money(r.inventory), money(r.total)]),
+        extraTable: {
+          title: t('reports.report.expense_summary_subtitle'),
+          headers: [t('reports.table.party'), t('reports.table.spend')],
+          rows: top.map((r) => [r.name, money(r.spend)]),
+        },
         headline: null,
-        empty: monthly.every((r) => r.spend === 0),
+        empty: monthly.every((r) => r.total === 0),
       };
     }
     case 'profit': {
-      const [payments, expenses] = await Promise.all([
+      const [payments, expenses, purchases] = await Promise.all([
         fetchPaymentsInRange(db, businessId, range),
         fetchExpensesInRange(db, businessId, range),
+        fetchInventoryPurchasesInRange(db, businessId, range),
       ]);
-      const rows = profitByMonth(payments, expenses, range);
+      const rows = profitByMonth(payments, expenses, purchases, range);
       return {
         chart: {
           kind: 'lines',
@@ -497,6 +519,34 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
               </TableBody>
             </Table>
           </TableContainer>
+
+          {model.extraTable && model.extraTable.rows.length > 0 ? (
+            <Box>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                {model.extraTable.title}
+              </Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {model.extraTable.headers.map((h) => (
+                        <TableCell key={h}>{h}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {model.extraTable.rows.map((row, i) => (
+                      <TableRow key={i}>
+                        {row.map((cell, j) => (
+                          <TableCell key={j}>{cell}</TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : null}
 
           <Box>
             <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownload}>

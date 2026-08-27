@@ -3,7 +3,14 @@
  * projections it needs; RLS scopes every query to the member's business.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { DateRange, ReportBooking, ReportExpense, ReportParty, ReportPayment } from './types';
+import type {
+  DateRange,
+  ReportBooking,
+  ReportExpense,
+  ReportInventoryPurchase,
+  ReportParty,
+  ReportPayment,
+} from './types';
 
 const BOOKING_COLUMNS =
   'id, customer_name, event_type, event_icon, start_date, end_date, total_amount, status, source';
@@ -75,6 +82,42 @@ export async function fetchExpensesInRange(
     throw new Error(error.message);
   }
   return (data ?? []) as ReportExpense[];
+}
+
+/** Day after an ISO date — exclusive upper bound for timestamptz filters. */
+function nextDayIso(isoDate: string): string {
+  return new Date(Date.parse(`${isoDate}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Inventory `add` transactions (stock purchases) in the range. Counted as
+ * expenses in the money reports (quantity × unit_price) — there is no
+ * matching expense ledger row. transaction_date is timestamptz, so the end
+ * bound is exclusive-next-day to include the whole last day.
+ */
+export async function fetchInventoryPurchasesInRange(
+  db: SupabaseClient,
+  businessId: string,
+  range: DateRange,
+): Promise<ReportInventoryPurchase[]> {
+  const { data, error } = await db
+    .from('inventory_transactions')
+    .select('quantity, unit_price, transaction_date')
+    .eq('business_id', businessId)
+    .eq('transaction_type', 'add')
+    .is('deleted_at', null)
+    .gte('transaction_date', range.start)
+    .lt('transaction_date', nextDayIso(range.end));
+  if (error) {
+    throw new Error(error.message);
+  }
+  return ((data ?? []) as { quantity: number; unit_price: number; transaction_date: string }[]).map(
+    (row) => ({
+      quantity: Number(row.quantity),
+      unit_price: Number(row.unit_price),
+      transaction_date: row.transaction_date,
+    }),
+  );
 }
 
 export async function fetchPartyNames(db: SupabaseClient, businessId: string): Promise<ReportParty[]> {

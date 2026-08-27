@@ -5,6 +5,8 @@ import {
   duesByBucket,
   eventTypeBreakdown,
   expenseSpendByMonth,
+  expenseSummaryByMonth,
+  inventoryPurchasesByMonth,
   monthsInRange,
   occupancyByMonth,
   outstandingDues,
@@ -13,7 +15,12 @@ import {
   sourceBreakdown,
   topPartiesBySpend,
 } from '@/lib/reports/compute';
-import type { ReportBooking, ReportExpense, ReportPayment } from '@/lib/reports/types';
+import type {
+  ReportBooking,
+  ReportExpense,
+  ReportInventoryPurchase,
+  ReportPayment,
+} from '@/lib/reports/types';
 
 const RANGE = { start: '2026-01-01', end: '2026-03-31' };
 
@@ -131,9 +138,41 @@ describe('expenses + profit', () => {
     { party_id: 'p2', direction: 'paid', amount: 200, expense_date: '2026-02-15' },
     { party_id: 'p2', direction: 'received', amount: 150, expense_date: '2026-02-20' },
   ];
+  const purchases: ReportInventoryPurchase[] = [
+    // Two adds in Jan (100×2 + 50×4 = 400), one in Mar (10×30 = 300).
+    { quantity: 100, unit_price: 2, transaction_date: '2026-01-08T10:30:00+00:00' },
+    { quantity: 50, unit_price: 4, transaction_date: '2026-01-25T23:59:00+00:00' },
+    { quantity: 10, unit_price: 30, transaction_date: '2026-03-02T05:00:00+00:00' },
+    { quantity: 99, unit_price: 99, transaction_date: '2025-12-31T12:00:00+00:00' }, // out of range
+  ];
   it('sums monthly spend from paid entries only', () => {
     const rows = expenseSpendByMonth(expenses, RANGE);
     expect(rows.map((r) => r.spend)).toEqual([500, 500, 0]);
+  });
+  it('buckets inventory purchases by transaction month at quantity × unit price', () => {
+    const rows = inventoryPurchasesByMonth(purchases, RANGE);
+    expect(rows.map((r) => r.month)).toEqual(['2026-01', '2026-02', '2026-03']);
+    expect(rows.map((r) => r.spend)).toEqual([400, 0, 300]); // empty Feb present, out-of-range dropped
+  });
+  it('skips purchases without a transaction timestamp', () => {
+    const rows = inventoryPurchasesByMonth(
+      [{ quantity: 5, unit_price: 10, transaction_date: '' }],
+      RANGE,
+    );
+    expect(rows.every((r) => r.spend === 0)).toBe(true);
+  });
+  it('combines ledger spend and inventory purchases per month', () => {
+    const rows = expenseSummaryByMonth(expenses, purchases, RANGE);
+    expect(rows).toEqual([
+      { month: '2026-01', ledger: 500, inventory: 400, total: 900 },
+      { month: '2026-02', ledger: 500, inventory: 0, total: 500 },
+      { month: '2026-03', ledger: 0, inventory: 300, total: 300 },
+    ]);
+  });
+  it('keeps zero months when there is no spend at all', () => {
+    const rows = expenseSummaryByMonth([], [], RANGE);
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.ledger === 0 && r.inventory === 0 && r.total === 0)).toBe(true);
   });
   it('ranks top parties by spend', () => {
     const top = topPartiesBySpend(expenses, [
@@ -145,9 +184,16 @@ describe('expenses + profit', () => {
   });
   it('computes cash-basis profit with received entries as income', () => {
     const payments: ReportPayment[] = [{ booking_id: 'b1', amount: 1000, paid_on: '2026-02-01' }];
-    const rows = profitByMonth(payments, expenses, RANGE);
+    const rows = profitByMonth(payments, expenses, [], RANGE);
     expect(rows[1]).toEqual({ month: '2026-02', income: 1150, spend: 500, net: 650 });
     expect(rows[0]).toEqual({ month: '2026-01', income: 0, spend: 500, net: -500 });
+  });
+  it('subtracts inventory purchases from monthly profit', () => {
+    const payments: ReportPayment[] = [{ booking_id: 'b1', amount: 1000, paid_on: '2026-01-15' }];
+    const rows = profitByMonth(payments, expenses, purchases, RANGE);
+    expect(rows[0]).toEqual({ month: '2026-01', income: 1000, spend: 900, net: 100 });
+    expect(rows[1]).toEqual({ month: '2026-02', income: 150, spend: 500, net: -350 });
+    expect(rows[2]).toEqual({ month: '2026-03', income: 0, spend: 300, net: -300 });
   });
 });
 

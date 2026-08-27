@@ -31,6 +31,17 @@ export interface ReportParty {
   name: string;
 }
 
+/**
+ * An inventory `add` transaction (a stock purchase). Valued at
+ * quantity × unit_price and counted as an expense in the money reports,
+ * bucketed by the month of transaction_date — no expense ledger row exists.
+ */
+export interface ReportInventoryPurchase {
+  quantity: number;
+  unit_price: number;
+  transaction_date: string; // ISO timestamp
+}
+
 /** Inclusive ISO date range every report is filtered by. */
 export interface DateRange {
   start: string;

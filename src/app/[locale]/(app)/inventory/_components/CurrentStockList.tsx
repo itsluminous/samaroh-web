@@ -13,7 +13,9 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
+import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -52,6 +54,7 @@ export default function CurrentStockList() {
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [txnOpen, setTxnOpen] = useState(false);
+  const [snack, setSnack] = useState<string | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; name: string } | null>(null);
 
   const reload = useCallback(async () => {
@@ -159,38 +162,43 @@ export default function CurrentStockList() {
             const imageUrl = row.imagePath ? imageUrls.get(row.imagePath) : undefined;
             const quantityText = `${formatIndianNumber(row.currentQuantity)} ${unitLabel(row.unit)}`;
             return (
-              <ListItem key={row.masterItemId} divider>
-                <ListItemAvatar>
-                  {imageUrl ? (
-                    <Avatar
-                      src={imageUrl}
-                      alt={row.name}
-                      variant="rounded"
-                      sx={{ cursor: 'pointer', width: 48, height: 48 }}
-                      onClick={() => setExpandedImage({ url: imageUrl, name: row.name })}
-                    />
-                  ) : (
-                    <Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
-                      <Inventory2OutlinedIcon />
-                    </Avatar>
-                  )}
-                </ListItemAvatar>
-                <ListItemText
-                  primary={row.name}
-                  secondary={
-                    row.lastTransactionAt
-                      ? `${quantityText} · ${t('stock.updated', {
-                          time: format.relativeTime(new Date(row.lastTransactionAt)),
-                        })}`
-                      : quantityText
-                  }
-                />
-                <Box sx={{ textAlign: 'right' }}>
-                  <Typography variant="subtitle1">{formatAmount(row.currentValue)}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {t('stock.value_label')}
-                  </Typography>
-                </Box>
+              <ListItem key={row.masterItemId} divider disablePadding>
+                <ListItemButton onClick={() => router.push(`/inventory/${row.masterItemId}`)}>
+                  <ListItemAvatar>
+                    {imageUrl ? (
+                      <Avatar
+                        src={imageUrl}
+                        alt={row.name}
+                        variant="rounded"
+                        sx={{ cursor: 'pointer', width: 48, height: 48 }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExpandedImage({ url: imageUrl, name: row.name });
+                        }}
+                      />
+                    ) : (
+                      <Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
+                        <Inventory2OutlinedIcon />
+                      </Avatar>
+                    )}
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={row.name}
+                    secondary={
+                      row.lastTransactionAt
+                        ? `${quantityText} · ${t('stock.updated', {
+                            time: format.relativeTime(new Date(row.lastTransactionAt)),
+                          })}`
+                        : quantityText
+                    }
+                  />
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography variant="subtitle1">{formatAmount(row.currentValue)}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {t('stock.value_label')}
+                    </Typography>
+                  </Box>
+                </ListItemButton>
               </ListItem>
             );
           })}
@@ -216,10 +224,25 @@ export default function CurrentStockList() {
         businessId={businessId}
         userId={userId}
         onClose={() => setTxnOpen(false)}
-        onSaved={() => {
+        onSaved={(result) => {
           setTxnOpen(false);
+          setSnack(
+            result.type === 'add'
+              ? t('txn.add_success', { name: result.itemName })
+              : t('txn.remove_success', {
+                  name: result.itemName,
+                  amount: formatAmount(result.removedValue ?? 0),
+                }),
+          );
           void reload();
         }}
+      />
+
+      <Snackbar
+        open={snack !== null}
+        autoHideDuration={4000}
+        onClose={() => setSnack(null)}
+        message={snack ?? ''}
       />
 
       <Dialog

@@ -71,6 +71,11 @@ export interface ReplayResult {
 
 let replaying = false;
 
+/** True while a replay run is in flight (drives the syncing indicator). */
+export function isReplaying(): boolean {
+  return replaying;
+}
+
 /**
  * Pushes queued ops FIFO. Safe to call repeatedly (re-entrancy guarded);
  * meant to run on reconnect, on app load and from the "Sync now" button.
@@ -84,6 +89,7 @@ export async function replayOutbox(db: SupabaseClient): Promise<ReplayResult> {
     return result;
   }
   replaying = true;
+  notifySyncState();
   try {
     const items = await outboxDb.outbox.orderBy('seq').toArray();
     for (const item of items) {
@@ -123,6 +129,7 @@ export async function replayOutbox(db: SupabaseClient): Promise<ReplayResult> {
     return result;
   } finally {
     replaying = false;
+    notifySyncState();
     notifyOutboxChanged();
   }
 }
@@ -167,8 +174,17 @@ async function applyItem(db: SupabaseClient, item: OutboxItem): Promise<ApplyOut
 
 export const OUTBOX_CHANGED_EVENT = 'samaroh:outbox-changed';
 
+/** Fired whenever a replay run starts or ends — read `isReplaying()` on it. */
+export const OUTBOX_SYNC_STATE_EVENT = 'samaroh:outbox-sync-state';
+
 export function notifyOutboxChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(OUTBOX_CHANGED_EVENT));
+  }
+}
+
+function notifySyncState(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(OUTBOX_SYNC_STATE_EVENT));
   }
 }

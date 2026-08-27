@@ -23,6 +23,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 import LocaleSwitcher from '@/components/LocaleSwitcher';
+import SyncIndicator from '@/components/SyncIndicator';
 import { Link, usePathname } from '@/i18n/navigation';
 
 const RAIL_WIDTH = 220;
@@ -54,6 +55,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <Typography variant="h6" component="h1" color="primary" sx={{ flexGrow: 1 }}>
             {t('common.app_name')}
           </Typography>
+          <SyncIndicator />
           <LocaleSwitcher />
           {/* Sign-out posts to the non-localized auth route. */}
           <Box component="form" action="/auth/sign-out" method="post" sx={{ display: 'flex' }}>

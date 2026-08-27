@@ -53,6 +53,12 @@ export interface ExpenseRecord {
 
 export const MAX_ATTACHMENTS_PER_ENTRY = 4;
 
+/**
+ * sessionStorage key carrying the just-deleted party's name across the
+ * ledger → list navigation so the list can show the deleted notice.
+ */
+export const PARTY_DELETED_NOTICE_KEY = 'samaroh_party_deleted';
+
 export async function fetchParties(
   supabase: SupabaseClient,
   businessId: string,
@@ -164,6 +170,89 @@ export async function updatePartyBusinessRelated(
     table: 'parties',
     entityId: party.id,
     patch: { business_related: businessRelated, updated_at: new Date().toISOString() },
+    baseUpdatedAt: null,
+    label: party.name,
+  });
+}
+
+export interface PartyInput {
+  name: string;
+  phone: string | null;
+  businessRelated: boolean;
+}
+
+/** Full party edit (name / phone / business flag) — create parity. */
+export async function updateParty(
+  supabase: SupabaseClient,
+  partyId: string,
+  input: PartyInput,
+): Promise<void> {
+  const name = input.name.trim();
+  await updateWithOutbox(supabase, {
+    module: 'expenses',
+    table: 'parties',
+    entityId: partyId,
+    patch: {
+      name,
+      phone: input.phone?.trim() || null,
+      business_related: input.businessRelated,
+      updated_at: new Date().toISOString(),
+    },
+    baseUpdatedAt: null,
+    label: name,
+  });
+}
+
+/**
+ * Deletes a party and CASCADE-tombstones everything under it: every live
+ * expense of the party and every live attachment of those expenses get the
+ * same `deleted_at`, then the party itself. All writes are per-row outbox
+ * updates (offline they queue as delete payloads and replay FIFO; in guest
+ * mode they land straight in the Dexie store). Children go first so a crash
+ * mid-way never leaves orphaned live entries under a deleted party.
+ */
+export async function deleteParty(supabase: SupabaseClient, party: PartyRecord): Promise<void> {
+  const deletedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('expenses')
+    .select('id, expense_attachments(id, deleted_at)')
+    .eq('party_id', party.id)
+    .is('deleted_at', null);
+  if (error) {
+    throw new Error(error.message);
+  }
+  const expenses = (data ?? []) as {
+    id: string;
+    expense_attachments: { id: string; deleted_at: string | null }[] | null;
+  }[];
+  for (const expense of expenses) {
+    for (const attachment of expense.expense_attachments ?? []) {
+      if (attachment.deleted_at !== null) {
+        continue;
+      }
+      await updateWithOutbox(supabase, {
+        module: 'expenses',
+        table: 'expense_attachments',
+        entityId: attachment.id,
+        patch: { deleted_at: deletedAt },
+        baseUpdatedAt: null,
+        label: party.name,
+      });
+    }
+    await updateWithOutbox(supabase, {
+      module: 'expenses',
+      table: 'expenses',
+      entityId: expense.id,
+      patch: { deleted_at: deletedAt, updated_at: deletedAt },
+      baseUpdatedAt: null,
+      label: party.name,
+    });
+  }
+  await updateWithOutbox(supabase, {
+    module: 'expenses',
+    table: 'parties',
+    entityId: party.id,
+    patch: { deleted_at: deletedAt, updated_at: deletedAt },
     baseUpdatedAt: null,
     label: party.name,
   });

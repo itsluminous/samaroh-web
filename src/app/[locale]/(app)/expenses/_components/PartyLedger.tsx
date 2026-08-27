@@ -2,6 +2,7 @@
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import EditIcon from '@mui/icons-material/Edit';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -17,16 +18,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeLedger, computeNetBalance, type ExpenseDirection } from '@/lib/expenses/ledger';
 import { formatAmount } from '@/lib/format/amount';
-import { useBusiness } from '@/lib/hooks/useBusiness';
+import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
 import {
   fetchParty,
   fetchPartyExpenses,
+  PARTY_DELETED_NOTICE_KEY,
   updatePartyBusinessRelated,
   type ExpenseRecord,
   type PartyRecord,
 } from '../_lib/queries';
 import BusinessRelatedPill from './BusinessRelatedPill';
+import EditPartyDialog from './EditPartyDialog';
 import EntryDialog from './EntryDialog';
 
 /**
@@ -38,7 +41,15 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   const tCommon = useTranslations('common');
   const format = useFormatter();
   const router = useRouter();
-  const { supabase, businessId, businessName, loading: businessLoading, error: businessError } = useBusiness();
+  const {
+    supabase,
+    business,
+    permissions,
+    loading: businessLoading,
+    error: businessError,
+  } = useMembership();
+  const businessId = business?.id ?? null;
+  const businessName = business?.name ?? null;
 
   const [party, setParty] = useState<PartyRecord | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -47,6 +58,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   const [dialogDirection, setDialogDirection] = useState<ExpenseDirection>('paid');
   const [dialogEntry, setDialogEntry] = useState<ExpenseRecord | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const reload = useCallback(async () => {
     if (!supabase) {
@@ -168,6 +180,11 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                 : t('ledger.settled')}
           </Typography>
         </Box>
+        {permissions.expenses.manage_parties ? (
+          <IconButton aria-label={t('party.edit_title')} onClick={() => setEditOpen(true)}>
+            <EditIcon />
+          </IconButton>
+        ) : null}
       </Box>
 
       <Box sx={{ mb: 2, ml: 7 }}>
@@ -287,6 +304,29 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
           void reload();
         }}
       />
+
+      {permissions.expenses.manage_parties ? (
+        <EditPartyDialog
+          open={editOpen}
+          party={party}
+          canDelete={permissions.expenses.delete}
+          onClose={() => setEditOpen(false)}
+          onSaved={(updated) => {
+            setEditOpen(false);
+            setParty(updated);
+          }}
+          onDeleted={() => {
+            setEditOpen(false);
+            // The list screen shows the "{name} deleted" notice after we land.
+            try {
+              window.sessionStorage.setItem(PARTY_DELETED_NOTICE_KEY, party.name);
+            } catch {
+              // Storage unavailable (private mode) — skip the notice.
+            }
+            router.push('/expenses');
+          }}
+        />
+      ) : null}
     </Box>
   );
 }

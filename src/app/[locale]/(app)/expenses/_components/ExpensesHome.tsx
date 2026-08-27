@@ -12,6 +12,7 @@ import List from '@mui/material/List';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -21,7 +22,7 @@ import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
 import { formatAmount } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
-import { fetchBusinessExpenses, fetchParties, type ExpenseRecord, type PartyRecord } from '../_lib/queries';
+import { fetchBusinessExpenses, fetchParties, PARTY_DELETED_NOTICE_KEY, type ExpenseRecord, type PartyRecord } from '../_lib/queries';
 import AddPersonDialog from './AddPersonDialog';
 
 interface PartyListRow {
@@ -44,6 +45,20 @@ export default function ExpensesHome() {
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
+
+  // Party deletion navigates back here; the ledger leaves the name behind.
+  useEffect(() => {
+    try {
+      const name = window.sessionStorage.getItem(PARTY_DELETED_NOTICE_KEY);
+      if (name !== null) {
+        window.sessionStorage.removeItem(PARTY_DELETED_NOTICE_KEY);
+        setDeletedNotice(name);
+      }
+    } catch {
+      // Storage unavailable — no notice.
+    }
+  }, []);
 
   const reload = useCallback(async () => {
     if (!supabase || !businessId) {
@@ -231,6 +246,13 @@ export default function ExpensesHome() {
           setAddOpen(false);
           router.push(`/expenses/${party.id}`);
         }}
+      />
+
+      <Snackbar
+        open={deletedNotice !== null}
+        autoHideDuration={4000}
+        onClose={() => setDeletedNotice(null)}
+        message={deletedNotice !== null ? t('party.deleted_notice', { name: deletedNotice }) : undefined}
       />
     </Box>
   );

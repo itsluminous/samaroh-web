@@ -125,6 +125,77 @@ async function fetchTransactions(
   }));
 }
 
+/** A single master item by id (item detail page); null when missing/deleted. */
+export async function fetchMasterItem(
+  supabase: SupabaseClient,
+  businessId: string,
+  itemId: string,
+): Promise<MasterItemRecord | null> {
+  const { data, error } = await supabase
+    .from('master_items')
+    .select('id, name, unit, image_path, created_at')
+    .eq('business_id', businessId)
+    .eq('id', itemId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data as MasterItemRecord | null) ?? null;
+}
+
+export interface ItemTransactionRecord {
+  id: string;
+  transactionType: 'add' | 'remove';
+  quantity: number;
+  /** Per-unit price; for removes this is the FIFO cost per removed unit. */
+  unitPrice: number;
+  remainingQuantity: number;
+  transactionDate: string;
+  notes: string | null;
+}
+
+/**
+ * All live transactions for one item, newest first (item detail history).
+ * The full list is fetched and paginated client-side: per-item histories are
+ * small, and the guest-mode local client has no `range`/count support.
+ */
+export async function fetchItemTransactions(
+  supabase: SupabaseClient,
+  businessId: string,
+  itemId: string,
+): Promise<ItemTransactionRecord[]> {
+  const { data, error } = await supabase
+    .from('inventory_transactions')
+    .select(
+      'id, transaction_type, quantity, unit_price, remaining_quantity, transaction_date, notes',
+    )
+    .eq('business_id', businessId)
+    .eq('master_item_id', itemId)
+    .is('deleted_at', null)
+    .order('transaction_date', { ascending: false });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return ((data ?? []) as {
+    id: string;
+    transaction_type: 'add' | 'remove';
+    quantity: number;
+    unit_price: number;
+    remaining_quantity: number;
+    transaction_date: string;
+    notes: string | null;
+  }[]).map((row) => ({
+    id: row.id,
+    transactionType: row.transaction_type,
+    quantity: Number(row.quantity),
+    unitPrice: Number(row.unit_price),
+    remainingQuantity: Number(row.remaining_quantity),
+    transactionDate: row.transaction_date,
+    notes: row.notes,
+  }));
+}
+
 /** Distinct master_item_ids that have live transactions (delete blocking). */
 export async function fetchItemIdsWithTransactions(
   supabase: SupabaseClient,
@@ -182,7 +253,8 @@ export class InsufficientStockError extends Error {
 
 /**
  * Records a `remove` transaction, consuming the oldest open add lots
- * (FIFO) by decrementing their remaining_quantity. Throws
+ * (FIFO) by decrementing their remaining_quantity. Returns the FIFO cost of
+ * the removed quantity (for the success feedback). Throws
  * {@link InsufficientStockError} when the open lots cannot cover the quantity.
  */
 export async function recordRemoveTransaction(
@@ -192,7 +264,7 @@ export async function recordRemoveTransaction(
   masterItemId: string,
   quantity: number,
   notes: string | null,
-): Promise<void> {
+): Promise<number> {
   const { data, error } = await supabase
     .from('inventory_transactions')
     .select('id, remaining_quantity, unit_price, transaction_date')
@@ -247,6 +319,7 @@ export async function recordRemoveTransaction(
       throw new Error(updateError.message);
     }
   }
+  return plan.removedValue;
 }
 
 export async function createMasterItem(

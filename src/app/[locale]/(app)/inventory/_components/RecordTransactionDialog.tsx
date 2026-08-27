@@ -1,6 +1,7 @@
 'use client';
 
 import Autocomplete from '@mui/material/Autocomplete';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -13,7 +14,7 @@ import Typography from '@mui/material/Typography';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { formatIndianNumber } from '@/lib/format/amount';
+import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
 import { FUZZY_MIN_QUERY_LENGTH, findSimilarItems } from '@/lib/fuzzy';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { canRemoveQuantity, type TransactionType } from '@/lib/inventory/fifo';
@@ -30,22 +31,37 @@ interface RecordTransactionDialogProps {
   items: MasterItemRecord[];
   /** Current FIFO stock per master item id — remove validation. */
   stockByItemId: Map<string, number>;
+  /** Pre-select this item on open (item detail page entry points). */
+  preselectedItem?: MasterItemRecord | null;
+  /** Transaction type selected on open (defaults to add). */
+  initialType?: TransactionType;
   supabase: SupabaseClient | null;
   businessId: string | null;
   userId: string | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (result: SavedTransaction) => void;
+}
+
+/** Outcome passed to `onSaved` — drives the success snackbar. */
+export interface SavedTransaction {
+  type: TransactionType;
+  itemName: string;
+  /** FIFO cost of the removed quantity (remove transactions only). */
+  removedValue?: number;
 }
 
 /**
  * Record-transaction dialog (spec §4.3): 300ms-debounced fuzzy item
- * type-ahead, Add/Remove toggle, quantity, unit price (add only), notes.
- * Validation: cannot remove more than the current stock.
+ * type-ahead, Add/Remove toggle, quantity, unit price (add only, with a live
+ * total-price preview), notes. Validation: cannot remove more than the
+ * current stock.
  */
 export default function RecordTransactionDialog({
   open,
   items,
   stockByItemId,
+  preselectedItem = null,
+  initialType = 'add',
   supabase,
   businessId,
   userId,
@@ -70,16 +86,16 @@ export default function RecordTransactionDialog({
     if (!open) {
       return;
     }
-    setTxnType('add');
-    setSelectedItem(null);
-    setItemQuery('');
+    setTxnType(initialType);
+    setSelectedItem(preselectedItem);
+    setItemQuery(preselectedItem?.name ?? '');
     setQuantity('');
     setUnitPrice('');
     setNotes('');
     setFieldError(null);
     setSaveError(false);
     setSaving(false);
-  }, [open]);
+  }, [open, initialType, preselectedItem]);
 
   const unitLabel = useCallback(
     (unit: string) => (isBuiltInUnit(unit) ? t(`master.${unitLabelKey(unit)}`) : unit),
@@ -104,6 +120,19 @@ export default function RecordTransactionDialog({
   }, [debouncedQuery, items]);
 
   const selectedStock = selectedItem ? (stockByItemId.get(selectedItem.id) ?? 0) : 0;
+
+  /** Live qty × unit-price preview for the add form; null until both parse. */
+  const totalPreview = useMemo(() => {
+    if (txnType !== 'add') {
+      return null;
+    }
+    const qty = Number.parseFloat(quantity);
+    const price = Number.parseFloat(unitPrice);
+    if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price < 0) {
+      return null;
+    }
+    return Math.round(qty * price * 100) / 100;
+  }, [txnType, quantity, unitPrice]);
 
   const handleSave = async () => {
     if (!selectedItem) {
@@ -151,8 +180,9 @@ export default function RecordTransactionDialog({
           notes.trim() || null,
           selectedItem.name,
         );
+        onSaved({ type: 'add', itemName: selectedItem.name });
       } else {
-        await recordRemoveTransaction(
+        const removedValue = await recordRemoveTransaction(
           supabase,
           businessId,
           userId,
@@ -160,8 +190,8 @@ export default function RecordTransactionDialog({
           qty,
           notes.trim() || null,
         );
+        onSaved({ type: 'remove', itemName: selectedItem.name, removedValue });
       }
-      onSaved();
     } catch (error) {
       if (error instanceof InsufficientStockError) {
         setFieldError({
@@ -262,6 +292,23 @@ export default function RecordTransactionDialog({
               setFieldError(null);
             }}
           />
+        )}
+
+        {totalPreview !== null && (
+          <Box
+            sx={{
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              borderRadius: 1,
+              px: 2,
+              py: 1,
+              mb: 1,
+            }}
+          >
+            <Typography variant="subtitle2">
+              {t('txn.total_price', { amount: formatAmount(totalPreview) })}
+            </Typography>
+          </Box>
         )}
 
         <TextField

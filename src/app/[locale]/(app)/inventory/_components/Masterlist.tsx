@@ -21,6 +21,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import ListItemText from '@mui/material/ListItemText';
+import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -59,6 +60,7 @@ export default function Masterlist() {
   const [editingItem, setEditingItem] = useState<MasterItemRecord | null>(null);
   const [deletingItem, setDeletingItem] = useState<MasterItemRecord | null>(null);
   const [deleteError, setDeleteError] = useState(false);
+  const [snack, setSnack] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!supabase || !businessId) {
@@ -239,8 +241,16 @@ export default function Masterlist() {
         onPickExisting={(existing) => setEditingItem(existing)}
         onSaved={() => {
           setDialogOpen(false);
+          setSnack(t('master.save_success'));
           void reload();
         }}
+      />
+
+      <Snackbar
+        open={snack !== null}
+        autoHideDuration={4000}
+        onClose={() => setSnack(null)}
+        message={snack ?? ''}
       />
 
       <Dialog open={deletingItem !== null} onClose={() => setDeletingItem(null)} maxWidth="xs">

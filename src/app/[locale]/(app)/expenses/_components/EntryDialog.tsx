@@ -1,6 +1,9 @@
 'use client';
 
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import CollectionsIcon from '@mui/icons-material/Collections';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -13,6 +16,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
+import ChipRow from '@/components/ChipRow';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
 import { parseAmount } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
@@ -58,7 +62,9 @@ export default function EntryDialog({
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
   const { supabase, businessId, userId } = useBusiness();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayIsoDate());
@@ -227,23 +233,71 @@ export default function EntryDialog({
               />
             ))}
           </Box>
-          <Button
-            size="small"
-            startIcon={<AttachFileIcon />}
-            disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {t('entry.attach')}
-          </Button>
+          {/*
+           * Attachment source pills (Camera / Gallery / PDF). ChipRow keeps
+           * them on ONE horizontally-scrollable line — on 320px viewports
+           * (and in Hindi) they must never wrap into a ragged second row.
+           */}
+          <ChipRow aria-label={t('entry.attach')} sx={{ mb: 0.5 }}>
+            <Chip
+              icon={<PhotoCameraIcon />}
+              variant="outlined"
+              clickable
+              label={t('entry.attach_camera')}
+              disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
+              onClick={() => cameraInputRef.current?.click()}
+            />
+            <Chip
+              icon={<CollectionsIcon />}
+              variant="outlined"
+              clickable
+              label={t('entry.attach_gallery')}
+              disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
+              onClick={() => galleryInputRef.current?.click()}
+            />
+            <Chip
+              icon={<PictureAsPdfIcon />}
+              variant="outlined"
+              clickable
+              label={t('entry.attach_pdf')}
+              disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
+              onClick={() => pdfInputRef.current?.click()}
+            />
+          </ChipRow>
           <Typography variant="caption" color="text.secondary" component="div">
             {t('entry.attachment_limit_hint', { max: MAX_ATTACHMENTS_PER_ENTRY })}
           </Typography>
           <input
-            ref={fileInputRef}
+            ref={cameraInputRef}
+            type="file"
+            hidden
+            accept="image/*"
+            capture="environment"
+            aria-label={t('entry.attach_camera')}
+            onChange={(event) => {
+              handleFilesPicked(event.target.files);
+              event.target.value = '';
+            }}
+          />
+          <input
+            ref={galleryInputRef}
             type="file"
             hidden
             multiple
-            accept="image/*,application/pdf"
+            accept="image/*"
+            aria-label={t('entry.attach_gallery')}
+            onChange={(event) => {
+              handleFilesPicked(event.target.files);
+              event.target.value = '';
+            }}
+          />
+          <input
+            ref={pdfInputRef}
+            type="file"
+            hidden
+            multiple
+            accept="application/pdf"
+            aria-label={t('entry.attach_pdf')}
             onChange={(event) => {
               handleFilesPicked(event.target.files);
               event.target.value = '';

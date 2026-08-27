@@ -98,6 +98,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
         component="main"
         sx={{
           flexGrow: 1,
+          // Flex items default to min-width:auto — without this, any child
+          // whose min-content is wider than the viewport (long chips, wide
+          // rows) inflates <main> and the whole page pans/clips sideways on
+          // narrow phones instead of the row scrolling or wrapping locally.
+          minWidth: 0,
           p: 3,
           pb: { xs: 10, md: 3 }, // keep content clear of the mobile bottom nav
         }}

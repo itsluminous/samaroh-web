@@ -113,8 +113,10 @@ export default function SettingsScreen() {
             </ListItemButton>
           </ListItem>
 
-          {/* Google account link — stub row: OAuth client not configured. */}
-          <ListItem>
+          {/* Google account link — stub row: OAuth client not configured.
+              flexWrap: the long "not configured" chip drops below the label
+              on narrow viewports instead of forcing the row off-screen. */}
+          <ListItem sx={{ flexWrap: 'wrap', gap: 1 }}>
             <ListItemIcon>
               <LinkOffIcon />
             </ListItemIcon>

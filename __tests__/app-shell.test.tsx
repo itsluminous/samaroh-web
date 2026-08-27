@@ -64,4 +64,11 @@ describe('AppShell', () => {
     renderShell('en', en, <span>{probe}</span>);
     expect(screen.getByRole('main')).toHaveTextContent(probe);
   });
+
+  it('lets the main region shrink below its content min-width', () => {
+    // <main> is a flex item; without min-width:0 any wide child (long chip
+    // rows) inflates it and the whole page pans sideways on narrow phones.
+    renderShell('en', en);
+    expect(screen.getByRole('main')).toHaveStyle({ minWidth: 0 });
+  });
 });

@@ -22,11 +22,20 @@ import { hasGuestBusiness, seedGuestBusiness } from '@/lib/guest/seed';
 import { createRemoteClient } from '@/lib/supabase/client';
 
 type Mode = 'sign_in' | 'sign_up';
-type Step = 'auth' | 'setup';
+type Step = 'auth' | 'setup' | 'join';
 
 interface Notice {
   severity: 'error' | 'info';
   text: string;
+}
+
+/** A pending invitation for the signed-in email (§4.0 step 4 — join path). */
+interface PendingInvite {
+  id: string;
+  business_id: string;
+  display_name: string;
+  /** Business name — null until the invited-select policy is live server-side. */
+  businessName: string | null;
 }
 
 /** Suggested business types (shared onboarding contract, free text column). */
@@ -62,6 +71,8 @@ export default function SignInForm() {
   const [bizAddress, setBizAddress] = useState('');
   const [ownerName, setOwnerName] = useState('');
 
+  const [invites, setInvites] = useState<PendingInvite[]>([]);
+
   const configured = supabase !== null;
 
   function goToApp() {
@@ -69,21 +80,116 @@ export default function SignInForm() {
     router.refresh();
   }
 
-  /** After a live session exists: route to the app, or to business setup. */
+  /** Pending invitations for this account (RLS scopes rows to the caller). */
+  async function fetchInvites(client: SupabaseClient): Promise<PendingInvite[]> {
+    const { data } = await client
+      .from('business_members')
+      .select('id, business_id, display_name, businesses(name)')
+      .eq('status', 'invited')
+      .eq('is_owner', false)
+      .is('deleted_at', null);
+    return (data ?? []).map((row) => {
+      const biz = row.businesses as { name?: string } | { name?: string }[] | null;
+      const name = Array.isArray(biz) ? biz[0]?.name : biz?.name;
+      return {
+        id: row.id as string,
+        business_id: row.business_id as string,
+        display_name: row.display_name as string,
+        businessName: name ?? null,
+      };
+    });
+  }
+
+  /**
+   * After a live session exists: route to the app (active membership or owned
+   * business), offer pending invitations (join step), or fall through to
+   * business setup. Membership — not mere business visibility — decides:
+   * an invited-but-not-active user may see the business row without having
+   * any usable access yet.
+   */
   async function continueAfterAuth(client: SupabaseClient, uid: string) {
     leaveGuestMode();
     setUserId(uid);
-    const { data } = await client
-      .from('businesses')
+    const { data: active } = await client
+      .from('business_members')
       .select('id')
+      .eq('status', 'active')
       .is('deleted_at', null)
       .limit(1);
-    if (data && data.length > 0) {
+    if (active && active.length > 0) {
       goToApp();
+      return;
+    }
+    const { data: owned } = await client
+      .from('businesses')
+      .select('id')
+      .eq('owner_user_id', uid)
+      .is('deleted_at', null)
+      .limit(1);
+    if (owned && owned.length > 0) {
+      goToApp();
+      return;
+    }
+    const pending = await fetchInvites(client);
+    if (pending.length > 0) {
+      setInvites(pending);
+      setStep('join');
       return;
     }
     setSetupForGuest(false);
     setStep('setup');
+  }
+
+  /**
+   * Accepts an invitation: activates the caller's own pending row server-side
+   * (self-activation policy, shared migration 004). Only a CONFIRMED activation
+   * enters the app — an already-active row (signup auto-activation race) also
+   * counts. Anything else stays on the join step with an error.
+   */
+  async function handleAcceptInvite(invite: PendingInvite) {
+    if (!supabase || !userId) {
+      return;
+    }
+    setNotice(null);
+    setSubmitting(true);
+    try {
+      const { data } = await supabase
+        .from('business_members')
+        .update({ user_id: userId, status: 'active' })
+        .eq('id', invite.id)
+        .eq('status', 'invited')
+        .select();
+      if (data && data.length > 0) {
+        goToApp();
+        return;
+      }
+      const { data: row } = await supabase
+        .from('business_members')
+        .select('id, status, user_id')
+        .eq('id', invite.id)
+        .maybeSingle();
+      if (row?.status === 'active' && row.user_id === userId) {
+        goToApp();
+        return;
+      }
+      setNotice({ severity: 'error', text: t('onboarding.join.accept_failed') });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** "Check again" on the join step — re-pulls invitations from the server. */
+  async function handleRefreshInvites() {
+    if (!supabase) {
+      return;
+    }
+    setNotice(null);
+    setSubmitting(true);
+    try {
+      setInvites(await fetchInvites(supabase));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -291,6 +397,54 @@ export default function SignInForm() {
               {/* Guest mode is fully local — available even without Supabase. */}
               <Button variant="text" onClick={handleGuest} disabled={submitting}>
                 {t('onboarding.sign_in.continue_offline')}
+              </Button>
+            </Stack>
+          ) : step === 'join' ? (
+            <Stack spacing={2}>
+              <Typography variant="h5" component="h1" color="primary" textAlign="center">
+                {t('common.app_name')}
+              </Typography>
+              <Typography variant="h6" component="h2" textAlign="center">
+                {t('onboarding.join.title')}
+              </Typography>
+
+              {notice && <Alert severity={notice.severity}>{notice.text}</Alert>}
+
+              {invites.length === 0 && <Alert severity="info">{t('onboarding.join.empty')}</Alert>}
+              {invites.map((invite) => (
+                <Card key={invite.id} variant="outlined">
+                  <CardContent>
+                    <Stack spacing={1}>
+                      <Typography variant="subtitle1">
+                        {invite.businessName ?? invite.display_name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('onboarding.join.invited_as', { name: invite.display_name })}
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => handleAcceptInvite(invite)}
+                        disabled={submitting}
+                      >
+                        {t('onboarding.join.accept')}
+                      </Button>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ))}
+              <Button variant="outlined" onClick={handleRefreshInvites} disabled={submitting}>
+                {t('onboarding.join.refresh')}
+              </Button>
+              <Button
+                variant="text"
+                onClick={() => {
+                  setNotice(null);
+                  setSetupForGuest(false);
+                  setStep('setup');
+                }}
+                disabled={submitting}
+              >
+                {t('onboarding.create.title')}
               </Button>
             </Stack>
           ) : (

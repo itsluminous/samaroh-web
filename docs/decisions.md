@@ -176,3 +176,18 @@ repo interprets it where the spec leaves web-specific latitude.)
   the network is genuinely down the run stops on the first network error and
   items stay queued (no retry storm — the trigger fires per enqueue, not on a
   timer loop).
+
+- **Join step on sign-in (invite acceptance).** `continueAfterAuth` previously
+  routed on mere BUSINESS visibility (`businesses` select): a user with no
+  visible business always fell through to create-business, so an invited user
+  could never join — and once the invited-select RLS lands (shared migration
+  004), an invited-but-not-active user WOULD see the business row and be routed
+  into an app with no usable access. Routing now decides on MEMBERSHIP: active
+  membership or owned business → app; pending invitations (`business_members`
+  status `invited`, scoped by RLS to the caller) → a join step listing them;
+  else create-business. Accepting activates the caller's own row server-side
+  (self-activation policy, shared migration 004) and only a confirmed
+  activation (or an already-active row — signup auto-activation race) enters
+  the app; a refused activation surfaces `onboarding.join.accept_failed`.
+  Mirrors the Android flow (samaroh-android ADR-037); reuses the shared
+  `onboarding.join.*` keys.

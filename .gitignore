@@ -17,6 +17,7 @@ messages/
 # test & build output
 coverage/
 build.log
+gate.log
 *.tsbuildinfo
 playwright.log
 test-results/

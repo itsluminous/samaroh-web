@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.itsluminous.samaroh",
+      "sha256_cert_fingerprints": [
+        "9D:54:FD:7D:D0:07:C7:9C:1C:43:E8:77:41:56:7F:A3:6E:55:FB:F1:5C:01:AD:7A:6A:A6:D9:19:48:EF:D8:50",
+        "D9:7B:D1:11:9E:C8:5F:81:BC:D2:EF:E0:07:81:1B:01:0F:A1:31:E5:C6:27:D6:B3:3B:D5:3E:A5:A9:DA:10:28"
+      ]
+    }
+  }
+]

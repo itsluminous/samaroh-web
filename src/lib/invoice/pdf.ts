@@ -33,12 +33,22 @@ export interface InvoiceFonts {
 }
 
 /**
- * The embedded text face has no color-emoji glyphs; PDF text runs drop
- * pictographs (the emoji still appears in the text receipt variant).
+ * PDF invoices carry NO emoji/pictographs anywhere (owner decision, see
+ * shared/invoice/layout-spec.md) — and the embedded text face has no
+ * color-emoji glyphs anyway. Every PDF text run passes through this filter
+ * (drawText + footer); the emoji still appears in the text receipt variant.
+ * Exported for the emoji-free contract test.
  */
-function stripEmoji(text: string): string {
+export function stripEmoji(text: string): string {
+  // Extended_Pictographic alone misses emoji components that ride along in
+  // sequences: skin tones (Emoji_Modifier), flags (Regional_Indicator pairs),
+  // tag characters (subdivision flags), VS-16, ZWJ and the keycap combiner.
+  // NOT \p{Emoji_Component} wholesale — that would also delete digits 0-9.
   return text
-    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu, '')
+    .replace(
+      /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu,
+      '',
+    )
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -193,11 +203,13 @@ export async function renderInvoicePdf(
     drawText(ctx, p.methodLabel, { x: colMethodX, size: 11 });
     if (p.notes) {
       // Single-line clamp so the notes column never collides with the amount.
-      let notes = p.notes;
+      // Measure the emoji-stripped text — it is what drawText actually draws.
+      const full = stripEmoji(p.notes);
+      let notes = full;
       while (ctx.regular.widthOfTextAtSize(notes, 11) > RIGHT - 90 - colNotesX && notes.length > 1) {
         notes = notes.slice(0, -1);
       }
-      drawText(ctx, notes === p.notes ? notes : `${notes}\u2026`, {
+      drawText(ctx, notes === full ? notes : `${notes}\u2026`, {
         x: colNotesX,
         size: 11,
         color: GREY,

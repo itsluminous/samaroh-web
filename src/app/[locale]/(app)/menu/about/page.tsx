@@ -4,9 +4,10 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
-import packageJson from '../../../../../../package.json';
 
-// About (§4.4): app version, GitHub link, licenses note, made with ❤️.
+// About (§4.4): GitHub link, licenses note, made with ❤️.
+// No version line on web — the app deploys continuously, so there is no
+// meaningful user-facing version number (unlike the Android build).
 const GITHUB_URL = 'https://github.com/itsluminous/Samaroh';
 
 export default function AboutPage() {
@@ -18,9 +19,6 @@ export default function AboutPage() {
       </Typography>
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack spacing={2}>
-          <Typography variant="body1">
-            {t('version', { version: packageJson.version })}
-          </Typography>
           <Link
             href={GITHUB_URL}
             target="_blank"

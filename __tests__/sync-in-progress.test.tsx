@@ -152,8 +152,10 @@ describe('SyncIndicator syncing state', () => {
     mockCreateClient.mockReturnValue(client);
     await queueCreate('ui');
     renderIndicator();
-    // Idle: named after the sync-status destination.
+    // Idle: named after the sync-status destination, cloud iconography.
     expect(await screen.findByRole('link', { name: en.settings.sync.title })).toBeInTheDocument();
+    expect(screen.getByTestId('CloudSyncIcon')).toBeInTheDocument();
+    expect(screen.queryByTestId('SyncIcon')).not.toBeInTheDocument();
 
     let run: Promise<unknown> = Promise.resolve();
     act(() => {
@@ -162,11 +164,18 @@ describe('SyncIndicator syncing state', () => {
     // Syncing: accessible name flips to the shared "Syncing…" string —
     // present regardless of whether the rotation animation is reduced.
     expect(screen.getByRole('link', { name: en.sync.notification.syncing })).toBeInTheDocument();
+    // Android parity: the active state is a plain circular-arrows sync
+    // glyph (the thing that rotates), not the cloud.
+    expect(screen.getByTestId('SyncIcon')).toBeInTheDocument();
+    expect(screen.queryByTestId('CloudSyncIcon')).not.toBeInTheDocument();
 
     release();
     await act(async () => {
       await run;
     });
     expect(screen.getByRole('link', { name: en.settings.sync.title })).toBeInTheDocument();
+    // Back to idle: cloud returns.
+    expect(screen.getByTestId('CloudSyncIcon')).toBeInTheDocument();
+    expect(screen.queryByTestId('SyncIcon')).not.toBeInTheDocument();
   });
 });

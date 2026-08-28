@@ -187,13 +187,25 @@ export default function ExpensesHome() {
                 <Avatar>{partyInitials(party.name)}</Avatar>
               </ListItemAvatar>
               <ListItemText
+                sx={{ minWidth: 0 }}
+                primaryTypographyProps={{ component: 'div' }}
                 primary={
-                  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                    {party.name}
+                  <>
+                    <Box
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {party.name}
+                    </Box>
                     {!party.business_related && (
-                      <Chip size="small" variant="outlined" label={t('party.personal_tag')} />
+                      <Box sx={{ mt: 0.25 }}>
+                        <Chip size="small" variant="outlined" label={t('party.personal_tag')} />
+                      </Box>
                     )}
-                  </Box>
+                  </>
                 }
                 secondary={
                   lastEntryAt

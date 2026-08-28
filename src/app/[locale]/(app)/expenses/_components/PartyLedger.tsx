@@ -151,14 +151,14 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
         </IconButton>
         <Avatar>{partyInitials(party.name)}</Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Typography variant="h6" noWrap>
-              {party.name}
-            </Typography>
-            {!party.business_related && (
+          <Typography variant="h6" noWrap>
+            {party.name}
+          </Typography>
+          {!party.business_related && (
+            <Box sx={{ mt: 0.25 }}>
               <Chip size="small" variant="outlined" label={t('party.personal_tag')} />
-            )}
-          </Box>
+            </Box>
+          )}
           {party.phone && (
             <Typography variant="body2" color="text.secondary">
               {party.phone}

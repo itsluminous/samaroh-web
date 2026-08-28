@@ -76,6 +76,46 @@ export function isReplaying(): boolean {
   return replaying;
 }
 
+/** Debounce window for the enqueue-triggered immediate replay. */
+export const IMMEDIATE_REPLAY_DELAY_MS = 500;
+
+let immediateReplayTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Debounced immediate replay after an enqueue while the browser is ONLINE —
+ * Android sync-engine parity: a mutation queued despite `navigator.onLine`
+ * (transient fetch-level failure) retries right away instead of sitting in
+ * the queue until the next reconnect or app load. Offline enqueues are
+ * skipped here (the `online` listener in OutboxSync is their trigger), and
+ * bursts of enqueues collapse into a single run.
+ */
+export function scheduleImmediateReplay(
+  db: SupabaseClient,
+  delayMs: number = IMMEDIATE_REPLAY_DELAY_MS,
+): void {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return; // online only — reconnect replay covers the offline case
+  }
+  if (isLocalClient(db)) {
+    return; // guest mode: replayOutbox refuses the local client anyway
+  }
+  if (immediateReplayTimer !== null) {
+    clearTimeout(immediateReplayTimer);
+  }
+  immediateReplayTimer = setTimeout(() => {
+    immediateReplayTimer = null;
+    void replayOutbox(db);
+  }, delayMs);
+}
+
+/** Cancels a pending enqueue-triggered replay (test teardown / sign-out). */
+export function cancelImmediateReplay(): void {
+  if (immediateReplayTimer !== null) {
+    clearTimeout(immediateReplayTimer);
+    immediateReplayTimer = null;
+  }
+}
+
 /**
  * Pushes queued ops FIFO. Safe to call repeatedly (re-entrancy guarded);
  * meant to run on reconnect, on app load and from the "Sync now" button.

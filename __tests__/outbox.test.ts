@@ -8,7 +8,13 @@ import 'fake-indexeddb/auto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getLastSyncAt, outboxDb } from '@/lib/outbox/db';
 import { insertWithOutbox } from '@/lib/outbox/mutate';
-import { enqueue, listItems, pendingCount, replayOutbox } from '@/lib/outbox/outbox';
+import {
+  cancelImmediateReplay,
+  enqueue,
+  listItems,
+  pendingCount,
+  replayOutbox,
+} from '@/lib/outbox/outbox';
 
 type Result = { error: { message: string; code?: string } | null };
 
@@ -167,6 +173,9 @@ describe('insertWithOutbox (offline data layer)', () => {
   const onLine = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(navigator), 'onLine');
 
   afterEach(() => {
+    // A fetch-failure enqueue schedules a debounced immediate replay — cancel
+    // it so the timer never fires into a later test's fixtures.
+    cancelImmediateReplay();
     if (onLine) {
       Object.defineProperty(Object.getPrototypeOf(navigator), 'onLine', onLine);
     }

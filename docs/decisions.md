@@ -152,3 +152,27 @@ repo interprets it where the spec leaves web-specific latitude.)
   day's bookings plus a final create-gated "Add new event" row that opens the
   add form prefilled with the date; empty dates still open the form directly
   (routing in `dayTapAction`, §4.1).
+- **PDF invoices are emoji-free everywhere (owner decision).** The pdf-lib
+  renderer already dropped pictographs from text runs as a font limitation;
+  this is now the contract: NO emoji anywhere in the PDF — title, event line,
+  names, notes (the shared `invoice/layout-spec.md` is being updated to say
+  so; the event icon still renders in the text-receipt variant). `stripEmoji`
+  (`src/lib/invoice/pdf.ts`, applied to every drawn run) was widened to also
+  drop emoji COMPONENTS that `Extended_Pictographic` alone misses — skin-tone
+  modifiers, flag pairs (Regional_Indicator), subdivision-flag tag chars —
+  without touching digits, ₹ or Devanagari; the notes-column clamp now
+  measures the stripped text it actually draws. Contract test: capture every
+  `PDFPage.drawText` run under emoji-laden inputs and assert none contains a
+  pictograph (`__tests__/invoice-pdf.test.ts`).
+- **Immediate outbox replay on enqueue (web, Android sync-engine parity).**
+  Previously a mutation that fell back to the outbox while the browser was
+  ONLINE (transient fetch-level failure) sat queued until the next `online`
+  event or app load. Now every enqueue through the data layer
+  (`insertWithOutbox`/`updateWithOutbox`) schedules a DEBOUNCED (500 ms)
+  `replayOutbox` run via `scheduleImmediateReplay` (`src/lib/outbox/outbox.ts`)
+  — online only (`navigator.onLine === false` skips; the reconnect listener in
+  `OutboxSync` owns that case), guest local client refused, bursts collapse
+  into one run, and the existing re-entrancy guard still serialises runs. If
+  the network is genuinely down the run stops on the first network error and
+  items stay queued (no retry storm — the trigger fires per enqueue, not on a
+  timer loop).

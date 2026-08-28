@@ -9,7 +9,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isLocalClient } from '@/lib/guest/localClient';
 import type { OutboxModule } from './db';
-import { enqueue, isNetworkError } from './outbox';
+import { enqueue, isNetworkError, scheduleImmediateReplay } from './outbox';
 
 export type WriteOutcome = 'applied' | 'queued';
 
@@ -36,8 +36,8 @@ export interface InsertSpec {
  * a client UUID so the eventual replay (and any retry) is idempotent.
  */
 export async function insertWithOutbox(db: SupabaseClient, spec: InsertSpec): Promise<WriteOutcome> {
-  const queue = () =>
-    enqueue({
+  const queue = async () => {
+    await enqueue({
       module: spec.module,
       table: spec.table,
       entityId: String(spec.row.id),
@@ -45,6 +45,11 @@ export async function insertWithOutbox(db: SupabaseClient, spec: InsertSpec): Pr
       payload: spec.row,
       label: spec.label,
     });
+    // Android parity: an enqueue while ONLINE (fetch-level failure) replays
+    // immediately (debounced) — offline enqueues wait for the reconnect
+    // listener (the call self-gates on navigator.onLine).
+    scheduleImmediateReplay(db);
+  };
   if (browserSaysOffline(db)) {
     await queue();
     return 'queued';
@@ -77,8 +82,8 @@ export interface UpdateSpec {
 /** Updates a row (including tombstone deletes), falling back to the outbox when offline. */
 export async function updateWithOutbox(db: SupabaseClient, spec: UpdateSpec): Promise<WriteOutcome> {
   const isDelete = 'deleted_at' in spec.patch && spec.patch.deleted_at != null;
-  const queue = () =>
-    enqueue({
+  const queue = async () => {
+    await enqueue({
       module: spec.module,
       table: spec.table,
       entityId: spec.entityId,
@@ -87,6 +92,9 @@ export async function updateWithOutbox(db: SupabaseClient, spec: UpdateSpec): Pr
       baseUpdatedAt: spec.baseUpdatedAt,
       label: spec.label,
     });
+    // Same immediate-replay trigger as insertWithOutbox (online only).
+    scheduleImmediateReplay(db);
+  };
   if (browserSaysOffline(db)) {
     await queue();
     return 'queued';

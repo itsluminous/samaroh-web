@@ -28,7 +28,7 @@ function wrap(children: ReactNode) {
 
 describe('SummaryCard', () => {
   it('shows localized received/pending amounts with Indian grouping', () => {
-    wrap(<SummaryCard received={106511} pending={50000} />);
+    wrap(<SummaryCard received={106511} pending={50000} showAmounts />);
     expect(screen.getByText(en.booking.summary.this_month)).toBeInTheDocument();
     expect(screen.getByText('Received \u20B91,06,511')).toBeInTheDocument();
     expect(screen.getByText('Pending \u20B950,000')).toBeInTheDocument();
@@ -38,7 +38,7 @@ describe('SummaryCard', () => {
     render(
       <ThemeProvider theme={theme}>
         <NextIntlClientProvider locale="en" messages={en}>
-          <SummaryCard received={106511} pending={50000} />
+          <SummaryCard received={106511} pending={50000} showAmounts />
         </NextIntlClientProvider>
       </ThemeProvider>,
     );

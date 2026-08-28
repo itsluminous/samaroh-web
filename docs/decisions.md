@@ -4,6 +4,31 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-08-28 — Amounts visibility (`view_amounts`) masking
+
+- **Schema exception (shared contract).** The per-module `view_amounts` keys
+  (booking/expenses/inventory/reports) default to TRUE when absent —
+  `normalizePermissions` masks only on explicit `false`; every other action
+  stays explicit-true-only. Viewer/Staff/Manager presets leave it true.
+- **Masking, not hiding.** Amounts render as the symbol-only mask ₹••• via
+  the shared `MaskedAmount` component (screen-reader label
+  `auth.permissions.amount_hidden_a11y`, no visible localized string).
+  `maskAmount()` covers interpolation sites (chips, snackbars, message
+  templates). Surfaces: booking summary card / detail / payment history,
+  expenses totals + balances + entry amounts, inventory values + unit prices
+  (quantities stay visible). Amount ENTRY forms are not masked — typing an
+  amount requires seeing what you type.
+- **Beyond the enumerated surfaces (leak-closure).** The agenda/day-chooser
+  booking rows' due chip and the WhatsApp reminder's due figure use the same
+  mask — leaving them visible would defeat the booking masking entirely. The
+  invoice buttons are hidden without `booking.view_amounts` (an invoice IS
+  amounts).
+- **Reports.** With `reports.view_amounts=false` the reports home lists only
+  the amount-free reports (occupancy, collection); direct URLs to money
+  reports render the existing localized denied state (`isMoneyReport` in
+  `src/lib/reports/types.ts`). As with all permission UI, RLS stays the real
+  boundary — masking is UX parity, never security.
+
 ## 2026-08-28 — Permission UI sweep: nav visibility, route guards, write gates
 
 - **Nav visibility (§3, Android parity).** Modules without `<module>.view`

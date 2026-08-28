@@ -74,6 +74,8 @@ export interface BookingPermissions {
   delete: boolean;
   record_payment: boolean;
   generate_invoice: boolean;
+  /** Absent defaults to TRUE (schema contract) — false masks amounts as ₹•••. */
+  view_amounts: boolean;
 }
 
 export const OWNER_PERMISSIONS: BookingPermissions = {
@@ -83,4 +85,5 @@ export const OWNER_PERMISSIONS: BookingPermissions = {
   delete: true,
   record_payment: true,
   generate_invoice: true,
+  view_amounts: true,
 };

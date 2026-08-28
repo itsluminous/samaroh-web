@@ -18,6 +18,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeLedger, computeNetBalance, type ExpenseDirection } from '@/lib/expenses/ledger';
+import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import { formatAmount } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
@@ -58,6 +59,9 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   const canEdit = isOwner || permissions.expenses.edit;
   const canDelete = isOwner || permissions.expenses.delete;
   const canManageParties = isOwner || permissions.expenses.manage_parties;
+  // expenses.view_amounts (absent = true): false masks the net balance,
+  // running-balance chips and entry amounts as ₹•••.
+  const showAmounts = isOwner || permissions.expenses.view_amounts;
 
   const [party, setParty] = useState<PartyRecord | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -178,7 +182,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
             variant="h6"
             color={netBalance > 0 ? 'error.main' : netBalance < 0 ? 'success.main' : 'text.secondary'}
           >
-            {formatAmount(Math.abs(netBalance))}
+            {showAmounts ? formatAmount(Math.abs(netBalance)) : <MaskedAmount />}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {netBalance > 0
@@ -245,7 +249,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                 <Chip
                   size="small"
                   sx={{ mt: 0.75 }}
-                  label={t('ledger.balance_chip', { amount: formatAmount(balanceAfter) })}
+                  label={t('ledger.balance_chip', { amount: maskAmount(formatAmount(balanceAfter), showAmounts) })}
                 />
               </Box>
               <Box sx={{ textAlign: 'right', ml: 1 }}>
@@ -253,7 +257,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                   variant="subtitle1"
                   color={record.direction === 'paid' ? 'error.main' : 'success.main'}
                 >
-                  {formatAmount(Number(record.amount))}
+                  {showAmounts ? formatAmount(Number(record.amount)) : <MaskedAmount />}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {record.direction === 'paid' ? t('home.you_gave') : t('home.you_got')}

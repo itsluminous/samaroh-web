@@ -352,7 +352,7 @@ export default function BookingScreen() {
 
   return (
     <Box sx={{ pb: 10, position: 'relative' }}>
-      {view === 'month' ? <SummaryCard received={summary.received} pending={summary.pending} /> : null}
+      {view === 'month' ? <SummaryCard received={summary.received} pending={summary.pending} showAmounts={ctx.permissions.view_amounts} /> : null}
 
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 0.5 }}>
         {view === 'month' ? (
@@ -429,7 +429,7 @@ export default function BookingScreen() {
       ) : null}
 
       {view === 'events' ? (
-        <EventsAgenda agenda={agenda} presets={presets} onOpen={(b) => setDetailId(b.id)} />
+        <EventsAgenda agenda={agenda} presets={presets} showAmounts={ctx.permissions.view_amounts} onOpen={(b) => setDetailId(b.id)} />
       ) : loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
@@ -449,6 +449,7 @@ export default function BookingScreen() {
             bookings={data.bookings}
             paymentsByBooking={data.paymentsByBooking}
             presets={presets}
+            showAmounts={ctx.permissions.view_amounts}
             onOpen={(b) => setDetailId(b.id)}
           />
         </>
@@ -491,6 +492,7 @@ export default function BookingScreen() {
           bookings={bookingsOnDate(chooserDate, data.bookings)}
           paymentsByBooking={data.paymentsByBooking}
           presets={presets}
+          showAmounts={ctx.permissions.view_amounts}
           canCreate={ctx.permissions.create}
           onOpenBooking={(b) => {
             setChooserDate(null);

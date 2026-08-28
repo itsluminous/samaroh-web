@@ -36,6 +36,37 @@ describe('normalizePermissions', () => {
     expect(hasPerm(perms, 'booking', 'delete')).toBe(false);
     expect(hasPerm(perms, 'reports', 'view')).toBe(true);
   });
+
+  it('defaults view_amounts to TRUE when absent (schema exception)', () => {
+    // Pre-existing permissions blobs written before amounts-visibility.
+    const legacy = normalizePermissions({ booking: { view: true }, reports: { view: true } });
+    for (const mod of ['booking', 'expenses', 'inventory', 'reports'] as const) {
+      expect(hasPerm(legacy, mod, 'view_amounts')).toBe(true);
+    }
+    // Junk / missing module blobs too.
+    expect(hasPerm(normalizePermissions(null), 'expenses', 'view_amounts')).toBe(true);
+    expect(hasPerm(normalizePermissions({}), 'inventory', 'view_amounts')).toBe(true);
+  });
+
+  it('masks only on explicit false (non-boolean junk stays true)', () => {
+    const perms = normalizePermissions({
+      booking: { view: true, view_amounts: false },
+      expenses: { view_amounts: 'no' },
+      inventory: { view_amounts: 0 },
+      reports: { view: true, view_amounts: true },
+    });
+    expect(hasPerm(perms, 'booking', 'view_amounts')).toBe(false);
+    expect(hasPerm(perms, 'expenses', 'view_amounts')).toBe(true);
+    expect(hasPerm(perms, 'inventory', 'view_amounts')).toBe(true);
+    expect(hasPerm(perms, 'reports', 'view_amounts')).toBe(true);
+  });
+
+  it('round-trips an explicit view_amounts=false through serialization', () => {
+    const perms = normalizePermissions({ booking: { view: true, view_amounts: false } });
+    const again = normalizePermissions(JSON.parse(JSON.stringify(perms)));
+    expect(again).toEqual(perms);
+    expect(hasPerm(again, 'booking', 'view_amounts')).toBe(false);
+  });
 });
 
 describe('presets', () => {
@@ -63,6 +94,19 @@ describe('presets', () => {
     }
     const custom = presetPermissions('viewer');
     custom.reports.view = true;
+    expect(matchingPreset(custom)).toBeNull();
+  });
+
+  it('all presets leave view_amounts true (owner toggles it off per member)', () => {
+    for (const preset of ['viewer', 'staff', 'manager'] as const) {
+      const p = presetPermissions(preset);
+      for (const mod of ['booking', 'expenses', 'inventory', 'reports'] as const) {
+        expect(hasPerm(p, mod, 'view_amounts')).toBe(true);
+      }
+    }
+    // Toggling any view_amounts off breaks the exact-preset match.
+    const custom = presetPermissions('viewer');
+    custom.booking.view_amounts = false;
     expect(matchingPreset(custom)).toBeNull();
   });
 });

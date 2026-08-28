@@ -25,10 +25,13 @@ import BookingRow from './BookingRow';
 export default function EventsAgenda({
   agenda,
   presets,
+  showAmounts,
   onOpen,
 }: {
   agenda: AgendaWindowState;
   presets?: EventTypePreset[] | null;
+  /** false = booking.view_amounts denied — due chips render ₹•••. */
+  showAmounts?: boolean;
   onOpen: (booking: Booking) => void;
 }) {
   const t = useTranslations();
@@ -182,6 +185,7 @@ export default function EventsAgenda({
                     booking={booking}
                     payments={agenda.paymentsByBooking[booking.id] ?? []}
                     presets={presets}
+                    showAmounts={showAmounts}
                     onClick={() => onOpen(booking)}
                   />
                 ))}

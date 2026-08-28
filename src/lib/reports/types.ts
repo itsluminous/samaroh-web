@@ -73,3 +73,15 @@ export type ReportKey = (typeof REPORT_KEYS)[number];
 export function isReportKey(value: string): value is ReportKey {
   return (REPORT_KEYS as readonly string[]).includes(value);
 }
+
+/**
+ * Reports whose content is rupee figures (revenue, expenses, dues, valuations)
+ * — hidden entirely when `reports.view_amounts` is explicitly false. Only
+ * occupancy (booked days / utilization) and collection (days-to-pay) carry no
+ * amounts and stay visible.
+ */
+export const NON_MONEY_REPORT_KEYS: readonly ReportKey[] = ['occupancy', 'collection'];
+
+export function isMoneyReport(key: ReportKey): boolean {
+  return !NON_MONEY_REPORT_KEYS.includes(key);
+}

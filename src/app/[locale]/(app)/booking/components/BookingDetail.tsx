@@ -27,6 +27,8 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
+import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import { computeDue, computePaid } from '@/lib/booking/due';
 import { effectiveBookingColor } from '@/lib/booking/bookingColors';
 import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
@@ -36,7 +38,7 @@ import type { Booking, BookingPayment, BookingPermissions, Business } from '@/li
 import { buildWhatsAppLink } from '@/lib/booking/whatsapp';
 import { formatBookingTitle } from './format';
 
-function AmountRow({ label, value, bold, color }: { label: string; value: string; bold?: boolean; color?: string }) {
+function AmountRow({ label, value, bold, color }: { label: string; value: ReactNode; bold?: boolean; color?: string }) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
       <Typography color="text.secondary">{label}</Typography>
@@ -88,10 +90,14 @@ export default function BookingDetail({
   const statusLabel = t(`booking.status.${booking.status}`);
   const colorDef = effectiveBookingColor(booking, presets);
   const addedBy = memberNames[booking.created_by] ?? business.owner_name;
+  // booking.view_amounts (absent = true): false masks every financial figure
+  // on this card as ₹••• and hides invoice generation (an invoice IS amounts).
+  const showAmounts = permissions.view_amounts;
+  const rupees = (value: number): ReactNode => (showAmounts ? formatRupees(value) : <MaskedAmount />);
 
   const waText = t('booking.whatsapp.reminder_text', {
     name: booking.customer_name,
-    due: formatRupees(Math.max(due, 0)),
+    due: maskAmount(formatRupees(Math.max(due, 0)), showAmounts),
     event: formatBookingTitle(booking, t),
     date: formatDate(booking.start_date, locale),
     business: business.name,
@@ -162,14 +168,14 @@ export default function BookingDetail({
         ) : null}
 
         <Divider sx={{ my: 1.5 }} />
-        <AmountRow label={t('booking.card.total_label')} value={formatRupees(booking.total_amount)} />
+        <AmountRow label={t('booking.card.total_label')} value={rupees(booking.total_amount)} />
         {booking.security_deposit > 0 ? (
-          <AmountRow label={t('booking.card.deposit_label')} value={formatRupees(booking.security_deposit)} />
+          <AmountRow label={t('booking.card.deposit_label')} value={rupees(booking.security_deposit)} />
         ) : null}
-        <AmountRow label={t('booking.card.paid_label')} value={formatRupees(paid)} />
+        <AmountRow label={t('booking.card.paid_label')} value={rupees(paid)} />
         <AmountRow
           label={t('booking.card.due_label')}
-          value={formatRupees(Math.max(due, 0))}
+          value={rupees(Math.max(due, 0))}
           bold
           color={due > 0 ? 'error.main' : 'success.main'}
         />
@@ -189,7 +195,7 @@ export default function BookingDetail({
                 {paymentLine(p)}
               </Typography>
               <Typography variant="body2" fontWeight={500}>
-                {formatRupees(p.amount)}
+                {rupees(p.amount)}
               </Typography>
             </Box>
           ))
@@ -213,7 +219,7 @@ export default function BookingDetail({
               {t('booking.card.action_record_payment')}
             </Button>
           ) : null}
-          {permissions.generate_invoice ? (
+          {permissions.generate_invoice && showAmounts ? (
             <Button
               variant="outlined"
               startIcon={<PrintIcon />}

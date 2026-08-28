@@ -17,7 +17,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { useMembership } from '@/lib/permissions/useMembership';
-import { REPORT_KEYS } from '@/lib/reports/types';
+import { isMoneyReport, REPORT_KEYS } from '@/lib/reports/types';
 
 export default function ReportsHome() {
   const t = useTranslations();
@@ -40,6 +40,11 @@ export default function ReportsHome() {
     );
   }
 
+  // reports.view_amounts (absent = true): false hides the money reports
+  // entirely — only the amount-free ones (occupancy, collection) stay.
+  const showAmounts = isOwner || permissions.reports.view_amounts;
+  const visibleKeys = REPORT_KEYS.filter((key) => showAmounts || !isMoneyReport(key));
+
   return (
     <>
       <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
@@ -47,7 +52,7 @@ export default function ReportsHome() {
       </Typography>
       <Paper variant="outlined" sx={{ maxWidth: 640 }}>
         <List disablePadding>
-          {REPORT_KEYS.map((key) => (
+          {visibleKeys.map((key) => (
             <ListItem key={key} disablePadding divider>
               <ListItemButton component={Link} href={`/menu/reports/${key}`}>
                 <ListItemText primary={t(`reports.report.${key}`)} secondary={t(`reports.report.${key}_subtitle`)} />

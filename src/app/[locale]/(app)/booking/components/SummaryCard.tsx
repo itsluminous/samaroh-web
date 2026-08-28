@@ -8,9 +8,19 @@ import CardContent from '@mui/material/CardContent';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
+import { maskAmount } from '@/components/MaskedAmount';
 import { formatRupees } from '@/lib/booking/money';
 
-export default function SummaryCard({ received, pending }: { received: number; pending: number }) {
+export default function SummaryCard({
+  received,
+  pending,
+  showAmounts,
+}: {
+  received: number;
+  pending: number;
+  /** false = booking.view_amounts denied — amounts render as ₹•••. */
+  showAmounts: boolean;
+}) {
   const t = useTranslations('booking.summary');
   return (
     <Card variant="outlined" sx={{ mb: 2 }}>
@@ -20,10 +30,10 @@ export default function SummaryCard({ received, pending }: { received: number; p
         </Typography>
         <Stack direction="row" spacing={2}>
           <Typography variant="subtitle1" fontWeight={600} color="success.main">
-            {t('received', { amount: formatRupees(received) })}
+            {t('received', { amount: maskAmount(formatRupees(received), showAmounts) })}
           </Typography>
           <Typography variant="subtitle1" fontWeight={600} color="error.main">
-            {t('pending', { amount: formatRupees(pending) })}
+            {t('pending', { amount: maskAmount(formatRupees(pending), showAmounts) })}
           </Typography>
         </Stack>
       </CardContent>

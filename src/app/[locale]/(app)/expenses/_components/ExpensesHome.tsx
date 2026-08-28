@@ -19,6 +19,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
+import MaskedAmount from '@/components/MaskedAmount';
 import { formatAmount } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
@@ -48,6 +49,8 @@ export default function ExpensesHome() {
   const businessId = business?.id ?? null;
   // Add person edits the party roster — hidden without manage_parties (§3).
   const canManageParties = isOwner || permissions.expenses.manage_parties;
+  // expenses.view_amounts (absent = true): false masks totals and balances as ₹•••.
+  const showAmounts = isOwner || permissions.expenses.view_amounts;
 
   const [parties, setParties] = useState<PartyRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -153,7 +156,7 @@ export default function ExpensesHome() {
             {t('home.you_gave')}
           </Typography>
           <Typography variant="h6" color="error.main">
-            {formatAmount(totals.gave)}
+            {showAmounts ? formatAmount(totals.gave) : <MaskedAmount />}
           </Typography>
         </Box>
         <Box sx={{ flex: 1, p: 2, textAlign: 'center', borderLeft: 1, borderColor: 'divider' }}>
@@ -161,7 +164,7 @@ export default function ExpensesHome() {
             {t('home.you_got')}
           </Typography>
           <Typography variant="h6" color="success.main">
-            {formatAmount(totals.got)}
+            {showAmounts ? formatAmount(totals.got) : <MaskedAmount />}
           </Typography>
         </Box>
       </Card>
@@ -230,7 +233,7 @@ export default function ExpensesHome() {
                     netBalance > 0 ? 'error.main' : netBalance < 0 ? 'success.main' : 'text.secondary'
                   }
                 >
-                  {formatAmount(Math.abs(netBalance))}
+                  {showAmounts ? formatAmount(Math.abs(netBalance)) : <MaskedAmount />}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {netBalance > 0

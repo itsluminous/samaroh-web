@@ -28,6 +28,7 @@ import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import {
@@ -74,6 +75,9 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   // inventory.manage_master_items (shared/permissions/permissions-schema.json).
   const { isOwner, permissions } = useMembership();
   const canManageItems = isOwner || permissions.inventory.manage_master_items;
+  // inventory.view_amounts (absent = true): false masks the stock value, unit
+  // prices and transaction totals as ₹••• — quantities stay visible.
+  const showAmounts = isOwner || permissions.inventory.view_amounts;
 
   const [item, setItem] = useState<MasterItemRecord | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -272,7 +276,7 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
               unit: unitLabel(item.unit),
             })}
           </Typography>
-          <Typography variant="h6">{formatAmount(currentValue)}</Typography>
+          <Typography variant="h6">{showAmounts ? formatAmount(currentValue) : <MaskedAmount />}</Typography>
           <Typography variant="caption" color="text.secondary">
             {t('stock.value_label')}
           </Typography>
@@ -340,9 +344,9 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
                       />
                     </TableCell>
                     <TableCell align="right">{formatIndianNumber(txn.quantity)}</TableCell>
-                    <TableCell align="right">{formatAmount(txn.unitPrice)}</TableCell>
+                    <TableCell align="right">{showAmounts ? formatAmount(txn.unitPrice) : <MaskedAmount />}</TableCell>
                     <TableCell align="right">
-                      {formatAmount(Math.round(txn.quantity * txn.unitPrice * 100) / 100)}
+                      {showAmounts ? formatAmount(Math.round(txn.quantity * txn.unitPrice * 100) / 100) : <MaskedAmount />}
                     </TableCell>
                     <TableCell>{txn.notes ?? ''}</TableCell>
                   </TableRow>
@@ -377,7 +381,7 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
               ? t('txn.add_success', { name: result.itemName })
               : t('txn.remove_success', {
                   name: result.itemName,
-                  amount: formatAmount(result.removedValue ?? 0),
+                  amount: maskAmount(formatAmount(result.removedValue ?? 0), showAmounts),
                 }),
           );
           setShownCount(ITEM_TXN_PAGE_SIZE);

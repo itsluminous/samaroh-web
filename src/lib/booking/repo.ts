@@ -68,7 +68,16 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
   const memberNames: Record<string, string> = {};
   let permissions: BookingPermissions = isOwner
     ? OWNER_PERMISSIONS
-    : { view: false, create: false, edit: false, delete: false, record_payment: false, generate_invoice: false };
+    : {
+        view: false,
+        create: false,
+        edit: false,
+        delete: false,
+        record_payment: false,
+        generate_invoice: false,
+        // Absent defaults to TRUE (schema contract) — masking only on explicit false.
+        view_amounts: true,
+      };
   for (const m of members ?? []) {
     if (m.user_id) {
       memberNames[m.user_id] = m.display_name;
@@ -82,6 +91,7 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
         delete: p.delete === true || m.is_owner === true,
         record_payment: p.record_payment === true || m.is_owner === true,
         generate_invoice: p.generate_invoice === true || m.is_owner === true,
+        view_amounts: p.view_amounts !== false || m.is_owner === true,
       };
     }
   }

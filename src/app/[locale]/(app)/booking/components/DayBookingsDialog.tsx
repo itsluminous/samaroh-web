@@ -24,6 +24,7 @@ export default function DayBookingsDialog({
   bookings,
   paymentsByBooking,
   presets,
+  showAmounts,
   canCreate,
   onOpenBooking,
   onAddNew,
@@ -35,6 +36,8 @@ export default function DayBookingsDialog({
   bookings: Booking[];
   paymentsByBooking: Record<string, BookingPayment[]>;
   presets?: EventTypePreset[] | null;
+  /** false = booking.view_amounts denied — due chips render ₹•••. */
+  showAmounts?: boolean;
   /** Gates the final "Add new event" row. */
   canCreate: boolean;
   onOpenBooking: (booking: Booking) => void;
@@ -55,6 +58,7 @@ export default function DayBookingsDialog({
               booking={booking}
               payments={paymentsByBooking[booking.id] ?? []}
               presets={presets}
+              showAmounts={showAmounts}
               onClick={() => onOpenBooking(booking)}
             />
           ))}

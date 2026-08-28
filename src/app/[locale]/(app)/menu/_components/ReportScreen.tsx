@@ -55,6 +55,7 @@ import {
   fetchPartyNames,
   fetchPaymentsInRange,
 } from '@/lib/reports/queries';
+import { isMoneyReport } from '@/lib/reports/types';
 import type { DateRange, ReportKey } from '@/lib/reports/types';
 import { BarChart, HBarList, LineChart, type BarDatum, type HBarRow, type LineSeries } from './charts';
 import DateRangeFilter, { presetRange, type RangePreset } from './DateRangeFilter';
@@ -522,7 +523,11 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
     return (v: number) => fmt.format(v);
   }, [locale]);
 
-  const canView = isOwner || permissions.reports.view;
+  // Direct-URL parity with the home list: a money report needs
+  // reports.view_amounts on top of reports.view (occupancy/collection don't).
+  const canView =
+    (isOwner || permissions.reports.view) &&
+    (isOwner || permissions.reports.view_amounts || !isMoneyReport(reportKey));
 
   useEffect(() => {
     if (!supabase || !business || !canView) {

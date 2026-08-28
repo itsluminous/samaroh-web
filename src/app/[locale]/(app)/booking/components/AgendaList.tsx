@@ -14,12 +14,15 @@ export default function AgendaList({
   bookings,
   paymentsByBooking,
   presets,
+  showAmounts,
   onOpen,
 }: {
   bookings: Booking[];
   paymentsByBooking: Record<string, BookingPayment[]>;
   /** Live event-type presets for type-default color resolution (null = static fallback). */
   presets?: EventTypePreset[] | null;
+  /** false = booking.view_amounts denied — due chips render ₹•••. */
+  showAmounts?: boolean;
   onOpen: (booking: Booking) => void;
 }) {
   const t = useTranslations();
@@ -40,6 +43,7 @@ export default function AgendaList({
               booking={booking}
               payments={paymentsByBooking[booking.id] ?? []}
               presets={presets}
+              showAmounts={showAmounts}
               onClick={() => onOpen(booking)}
             />
           ))}

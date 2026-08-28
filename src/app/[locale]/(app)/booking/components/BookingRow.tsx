@@ -12,6 +12,7 @@ import ListItemText from '@mui/material/ListItemText';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import { useLocale, useTranslations } from 'next-intl';
+import { maskAmount } from '@/components/MaskedAmount';
 import { computeDue } from '@/lib/booking/due';
 import { pillPaint, type PillPaint } from '@/lib/booking/bookingColors';
 import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
@@ -49,12 +50,15 @@ export default function BookingRow({
   booking,
   payments,
   presets,
+  showAmounts = true,
   onClick,
 }: {
   booking: Booking;
   payments: BookingPayment[];
   /** Live event-type presets for type-default colour resolution (null = static fallback). */
   presets?: EventTypePreset[] | null;
+  /** false = booking.view_amounts denied — the due chip amount renders as ₹•••. */
+  showAmounts?: boolean;
   onClick: () => void;
 }) {
   const t = useTranslations();
@@ -103,7 +107,7 @@ export default function BookingRow({
           size="small"
           color="error"
           variant="outlined"
-          label={`${t('booking.card.due_label')}: ${formatRupees(due)}`}
+          label={`${t('booking.card.due_label')}: ${maskAmount(formatRupees(due), showAmounts)}`}
         />
       ) : (
         <Chip size="small" color="success" variant="outlined" label={t('invoice.fully_paid')} />

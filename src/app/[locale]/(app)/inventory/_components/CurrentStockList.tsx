@@ -22,6 +22,7 @@ import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import type { CurrentInventoryRow } from '@/lib/inventory/fifo';
@@ -56,6 +57,9 @@ export default function CurrentStockList() {
   const businessId = business?.id ?? null;
   // Record transaction is a write — hidden without inventory.create (§3).
   const canRecord = isOwner || permissions.inventory.create;
+  // inventory.view_amounts (absent = true): false masks stock values as ₹•••
+  // — quantities stay visible.
+  const showAmounts = isOwner || permissions.inventory.view_amounts;
 
   const [rows, setRows] = useState<CurrentInventoryRow[]>([]);
   const [items, setItems] = useState<MasterItemRecord[]>([]);
@@ -203,7 +207,7 @@ export default function CurrentStockList() {
                     }
                   />
                   <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="subtitle1">{formatAmount(row.currentValue)}</Typography>
+                    <Typography variant="subtitle1">{showAmounts ? formatAmount(row.currentValue) : <MaskedAmount />}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {t('stock.value_label')}
                     </Typography>
@@ -243,7 +247,7 @@ export default function CurrentStockList() {
               ? t('txn.add_success', { name: result.itemName })
               : t('txn.remove_success', {
                   name: result.itemName,
-                  amount: formatAmount(result.removedValue ?? 0),
+                  amount: maskAmount(formatAmount(result.removedValue ?? 0), showAmounts),
                 }),
           );
           void reload();

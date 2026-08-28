@@ -1,7 +1,11 @@
 /**
  * Member permission model — mirrors shared/permissions/permissions-schema.json
- * (the frozen Wave-0 contract). Every action defaults to false when absent;
- * owners bypass this object entirely (implicit full access, enforced by RLS).
+ * (the frozen Wave-0 contract). Every action defaults to false when absent,
+ * with ONE exception: the per-module `view_amounts` keys default to TRUE when
+ * absent (backward compat — permissions objects written before
+ * amounts-visibility existed keep showing amounts). Owners set it to false
+ * explicitly; the app then masks financial figures as ₹•••. Owners bypass
+ * this object entirely (implicit full access, enforced by RLS).
  */
 
 export type PermissionModule = 'booking' | 'expenses' | 'inventory' | 'reports' | 'settings';
@@ -14,6 +18,7 @@ export interface MemberPermissions {
     delete: boolean;
     record_payment: boolean;
     generate_invoice: boolean;
+    view_amounts: boolean;
   };
   expenses: {
     view: boolean;
@@ -21,6 +26,7 @@ export interface MemberPermissions {
     edit: boolean;
     delete: boolean;
     manage_parties: boolean;
+    view_amounts: boolean;
   };
   inventory: {
     view: boolean;
@@ -28,9 +34,11 @@ export interface MemberPermissions {
     edit: boolean;
     delete: boolean;
     manage_master_items: boolean;
+    view_amounts: boolean;
   };
   reports: {
     view: boolean;
+    view_amounts: boolean;
   };
   settings: {
     manage_business: boolean;
@@ -39,29 +47,36 @@ export interface MemberPermissions {
   };
 }
 
+/** The one absent-defaults-to-TRUE action (see the schema's top description). */
+export const DEFAULT_TRUE_ACTION = 'view_amounts';
+
 /** Matrix rows in display order — drives the permission editor UI. */
 export const PERMISSION_MATRIX: ReadonlyArray<{
   module: PermissionModule;
   actions: readonly string[];
 }> = [
-  { module: 'booking', actions: ['view', 'create', 'edit', 'delete', 'record_payment', 'generate_invoice'] },
-  { module: 'expenses', actions: ['view', 'create', 'edit', 'delete', 'manage_parties'] },
-  { module: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'manage_master_items'] },
-  { module: 'reports', actions: ['view'] },
+  { module: 'booking', actions: ['view', 'create', 'edit', 'delete', 'record_payment', 'generate_invoice', 'view_amounts'] },
+  { module: 'expenses', actions: ['view', 'create', 'edit', 'delete', 'manage_parties', 'view_amounts'] },
+  { module: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'manage_master_items', 'view_amounts'] },
+  { module: 'reports', actions: ['view', 'view_amounts'] },
   { module: 'settings', actions: ['manage_business', 'manage_members', 'gcal_sync'] },
 ];
 
 export function emptyPermissions(): MemberPermissions {
   return {
-    booking: { view: false, create: false, edit: false, delete: false, record_payment: false, generate_invoice: false },
-    expenses: { view: false, create: false, edit: false, delete: false, manage_parties: false },
-    inventory: { view: false, create: false, edit: false, delete: false, manage_master_items: false },
-    reports: { view: false },
+    booking: { view: false, create: false, edit: false, delete: false, record_payment: false, generate_invoice: false, view_amounts: true },
+    expenses: { view: false, create: false, edit: false, delete: false, manage_parties: false, view_amounts: true },
+    inventory: { view: false, create: false, edit: false, delete: false, manage_master_items: false, view_amounts: true },
+    reports: { view: false, view_amounts: true },
     settings: { manage_business: false, manage_members: false, gcal_sync: false },
   };
 }
 
-/** Normalises a permissions jsonb blob from the DB into the full shape. */
+/**
+ * Normalises a permissions jsonb blob from the DB into the full shape.
+ * Actions default to false unless explicitly true — except `view_amounts`,
+ * which defaults to true unless explicitly false (schema contract).
+ */
 export function normalizePermissions(raw: unknown): MemberPermissions {
   const base = emptyPermissions();
   if (!raw || typeof raw !== 'object') {
@@ -75,7 +90,9 @@ export function normalizePermissions(raw: unknown): MemberPermissions {
     }
     const target = base[module] as Record<string, boolean>;
     for (const action of actions) {
-      if (mod[action] === true) {
+      if (action === DEFAULT_TRUE_ACTION) {
+        target[action] = mod[action] !== false;
+      } else if (mod[action] === true) {
         target[action] = true;
       }
     }

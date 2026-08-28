@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
 import { formatAmount } from '@/lib/format/amount';
-import { useBusiness } from '@/lib/hooks/useBusiness';
+import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
 import { fetchBusinessExpenses, fetchParties, PARTY_DELETED_NOTICE_KEY, type ExpenseRecord, type PartyRecord } from '../_lib/queries';
 import AddPersonDialog from './AddPersonDialog';
@@ -37,7 +37,17 @@ export default function ExpensesHome() {
   const tCommon = useTranslations('common');
   const format = useFormatter();
   const router = useRouter();
-  const { supabase, businessId, loading: businessLoading, error: businessError } = useBusiness();
+  const {
+    supabase,
+    business,
+    isOwner,
+    permissions,
+    loading: businessLoading,
+    error: businessError,
+  } = useMembership();
+  const businessId = business?.id ?? null;
+  // Add person edits the party roster — hidden without manage_parties (§3).
+  const canManageParties = isOwner || permissions.expenses.manage_parties;
 
   const [parties, setParties] = useState<PartyRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -235,19 +245,21 @@ export default function ExpensesHome() {
         </List>
       )}
 
-      <GlassFab
-        color="primary"
-        variant="extended"
-        aria-label={t('home.add_person')}
-        onClick={() => setAddOpen(true)}
-        sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
-      >
-        <PersonAddAlt1Icon sx={{ mr: 1 }} />
-        {t('home.add_person')}
-      </GlassFab>
+      {canManageParties ? (
+        <GlassFab
+          color="primary"
+          variant="extended"
+          aria-label={t('home.add_person')}
+          onClick={() => setAddOpen(true)}
+          sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
+        >
+          <PersonAddAlt1Icon sx={{ mr: 1 }} />
+          {t('home.add_person')}
+        </GlassFab>
+      ) : null}
 
       <AddPersonDialog
-        open={addOpen}
+        open={addOpen && canManageParties}
         parties={parties}
         onClose={() => setAddOpen(false)}
         onPickExisting={(party) => {

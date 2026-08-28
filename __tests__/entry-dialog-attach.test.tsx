@@ -45,6 +45,7 @@ function openDialog() {
       partyId="p1"
       direction="paid"
       entry={null}
+      canDelete
       onClose={jest.fn()}
       onSaved={jest.fn()}
     />,

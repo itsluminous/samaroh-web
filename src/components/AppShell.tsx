@@ -25,6 +25,8 @@ import type { ReactNode } from 'react';
 import LocaleSwitcher from '@/components/LocaleSwitcher';
 import SyncIndicator from '@/components/SyncIndicator';
 import { Link, usePathname } from '@/i18n/navigation';
+import { useMembership } from '@/lib/permissions/useMembership';
+import { canViewSection, type NavModule } from '@/lib/permissions/visibility';
 
 const RAIL_WIDTH = 220;
 
@@ -39,9 +41,16 @@ const SECTIONS = [
 export default function AppShell({ children }: { children: ReactNode }) {
   const t = useTranslations();
   const pathname = usePathname();
+  const membership = useMembership();
+
+  // Modules the member cannot view disappear from BOTH navs (§3); Menu is
+  // always visible. Degraded modes (loading, guest, unconfigured) fail open.
+  const sections = SECTIONS.filter(
+    (s) => s.key === 'menu' || canViewSection(membership, s.key as NavModule),
+  );
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const activeIndex = SECTIONS.findIndex((s) => isActive(s.href));
+  const activeIndex = sections.findIndex((s) => isActive(s.href));
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -80,7 +89,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       >
         <Toolbar />
         <List component="nav">
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <ListItem key={section.key} disablePadding>
               <ListItemButton
                 component={Link}
@@ -126,7 +135,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         }}
       >
         <BottomNavigation showLabels value={activeIndex === -1 ? false : activeIndex}>
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <BottomNavigationAction
               key={section.key}
               component={Link}

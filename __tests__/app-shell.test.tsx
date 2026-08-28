@@ -8,6 +8,32 @@ import type { ReactNode } from 'react';
 import en from '../messages/en.json';
 import hi from '../messages/hi.json';
 import AppShell from '@/components/AppShell';
+import { emptyPermissions, type MemberPermissions } from '@/lib/permissions/permissions';
+
+// Membership drives nav visibility; the default (fail-open: no Supabase)
+// keeps the localization tests exercising all 4 sections.
+const mockUseMembership = jest.fn();
+jest.mock('@/lib/permissions/useMembership', () => ({
+  useMembership: () => mockUseMembership(),
+}));
+
+function membership(overrides: Record<string, unknown> = {}) {
+  return {
+    supabase: null,
+    business: null,
+    userId: null,
+    isOwner: false,
+    permissions: emptyPermissions(),
+    loading: false,
+    error: null,
+    refresh: jest.fn(),
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  mockUseMembership.mockReturnValue(membership());
+});
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/en/booking',
@@ -70,5 +96,54 @@ describe('AppShell', () => {
     // rows) inflates it and the whole page pans sideways on narrow phones.
     renderShell('en', en);
     expect(screen.getByRole('main')).toHaveStyle({ minWidth: 0 });
+  });
+});
+
+describe('AppShell nav visibility (§3)', () => {
+  const navLabel = (key: keyof typeof en.common.nav) => en.common.nav[key];
+
+  /** Rail + bottom nav both render the label; 0 hits = hidden everywhere. */
+  const countNav = (key: keyof typeof en.common.nav) => screen.queryAllByText(navLabel(key)).length;
+
+  function renderWith(permissions: MemberPermissions, overrides: Record<string, unknown> = {}) {
+    mockUseMembership.mockReturnValue(
+      membership({ supabase: {}, business: { id: 'b1' }, userId: 'u1', permissions, ...overrides }),
+    );
+    renderShell('en', en);
+  }
+
+  it.each([
+    { name: 'booking only', view: ['booking'], hidden: ['expenses', 'inventory'] },
+    { name: 'expenses only', view: ['expenses'], hidden: ['booking', 'inventory'] },
+    { name: 'inventory only', view: ['inventory'], hidden: ['booking', 'expenses'] },
+    { name: 'none', view: [], hidden: ['booking', 'expenses', 'inventory'] },
+  ])('maps view permissions to both navs: $name', ({ view, hidden }) => {
+    const perms = emptyPermissions();
+    for (const mod of view) {
+      (perms[mod as 'booking' | 'expenses' | 'inventory'] as { view: boolean }).view = true;
+    }
+    renderWith(perms);
+    for (const key of view) {
+      expect(countNav(key as never)).toBeGreaterThanOrEqual(2);
+    }
+    for (const key of hidden) {
+      expect(countNav(key as never)).toBe(0);
+    }
+    // Menu never disappears.
+    expect(countNav('menu')).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows every section to the owner', () => {
+    renderWith(emptyPermissions(), { isOwner: true });
+    for (const key of ['booking', 'expenses', 'inventory', 'menu'] as const) {
+      expect(countNav(key)).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('fails open while membership is loading', () => {
+    renderWith(emptyPermissions(), { loading: true });
+    for (const key of ['booking', 'expenses', 'inventory', 'menu'] as const) {
+      expect(countNav(key)).toBeGreaterThanOrEqual(2);
+    }
   });
 });

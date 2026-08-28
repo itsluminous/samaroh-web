@@ -4,6 +4,32 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-08-28 — Permission UI sweep: nav visibility, route guards, write gates
+
+- **Nav visibility (§3, Android parity).** Modules without `<module>.view`
+  disappear from BOTH the desktop left rail and the mobile bottom nav
+  (`AppShell` filters on `useMembership`); Menu is always visible. The locale
+  root redirect resolves membership server-side (`resolveLandingHref`) and
+  lands on the first visible section in nav order, `/menu` when none.
+- **Route guards, not middleware.** Direct-URL access to a viewless section
+  renders the localized no-access state (`SectionGuard`, new shared
+  `common.permission.no_access_*` keys in the `web-perms` fragment) instead
+  of the screen. Guarding stays client-side because permissions live behind
+  the same guarded client the screens use (guest mode included); RLS remains
+  the real enforcement — the guard is UX parity, never security.
+- **Fail-open chrome.** Every degraded mode (Supabase unconfigured, guest
+  mode, no session, no business, membership loading) shows the full nav and
+  passes guards: the hermetic build/e2e contract requires the app to work
+  without Supabase, guests are owners of their local business, and the
+  screens already render their own empty states.
+- **Write affordances are hidden, not disabled** (matching the Android app
+  and the existing masterlist/booking gates): expenses gave/got entry bar
+  (`create`), ledger-row edit → plain rows (`edit`), entry delete
+  (`delete`), add/edit party + business-related pill (`manage_parties`),
+  inventory record-transaction FAB (`create`). The business-related pill is
+  the one deliberate "disabled" exception: it doubles as a status display,
+  so it stays visible read-only.
+
 ## 2026-08-28 — Non-translatable catalog entries pass through gen-web
 
 - The shared catalog's entry shape gained an optional `"translatable": false`

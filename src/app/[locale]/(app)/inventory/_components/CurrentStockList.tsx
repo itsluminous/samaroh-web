@@ -23,7 +23,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
-import { useBusiness } from '@/lib/hooks/useBusiness';
+import { useMembership } from '@/lib/permissions/useMembership';
 import type { CurrentInventoryRow } from '@/lib/inventory/fifo';
 import {
   createImageUrls,
@@ -44,8 +44,18 @@ export default function CurrentStockList() {
   const tCommon = useTranslations('common');
   const format = useFormatter();
   const router = useRouter();
-  const { supabase, businessId, userId, loading: businessLoading, error: businessError } =
-    useBusiness();
+  const {
+    supabase,
+    business,
+    userId,
+    isOwner,
+    permissions,
+    loading: businessLoading,
+    error: businessError,
+  } = useMembership();
+  const businessId = business?.id ?? null;
+  // Record transaction is a write — hidden without inventory.create (§3).
+  const canRecord = isOwner || permissions.inventory.create;
 
   const [rows, setRows] = useState<CurrentInventoryRow[]>([]);
   const [items, setItems] = useState<MasterItemRecord[]>([]);
@@ -205,19 +215,21 @@ export default function CurrentStockList() {
         </List>
       )}
 
-      <GlassFab
-        color="primary"
-        variant="extended"
-        aria-label={t('stock.record_transaction')}
-        onClick={() => setTxnOpen(true)}
-        sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
-      >
-        <AddIcon sx={{ mr: 1 }} />
-        {t('stock.record_transaction')}
-      </GlassFab>
+      {canRecord ? (
+        <GlassFab
+          color="primary"
+          variant="extended"
+          aria-label={t('stock.record_transaction')}
+          onClick={() => setTxnOpen(true)}
+          sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
+        >
+          <AddIcon sx={{ mr: 1 }} />
+          {t('stock.record_transaction')}
+        </GlassFab>
+      ) : null}
 
       <RecordTransactionDialog
-        open={txnOpen}
+        open={txnOpen && canRecord}
         items={items}
         stockByItemId={new Map(rows.map((row) => [row.masterItemId, row.currentQuantity]))}
         supabase={supabase}

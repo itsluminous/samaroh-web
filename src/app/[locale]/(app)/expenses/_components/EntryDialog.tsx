@@ -35,6 +35,8 @@ interface EntryDialogProps {
   direction: ExpenseDirection;
   /** Present when editing an existing entry. */
   entry: ExpenseRecord | null;
+  /** expenses.delete — hides the tombstone-delete affordance when absent. */
+  canDelete: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -56,6 +58,7 @@ export default function EntryDialog({
   partyId,
   direction,
   entry,
+  canDelete,
   onClose,
   onSaved,
 }: EntryDialogProps) {
@@ -310,7 +313,7 @@ export default function EntryDialog({
           )}
         </DialogContent>
         <DialogActions>
-          {entry && (
+          {entry && canDelete && (
             <Button color="error" onClick={() => setConfirmDelete(true)} sx={{ mr: 'auto' }}>
               {tCommon('action.delete')}
             </Button>

@@ -11,6 +11,7 @@ import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -44,12 +45,19 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   const {
     supabase,
     business,
+    isOwner,
     permissions,
     loading: businessLoading,
     error: businessError,
   } = useMembership();
   const businessId = business?.id ?? null;
   const businessName = business?.name ?? null;
+  // Write affordances are HIDDEN (not disabled) without the permission (§3);
+  // owners get every action implicitly via useMembership.
+  const canCreate = isOwner || permissions.expenses.create;
+  const canEdit = isOwner || permissions.expenses.edit;
+  const canDelete = isOwner || permissions.expenses.delete;
+  const canManageParties = isOwner || permissions.expenses.manage_parties;
 
   const [party, setParty] = useState<PartyRecord | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
@@ -180,7 +188,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                 : t('ledger.settled')}
           </Typography>
         </Box>
-        {permissions.expenses.manage_parties ? (
+        {canManageParties ? (
           <IconButton aria-label={t('party.edit_title')} onClick={() => setEditOpen(true)}>
             <EditIcon />
           </IconButton>
@@ -191,6 +199,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
         <BusinessRelatedPill
           value={party.business_related}
           businessName={businessName ?? ''}
+          disabled={!canManageParties}
           onChange={(next) => void handleBusinessRelatedChange(next)}
         />
       </Box>
@@ -201,13 +210,9 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
         </Typography>
       ) : (
         <List disablePadding>
-          {ledgerRows.map(({ record, balanceAfter }) => (
-            <ListItemButton
-              key={record.id}
-              divider
-              onClick={() => openEdit(record)}
-              sx={{ alignItems: 'flex-start', py: 1.5 }}
-            >
+          {ledgerRows.map(({ record, balanceAfter }) => {
+            const rowContent = (
+              <>
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                 <Typography variant="body2" color="text.secondary">
                   {format.dateTime(new Date(`${record.expense_date}T00:00:00`), {
@@ -254,11 +259,29 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                   {record.direction === 'paid' ? t('home.you_gave') : t('home.you_got')}
                 </Typography>
               </Box>
-            </ListItemButton>
-          ))}
+              </>
+            );
+            // The whole row is the edit affordance — without expenses.edit it
+            // renders as a plain (non-interactive) list item instead (§3).
+            return canEdit ? (
+              <ListItemButton
+                key={record.id}
+                divider
+                onClick={() => openEdit(record)}
+                sx={{ alignItems: 'flex-start', py: 1.5 }}
+              >
+                {rowContent}
+              </ListItemButton>
+            ) : (
+              <ListItem key={record.id} divider sx={{ alignItems: 'flex-start', py: 1.5 }}>
+                {rowContent}
+              </ListItem>
+            );
+          })}
         </List>
       )}
 
+      {canCreate ? (
       <Box
         sx={{
           position: 'fixed',
@@ -292,12 +315,14 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
           {t('ledger.you_got_button')}
         </Button>
       </Box>
+      ) : null}
 
       <EntryDialog
         open={dialogOpen}
         partyId={partyId}
         direction={dialogDirection}
         entry={dialogEntry}
+        canDelete={canDelete}
         onClose={() => setDialogOpen(false)}
         onSaved={() => {
           setDialogOpen(false);
@@ -305,11 +330,11 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
         }}
       />
 
-      {permissions.expenses.manage_parties ? (
+      {canManageParties ? (
         <EditPartyDialog
           open={editOpen}
           party={party}
-          canDelete={permissions.expenses.delete}
+          canDelete={canDelete}
           onClose={() => setEditOpen(false)}
           onSaved={(updated) => {
             setEditOpen(false);

@@ -50,13 +50,15 @@ async function freshDb(): Promise<SupabaseClient> {
 }
 
 describe('seeding from the shared template', () => {
-  it('buildEventTypeSeedRows produces the 7 built-ins with localized labels and sort_order 0..6', () => {
+  it('buildEventTypeSeedRows produces the 9 built-ins with localized labels and sort_order 0..8', () => {
     const rows = buildEventTypeSeedRows(BIZ, translate);
-    expect(rows).toHaveLength(7);
-    expect(rows.map((r) => r.sort_order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(rows).toHaveLength(9);
+    expect(rows.map((r) => r.sort_order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
     expect(rows[0]).toMatchObject({ business_id: BIZ, label: 'Engagement', icon: '\u{1F48D}', color: 'flamingo' });
     expect(rows[2]).toMatchObject({ label: 'Wedding', color: 'tomato' });
     expect(rows[6]).toMatchObject({ label: 'Custom', color: 'grape' });
+    expect(rows[7]).toMatchObject({ label: 'Lagan', color: 'peacock' });
+    expect(rows[8]).toMatchObject({ label: 'Muh Dikhayi', color: 'fuchsia' });
     // Client UUIDs — replay-idempotent inserts.
     for (const r of rows) {
       expect(String(r.id)).toMatch(/^[0-9a-f-]{36}$/);
@@ -67,9 +69,9 @@ describe('seeding from the shared template', () => {
     const db = await freshDb();
     expect(await seedEventTypes(db, BIZ, translate)).toBe(true);
     const presets = await fetchEventTypes(db, BIZ);
-    expect(presets).toHaveLength(7);
+    expect(presets).toHaveLength(9);
     expect(presets?.map((p) => p.label)).toEqual([
-      'Engagement', 'Tilak', 'Wedding', 'Room Booking', 'Birthday', 'Anniversary', 'Custom',
+      'Engagement', 'Tilak', 'Wedding', 'Room Booking', 'Birthday', 'Anniversary', 'Custom', 'Lagan', 'Muh Dikhayi',
     ]);
   });
 
@@ -95,7 +97,7 @@ describe('seeding from the shared template', () => {
       translate,
     );
     const rows = await guestDb.event_types.toArray();
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(9);
     expect(rows.every((r) => r.business_id === GUEST_BUSINESS_ID)).toBe(true);
     expect(rows.every((r) => r.deleted_at === null)).toBe(true);
 
@@ -104,7 +106,7 @@ describe('seeding from the shared template', () => {
       { name: 'Hall', businessType: 'Marriage hall', address: null, ownerName: 'Asha' },
       translate,
     );
-    expect(await guestDb.event_types.count()).toBe(7);
+    expect(await guestDb.event_types.count()).toBe(9);
   });
 });
 
@@ -153,9 +155,9 @@ describe('CRUD round-trip on the guest Dexie client', () => {
     await reorderEventTypes(db, reordered);
     const after = (await fetchEventTypes(db, BIZ)) ?? [];
     expect(after.map((p) => p.label)).toEqual([
-      'Wedding', 'Engagement', 'Tilak', 'Room Booking', 'Birthday', 'Anniversary', 'Custom',
+      'Wedding', 'Engagement', 'Tilak', 'Room Booking', 'Birthday', 'Anniversary', 'Custom', 'Lagan', 'Muh Dikhayi',
     ]);
-    expect(after.map((p) => p.sort_order)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(after.map((p) => p.sort_order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });
 
@@ -291,7 +293,7 @@ describe('reads tolerate a pre-006 server (schema lag)', () => {
   it('fallbackPresets renders the static template without the custom entry', () => {
     const fallback = fallbackPresets(translate);
     expect(fallback.map((p) => p.label)).toEqual([
-      'Engagement', 'Tilak', 'Wedding', 'Room Booking', 'Birthday', 'Anniversary',
+      'Engagement', 'Tilak', 'Wedding', 'Room Booking', 'Birthday', 'Anniversary', 'Lagan', 'Muh Dikhayi',
     ]);
     expect(fallback.find((p) => p.label === 'Wedding')?.color).toBe('tomato');
   });

@@ -6,8 +6,8 @@ import { BOOKING_COLORS } from '../bookingColors';
 import { CUSTOM_EVENT_TYPE_KEY, EVENT_TYPES, findEventType, isBuiltInEventType } from '../eventTypes';
 
 describe('event types (shared contract)', () => {
-  it('parses 7 built-in types including custom', () => {
-    expect(EVENT_TYPES).toHaveLength(7);
+  it('parses 9 built-in types including custom', () => {
+    expect(EVENT_TYPES).toHaveLength(9);
     expect(EVENT_TYPES.some((t) => t.key === CUSTOM_EVENT_TYPE_KEY)).toBe(true);
   });
 
@@ -32,6 +32,8 @@ describe('event types (shared contract)', () => {
 
   it('findEventType / isBuiltInEventType resolve built-in keys, not free text', () => {
     expect(findEventType('wedding')?.color).toBe('tomato');
+    expect(findEventType('lagan')?.color).toBe('peacock');
+    expect(findEventType('muh_dikhayi')?.color).toBe('fuchsia');
     expect(findEventType('Mehndi Night')).toBeUndefined();
     expect(isBuiltInEventType('birthday')).toBe(true);
     expect(isBuiltInEventType('Mehndi Night')).toBe(false);

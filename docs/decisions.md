@@ -4,6 +4,17 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-08-28 — Non-translatable catalog entries pass through gen-web
+
+- The shared catalog's entry shape gained an optional `"translatable": false`
+  flag for data-like values (URIs, technical identifiers) that live only in the
+  canonical `en` catalog (a `hi` entry for one is a validation error; see
+  `shared/strings/README.md` and samaroh-android ADR-034). `gen-web.mjs` copies
+  the `en` value into **every** locale's messages file, so `useTranslations`
+  lookups never miss regardless of locale. No web code changes were needed;
+  first entries are `menu.about.donate_upi_uri` and `menu.about.source_code_url`
+  (currently Android-consumed — the web About page keeps its own repo URL).
+
 ## 2026-08-26 — WW-2: Menu, Reports, PWA/outbox, e2e, Vercel
 
 - **Service worker: hand-rolled, not next-pwa/Workbox.** `next-pwa` is not

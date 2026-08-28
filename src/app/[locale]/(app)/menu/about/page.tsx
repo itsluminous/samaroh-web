@@ -8,7 +8,7 @@ import { useTranslations } from 'next-intl';
 // About (§4.4): GitHub link, licenses note, made with ❤️.
 // No version line on web — the app deploys continuously, so there is no
 // meaningful user-facing version number (unlike the Android build).
-const GITHUB_URL = 'https://github.com/itsluminous/Samaroh';
+const GITHUB_URL = 'https://github.com/itsluminous/samaroh-web';
 
 export default function AboutPage() {
   const t = useTranslations('menu.about');

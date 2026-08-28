@@ -1,5 +1,7 @@
 # Samaroh Web
 
+[![CI](https://github.com/itsluminous/samaroh-web/actions/workflows/ci.yml/badge.svg)](https://github.com/itsluminous/samaroh-web/actions/workflows/ci.yml)
+
 The companion web app for **Samaroh** (समारोह) — business management for small venue
 businesses (marriage halls, banquet halls, community halls, guest houses). It shares one
 Supabase project with the Android app, so data is live-identical across both clients.

@@ -42,6 +42,11 @@ import {
   type MonthData,
 } from '@/lib/booking/repo';
 import type { Booking, PaymentMethod } from '@/lib/booking/types';
+import {
+  fallbackPresets,
+  fetchEventTypes,
+  type EventTypePreset,
+} from '@/lib/booking/eventTypePresets';
 import { createClient } from '@/lib/supabase/client';
 import {
   buildInvoiceData,
@@ -78,6 +83,10 @@ export default function BookingScreen() {
   const [ctx, setCtx] = useState<BusinessContext | null>(null);
   const [ctxLoaded, setCtxLoaded] = useState(false);
   const [data, setData] = useState<MonthData>({ bookings: [], blocks: [], paymentsByBooking: {} });
+  // The business's live event-type presets; null while loading or when the
+  // table is unreadable (schema lag) — color resolution then uses the static
+  // contract and the form falls back to the built-in template.
+  const [presets, setPresets] = useState<EventTypePreset[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -140,6 +149,21 @@ export default function BookingScreen() {
       reload();
     }
   }, [ctxLoaded, reload]);
+
+  useEffect(() => {
+    let active = true;
+    if (!db || !ctx) {
+      return;
+    }
+    fetchEventTypes(db, ctx.business.id).then((p) => {
+      if (active) {
+        setPresets(p);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [db, ctx]);
 
   const detailBooking = detailId ? (data.bookings.find((b) => b.id === detailId) ?? null) : null;
 
@@ -344,12 +368,14 @@ export default function BookingScreen() {
             month0={month0}
             bookings={data.bookings}
             blocks={data.blocks}
+            presets={presets}
             onDayClick={handleDayClick}
             onBookingClick={(b) => setDetailId(b.id)}
           />
           <AgendaList
             bookings={data.bookings}
             paymentsByBooking={data.paymentsByBooking}
+            presets={presets}
             onOpen={(b) => setDetailId(b.id)}
           />
         </>
@@ -375,6 +401,7 @@ export default function BookingScreen() {
           business={ctx.business}
           memberNames={ctx.memberNames}
           permissions={ctx.permissions}
+          presets={presets}
           invoiceBusy={invoiceBusy}
           onClose={() => setDetailId(null)}
           onEdit={() => setForm({ mode: 'edit', booking: detailBooking, initialDate: null })}
@@ -391,6 +418,7 @@ export default function BookingScreen() {
           initial={form.booking}
           initialDate={form.initialDate}
           payments={form.booking ? (data.paymentsByBooking[form.booking.id] ?? []) : []}
+          presets={presets ?? fallbackPresets((key) => t(key))}
           isOwner={ctx.isOwner}
           onCheckOverlaps={checkOverlaps}
           onSave={handleSave}

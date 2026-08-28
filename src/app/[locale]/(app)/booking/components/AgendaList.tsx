@@ -12,6 +12,7 @@ import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { computeDue } from '@/lib/booking/due';
 import { effectiveBookingColor } from '@/lib/booking/bookingColors';
+import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment } from '@/lib/booking/types';
@@ -20,10 +21,13 @@ import { formatBookingTitle } from './format';
 export default function AgendaList({
   bookings,
   paymentsByBooking,
+  presets,
   onOpen,
 }: {
   bookings: Booking[];
   paymentsByBooking: Record<string, BookingPayment[]>;
+  /** Live event-type presets for type-default color resolution (null = static fallback). */
+  presets?: EventTypePreset[] | null;
   onOpen: (booking: Booking) => void;
 }) {
   const t = useTranslations();
@@ -42,7 +46,7 @@ export default function AgendaList({
           {sorted.map((booking) => {
             const cancelled = booking.status === 'cancelled';
             const due = computeDue(booking.total_amount, paymentsByBooking[booking.id] ?? []);
-            const colorDef = effectiveBookingColor(booking);
+            const colorDef = effectiveBookingColor(booking, presets);
             return (
               <ListItemButton
                 key={booking.id}

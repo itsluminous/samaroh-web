@@ -1,13 +1,14 @@
 'use client';
 
-// Add/Edit booking form (§4.1): built-in event types from
-// shared/event-types.json, live auto-calculated due, non-blocking conflict
-// warning, blocking date-block gate with owner override, advance → first
-// payment (add mode only).
+// Add/Edit booking form (§4.1): live event-type presets from the business's
+// event_types table (plus the free-text custom option), live auto-calculated
+// due, non-blocking conflict warning, blocking date-block gate with owner
+// override, advance → first payment (add mode only). The selected preset is
+// SNAPSHOT into the booking (label + icon) — later preset edits never rewrite
+// saved bookings.
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import ButtonBase from '@mui/material/ButtonBase';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -17,6 +18,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import ChipRow from '@/components/ChipRow';
+import ColorSwatchPicker from '@/components/ColorSwatchPicker';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -24,13 +26,17 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { computePaid } from '@/lib/booking/due';
-import { BOOKING_COLORS, eventTypeDefaultColor } from '@/lib/booking/bookingColors';
-import { CUSTOM_EVENT_TYPE_KEY, EVENT_TYPES, findEventType, isBuiltInEventType } from '@/lib/booking/eventTypes';
+import { findBookingColor } from '@/lib/booking/bookingColors';
+import { findPresetForType, type EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { formatRupees, parseAmount } from '@/lib/booking/money';
 import type { BookingInput } from '@/lib/booking/repo';
 import type { Booking, BookingPayment, BookingSource, BookingStatus } from '@/lib/booking/types';
+import { eventTypeLabel } from '@/lib/invoice/client';
 
 const SOURCES: BookingSource[] = ['walk_in', 'phone', 'referral', 'repeat'];
+
+/** Dropdown sentinel for the free-text custom option (never a preset id). */
+const CUSTOM_OPTION = '__custom__';
 
 export interface OverlapCheck {
   conflictCount: number;
@@ -42,6 +48,7 @@ export default function BookingForm({
   initial,
   initialDate,
   payments,
+  presets,
   isOwner,
   onCheckOverlaps,
   onSave,
@@ -52,26 +59,27 @@ export default function BookingForm({
   /** Pre-selected start AND end date when opened from an empty calendar day. */
   initialDate: string | null;
   payments: BookingPayment[];
+  /** The business's live event-type presets (or the static fallback list). */
+  presets: EventTypePreset[];
   isOwner: boolean;
   onCheckOverlaps: (start: string, end: string, excludeId?: string) => Promise<OverlapCheck>;
   onSave: (input: BookingInput, advance: number) => Promise<void>;
   onClose: () => void;
 }) {
   const t = useTranslations();
+  const customOptionLabel = `\u2728 ${t('booking.event_type.custom')}`;
 
-  const initialTypeKey =
-    initial === null
-      ? (EVENT_TYPES[0]?.key ?? CUSTOM_EVENT_TYPE_KEY)
-      : isBuiltInEventType(initial.event_type)
-        ? initial.event_type
-        : CUSTOM_EVENT_TYPE_KEY;
+  // Edit mode: re-select the preset the stored snapshot matches (by label,
+  // bridging legacy built-in keys); anything unmatched becomes free text.
+  const initialPreset = initial === null ? presets[0] : findPresetForType(presets, initial.event_type);
+  const initialTypeId = initialPreset?.id ?? CUSTOM_OPTION;
 
-  const [typeKey, setTypeKey] = useState(initialTypeKey);
+  const [typeId, setTypeId] = useState(initialTypeId);
   const [customLabel, setCustomLabel] = useState(
-    initial !== null && !isBuiltInEventType(initial.event_type) ? initial.event_type : '',
+    initial !== null && initialPreset === undefined ? eventTypeLabel(initial, t) : '',
   );
   const [customEmoji, setCustomEmoji] = useState(
-    initial !== null && !isBuiltInEventType(initial.event_type) ? initial.event_icon : '\u2728',
+    initial !== null && initialPreset === undefined ? initial.event_icon : '\u2728',
   );
   const [status, setStatus] = useState<BookingStatus>(initial?.status ?? 'confirmed');
   const [name, setName] = useState(initial?.customer_name ?? '');
@@ -104,10 +112,10 @@ export default function BookingForm({
   );
 
   // "Default" in the color picker means "follow the event type": the swatch
-  // previews the selected type's default calendar color. Custom free-text types
-  // have no type default and keep the themed (primary purple) look.
-  const typeDefaultColor =
-    typeKey === CUSTOM_EVENT_TYPE_KEY ? undefined : eventTypeDefaultColor(typeKey);
+  // previews the selected preset's default calendar color. Custom free-text
+  // types (and presets without a color) keep the themed (primary purple) look.
+  const selectedPreset = typeId === CUSTOM_OPTION ? undefined : presets.find((p) => p.id === typeId);
+  const typeDefaultColor = findBookingColor(selectedPreset?.color);
 
   function buildInput(): BookingInput | null {
     if (name.trim() === '') {
@@ -125,11 +133,15 @@ export default function BookingForm({
       setAmountError(true);
       return null;
     }
-    const custom = typeKey === CUSTOM_EVENT_TYPE_KEY;
-    const builtIn = findEventType(typeKey);
     return {
-      event_type: custom ? (customLabel.trim() === '' ? t('booking.event_type.custom') : customLabel.trim()) : typeKey,
-      event_icon: custom ? customEmoji || '\u2728' : (builtIn?.emoji ?? '\u2728'),
+      // Snapshot semantics: the preset's label/icon are COPIED into the
+      // booking — later renames of the preset never rewrite this booking.
+      event_type: selectedPreset
+        ? selectedPreset.label
+        : customLabel.trim() === ''
+          ? t('booking.event_type.custom')
+          : customLabel.trim(),
+      event_icon: selectedPreset ? selectedPreset.icon : customEmoji || '\u2728',
       customer_name: name.trim(),
       customer_phone: phone.trim() === '' ? null : phone.trim(),
       start_date: startDate,
@@ -197,20 +209,21 @@ export default function BookingForm({
           <TextField
             select
             label={t('booking.form.event_type')}
-            value={typeKey}
-            onChange={(e) => setTypeKey(e.target.value)}
+            value={typeId}
+            onChange={(e) => setTypeId(e.target.value)}
             fullWidth
           >
-            {EVENT_TYPES.map((et) => {
-              const optionLabel = `${et.emoji} ${t(et.label_key)}`;
+            {presets.map((p) => {
+              const optionLabel = `${p.icon} ${p.label}`;
               return (
-                <MenuItem key={et.key} value={et.key}>
+                <MenuItem key={p.id} value={p.id}>
                   {optionLabel}
                 </MenuItem>
               );
             })}
+            <MenuItem value={CUSTOM_OPTION}>{customOptionLabel}</MenuItem>
           </TextField>
-          {typeKey === CUSTOM_EVENT_TYPE_KEY ? (
+          {typeId === CUSTOM_OPTION ? (
             <Stack direction="row" spacing={1}>
               <TextField
                 label={t('booking.form.custom_emoji')}
@@ -374,50 +387,12 @@ export default function BookingForm({
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
               {t('booking.form.color')}
             </Typography>
-            {/* Native buttons: Tab moves between swatches, Enter/Space selects. */}
-            <Box
-              role="group"
-              aria-label={t('booking.form.color')}
-              sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
-            >
-              <ButtonBase
-                aria-label={t('booking.color.default')}
-                aria-pressed={color === null}
-                onClick={() => setColor(null)}
-                sx={(theme) => ({
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  bgcolor: typeDefaultColor?.hex ?? 'primary.main',
-                  border: 1,
-                  borderColor: 'divider',
-                  boxShadow:
-                    color === null
-                      ? `0 0 0 2px ${theme.palette.background.paper}, 0 0 0 4px ${theme.palette.primary.main}`
-                      : 'none',
-                })}
-              />
-              {BOOKING_COLORS.map((c) => (
-                <ButtonBase
-                  key={c.key}
-                  aria-label={t(c.label_key)}
-                  aria-pressed={color === c.key}
-                  onClick={() => setColor(c.key)}
-                  sx={(theme) => ({
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    bgcolor: c.hex,
-                    border: 1,
-                    borderColor: 'divider',
-                    boxShadow:
-                      color === c.key
-                        ? `0 0 0 2px ${theme.palette.background.paper}, 0 0 0 4px ${theme.palette.primary.main}`
-                        : 'none',
-                  })}
-                />
-              ))}
-            </Box>
+            <ColorSwatchPicker
+              label={t('booking.form.color')}
+              value={color}
+              onChange={setColor}
+              defaultHex={typeDefaultColor?.hex}
+            />
           </Box>
 
           <TextField

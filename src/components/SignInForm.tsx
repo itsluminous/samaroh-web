@@ -16,6 +16,7 @@ import { useTranslations } from 'next-intl';
 import type { FormEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { seedEventTypes } from '@/lib/booking/eventTypePresets';
 import { enterGuestMode, leaveGuestMode } from '@/lib/guest/guest';
 import { hasGuestBusiness, seedGuestBusiness } from '@/lib/guest/seed';
 import { createRemoteClient } from '@/lib/supabase/client';
@@ -163,12 +164,15 @@ export default function SignInForm() {
     try {
       const businessType = t(`onboarding.business_type.${bizTypeKey}`);
       if (setupForGuest) {
-        await seedGuestBusiness({
-          name: bizName.trim(),
-          businessType,
-          address: bizAddress.trim() || null,
-          ownerName: ownerName.trim(),
-        });
+        await seedGuestBusiness(
+          {
+            name: bizName.trim(),
+            businessType,
+            address: bizAddress.trim() || null,
+            ownerName: ownerName.trim(),
+          },
+          (key) => t(key),
+        );
         goToApp();
         return;
       }
@@ -202,6 +206,9 @@ export default function SignInForm() {
         setNotice({ severity: 'error', text: t('onboarding.create.error') });
         return;
       }
+      // Built-in event-type presets (best effort — never blocks sign-up;
+      // reads fall back to the static template while migration 006 lags).
+      await seedEventTypes(supabase, businessId, (key) => t(key));
       goToApp();
     } finally {
       setSubmitting(false);

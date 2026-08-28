@@ -29,6 +29,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { computeDue, computePaid } from '@/lib/booking/due';
 import { effectiveBookingColor } from '@/lib/booking/bookingColors';
+import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { formatDate, formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment, BookingPermissions, Business } from '@/lib/booking/types';
@@ -52,6 +53,7 @@ export default function BookingDetail({
   business,
   memberNames,
   permissions,
+  presets,
   onClose,
   onEdit,
   onRecordPayment,
@@ -65,6 +67,8 @@ export default function BookingDetail({
   business: Business;
   memberNames: Record<string, string>;
   permissions: BookingPermissions;
+  /** Live event-type presets for type-default color resolution (null = static fallback). */
+  presets?: EventTypePreset[] | null;
   onClose: () => void;
   onEdit: () => void;
   onRecordPayment: () => void;
@@ -82,7 +86,7 @@ export default function BookingDetail({
   const due = computeDue(booking.total_amount, payments);
   const cancelled = booking.status === 'cancelled';
   const statusLabel = t(`booking.status.${booking.status}`);
-  const colorDef = effectiveBookingColor(booking);
+  const colorDef = effectiveBookingColor(booking, presets);
   const addedBy = memberNames[booking.created_by] ?? business.owner_name;
 
   const waText = t('booking.whatsapp.reminder_text', {

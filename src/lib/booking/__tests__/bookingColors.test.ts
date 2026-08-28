@@ -2,6 +2,7 @@
 // (shared/booking-colors.json + shared/event-types.json):
 // explicit bookings.color → event-type default → themed purple.
 
+import type { EventTypePreset } from '../eventTypePresets';
 import {
   BOOKING_COLORS,
   effectiveBookingColor,
@@ -116,6 +117,94 @@ describe('pillPaint (calendar pill color mapping)', () => {
   it('unknown color key on a free-text type degrades gracefully to themed', () => {
     expect(pillPaint({ status: 'confirmed', color: 'neon-zebra', event_type: 'Sangeet' })).toEqual({
       kind: 'themed',
+    });
+  });
+});
+
+// ---------- presets-based resolution (event_types table, migration 006) ----------
+
+
+function makePreset(overrides: Partial<EventTypePreset>): EventTypePreset {
+  return {
+    id: 'p-x',
+    business_id: 'biz-1',
+    label: 'X',
+    icon: '\u2728',
+    color: null,
+    sort_order: 0,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe('eventTypeDefaultColor from the business presets (label match → colour key → hex)', () => {
+  const presets = [
+    makePreset({ id: 'p1', label: 'Shaadi', color: 'tomato' }),
+    makePreset({ id: 'p2', label: 'Mehndi Night', color: 'fuchsia' }),
+    makePreset({ id: 'p3', label: 'Farewell', color: null }),
+    makePreset({ id: 'p4', label: 'Future Type', color: 'not-a-color' }),
+  ];
+
+  it('label match resolves the preset colour key to the palette hex', () => {
+    expect(eventTypeDefaultColor('Shaadi', presets)?.key).toBe('tomato');
+    expect(eventTypeDefaultColor('Shaadi', presets)?.hex).toBe('#C62828');
+    expect(eventTypeDefaultColor('Mehndi Night', presets)?.key).toBe('fuchsia');
+  });
+
+  it('label matching is case-insensitive (snapshot vs preset)', () => {
+    expect(eventTypeDefaultColor('shaadi', presets)?.key).toBe('tomato');
+  });
+
+  it('preset with colour null → themed default (undefined)', () => {
+    expect(eventTypeDefaultColor('Farewell', presets)).toBeUndefined();
+  });
+
+  it('preset with an unknown colour key from a newer contract → themed default', () => {
+    expect(eventTypeDefaultColor('Future Type', presets)).toBeUndefined();
+  });
+
+  it('no matching preset and no legacy key → themed default', () => {
+    expect(eventTypeDefaultColor('Sangeet', presets)).toBeUndefined();
+  });
+
+  it('legacy built-in KEY still resolves via the static contract when no preset matches', () => {
+    // Pre-006 booking snapshot 'wedding' with the seeded preset renamed away.
+    expect(eventTypeDefaultColor('wedding', presets)?.key).toBe('tomato');
+    expect(eventTypeDefaultColor('room_booking', presets)?.key).toBe('blueberry');
+  });
+
+  it('legacy built-in KEY prefers a matching live preset over the static contract', () => {
+    const seeded = [makePreset({ id: 'p5', label: 'Room Booking', color: 'sage' })];
+    expect(eventTypeDefaultColor('room_booking', seeded)?.key).toBe('sage');
+  });
+});
+
+describe('effectiveBookingColor / pillPaint with presets', () => {
+  const presets = [makePreset({ id: 'p1', label: 'Shaadi', color: 'tomato' })];
+
+  it('explicit bookings.color still wins over the preset default', () => {
+    expect(effectiveBookingColor({ color: 'sage', event_type: 'Shaadi' }, presets)?.key).toBe('sage');
+  });
+
+  it('null color falls back to the preset default and paints the pill', () => {
+    expect(pillPaint({ status: 'confirmed', color: null, event_type: 'Shaadi' }, presets)).toEqual({
+      kind: 'custom',
+      bg: '#C62828',
+      fg: '#FFFFFF',
+    });
+  });
+
+  it('renamed/deleted preset → themed pill for the old snapshot', () => {
+    expect(pillPaint({ status: 'confirmed', color: null, event_type: 'Old Label' }, presets)).toEqual({
+      kind: 'themed',
+    });
+  });
+
+  it('tentative stays outlined-amber regardless of preset colours', () => {
+    expect(pillPaint({ status: 'tentative', color: null, event_type: 'Shaadi' }, presets)).toEqual({
+      kind: 'tentative',
     });
   });
 });

@@ -12,6 +12,7 @@ import { useLocale } from 'next-intl';
 import { useMemo } from 'react';
 import { buildMonthWeeks, todayIso } from '@/lib/booking/calendar';
 import { pillPaint } from '@/lib/booking/bookingColors';
+import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { weekdayNarrowNames } from '@/lib/booking/dates';
 import type { Booking, DateBlock } from '@/lib/booking/types';
 import { pillLabel } from './format';
@@ -27,6 +28,7 @@ export default function CalendarGrid({
   month0,
   bookings,
   blocks,
+  presets,
   onDayClick,
   onBookingClick,
 }: {
@@ -34,6 +36,8 @@ export default function CalendarGrid({
   month0: number;
   bookings: Booking[];
   blocks: DateBlock[];
+  /** Live event-type presets for type-default color resolution (null = static fallback). */
+  presets?: EventTypePreset[] | null;
   onDayClick: (iso: string) => void;
   onBookingClick: (booking: Booking) => void;
 }) {
@@ -121,7 +125,7 @@ export default function CalendarGrid({
               }}
             >
               {week.segments.map((seg) => {
-                const paint = pillPaint(seg.booking);
+                const paint = pillPaint(seg.booking, presets);
                 return (
                   <ButtonBase
                     key={`${seg.booking.id}-${seg.startCol}`}

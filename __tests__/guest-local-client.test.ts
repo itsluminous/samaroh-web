@@ -131,18 +131,14 @@ describe('guest local client', () => {
 
   it('seeds the guest business with an owner membership, idempotently', async () => {
     expect(await hasGuestBusiness()).toBe(false);
-    await seedGuestBusiness({
-      name: 'Test Hall',
-      businessType: 'Marriage Hall',
-      address: null,
-      ownerName: 'Owner',
-    });
-    await seedGuestBusiness({
-      name: 'Other Name',
-      businessType: 'Marriage Hall',
-      address: null,
-      ownerName: 'Owner',
-    });
+    await seedGuestBusiness(
+      { name: 'Test Hall', businessType: 'Marriage Hall', address: null, ownerName: 'Owner' },
+      (key) => key,
+    );
+    await seedGuestBusiness(
+      { name: 'Other Name', businessType: 'Marriage Hall', address: null, ownerName: 'Owner' },
+      (key) => key,
+    );
     expect(await hasGuestBusiness()).toBe(true);
 
     const { data: user } = await client.auth.getUser();

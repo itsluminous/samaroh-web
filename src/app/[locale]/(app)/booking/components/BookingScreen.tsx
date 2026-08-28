@@ -22,7 +22,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { bookingsOnDate, monthRange, todayIso } from '@/lib/booking/calendar';
+import { bookingsOnDate, dayTapAction, monthRange, todayIso } from '@/lib/booking/calendar';
 import { findBlockingBlocks, findConflicts } from '@/lib/booking/conflicts';
 import { computeDue, computePaid } from '@/lib/booking/due';
 import { formatMonthName } from '@/lib/booking/dates';
@@ -61,9 +61,25 @@ import BlockDatesDialog from './BlockDatesDialog';
 import BookingDetail from './BookingDetail';
 import BookingForm from './BookingForm';
 import CalendarGrid from './CalendarGrid';
+import DayBookingsDialog from './DayBookingsDialog';
+import EventsAgenda from './EventsAgenda';
 import MonthPickerDialog from './MonthPickerDialog';
 import RecordPaymentDialog from './RecordPaymentDialog';
 import SummaryCard from './SummaryCard';
+import { useAgendaWindow } from './useAgendaWindow';
+
+/** Persisted calendar view choice (localStorage). */
+const VIEW_STORAGE_KEY = 'samaroh_booking_view';
+type CalendarView = 'month' | 'events';
+
+function storedView(): CalendarView | null {
+  try {
+    const v = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    return v === 'events' || v === 'month' ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 interface FormState {
   mode: 'add' | 'edit';
@@ -98,6 +114,28 @@ export default function BookingScreen() {
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
   const [snack, setSnack] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
+  // Month grid ↔ full agenda (events) view; the choice persists per device.
+  // Starts as 'month' and reads localStorage after mount (SSR-safe).
+  const [view, setView] = useState<CalendarView>('month');
+  // Tapped date whose bookings the day chooser lists (null = closed).
+  const [chooserDate, setChooserDate] = useState<string | null>(null);
+  const agenda = useAgendaWindow(db, ctx?.business.id ?? null, view === 'events' && ctx !== null);
+
+  useEffect(() => {
+    const persisted = storedView();
+    if (persisted) {
+      setView(persisted);
+    }
+  }, []);
+
+  function switchView(next: CalendarView) {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // Private-mode storage failures just lose the persistence, not the toggle.
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -165,7 +203,22 @@ export default function BookingScreen() {
     };
   }, [db, ctx]);
 
-  const detailBooking = detailId ? (data.bookings.find((b) => b.id === detailId) ?? null) : null;
+  // The detail drawer resolves its booking from whichever view supplied it.
+  const detailBooking = detailId
+    ? (data.bookings.find((b) => b.id === detailId) ??
+      agenda.window?.bookings.find((b) => b.id === detailId) ??
+      null)
+    : null;
+  const detailPayments = detailBooking
+    ? (data.paymentsByBooking[detailBooking.id] ?? agenda.paymentsByBooking[detailBooking.id] ?? [])
+    : [];
+
+  /** Reloads both views' data after a mutation. */
+  const agendaRefresh = agenda.refresh;
+  const reloadBoth = useCallback(() => {
+    reload();
+    agendaRefresh();
+  }, [reload, agendaRefresh]);
 
   const summary = useMemo(() => {
     let received = 0;
@@ -189,10 +242,11 @@ export default function BookingScreen() {
 
   function handleDayClick(iso: string) {
     const onDate = bookingsOnDate(iso, data.bookings);
-    const first = onDate[0];
-    if (first) {
-      setDetailId(first.id);
-    } else if (ctx?.permissions.create) {
+    const action = dayTapAction(onDate.length, ctx?.permissions.create === true);
+    if (action === 'chooser') {
+      // Any bookings on the date (even one) → the day chooser (§4.1).
+      setChooserDate(iso);
+    } else if (action === 'add') {
       // Empty date → Add form with start AND end pre-selected (§4.1).
       setForm({ mode: 'add', booking: null, initialDate: iso });
     }
@@ -222,7 +276,7 @@ export default function BookingScreen() {
       await createBooking(db, ctx.business.id, ctx.userId, input, advance);
     }
     setForm(null);
-    reload();
+    reloadBoth();
   }
 
   async function handleRecordPayment(input: {
@@ -237,7 +291,7 @@ export default function BookingScreen() {
     await recordPayment(db, payFor, ctx.userId, input);
     setPayFor(null);
     setSnack(t('booking.payment.recorded'));
-    reload();
+    reloadBoth();
   }
 
   async function handleCancelBooking() {
@@ -246,7 +300,7 @@ export default function BookingScreen() {
     }
     await cancelBooking(db, detailBooking, ctx.userId);
     setDetailId(null);
-    reload();
+    reloadBoth();
   }
 
   async function handleInvoice(kind: 'pdf' | 'text') {
@@ -269,7 +323,7 @@ export default function BookingScreen() {
         await navigator.clipboard.writeText(text);
         setSnack(t('booking.card.text_copied'));
       }
-      reload(); // pick up the frozen invoice number
+      reloadBoth(); // pick up the frozen invoice number
     } catch {
       setSnack(t('booking.card.invoice_failed'));
     } finally {
@@ -298,52 +352,69 @@ export default function BookingScreen() {
 
   return (
     <Box sx={{ pb: 10, position: 'relative' }}>
-      <SummaryCard received={summary.received} pending={summary.pending} />
+      {view === 'month' ? <SummaryCard received={summary.received} pending={summary.pending} /> : null}
 
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 0.5 }}>
-        <Tooltip title={t('booking.calendar.prev_month')}>
-          <IconButton onClick={() => shiftMonth(-1)} aria-label={t('booking.calendar.prev_month')}>
-            <ChevronLeftIcon />
-          </IconButton>
-        </Tooltip>
-        <Button onClick={() => setPickerOpen(true)} sx={{ textTransform: 'none' }}>
-          <Typography variant="h6">{monthLabel}</Typography>
-        </Button>
-        <Tooltip title={t('booking.calendar.next_month')}>
-          <IconButton onClick={() => shiftMonth(1)} aria-label={t('booking.calendar.next_month')}>
-            <ChevronRightIcon />
-          </IconButton>
-        </Tooltip>
-        <Box sx={{ flexGrow: 1 }} />
-        <Button
-          size="small"
-          onClick={() => {
-            setYear(Number(now.slice(0, 4)));
-            setMonth0(Number(now.slice(5, 7)) - 1);
-          }}
-        >
-          {t('booking.calendar.today')}
-        </Button>
-        {ctx.permissions.edit ? (
+        {view === 'month' ? (
           <>
-            <IconButton onClick={(e) => setMenuEl(e.currentTarget)} aria-label={t('booking.calendar.more_options')}>
-              <MoreVertIcon />
-            </IconButton>
-            <Menu anchorEl={menuEl} open={menuEl !== null} onClose={() => setMenuEl(null)}>
-              <MenuItem
-                onClick={() => {
-                  setMenuEl(null);
-                  setBlockOpen(true);
-                }}
-              >
-                {t('booking.calendar.block_dates')}
-              </MenuItem>
-            </Menu>
+            <Tooltip title={t('booking.calendar.prev_month')}>
+              <IconButton onClick={() => shiftMonth(-1)} aria-label={t('booking.calendar.prev_month')}>
+                <ChevronLeftIcon />
+              </IconButton>
+            </Tooltip>
+            <Button onClick={() => setPickerOpen(true)} sx={{ textTransform: 'none' }}>
+              <Typography variant="h6">{monthLabel}</Typography>
+            </Button>
+            <Tooltip title={t('booking.calendar.next_month')}>
+              <IconButton onClick={() => shiftMonth(1)} aria-label={t('booking.calendar.next_month')}>
+                <ChevronRightIcon />
+              </IconButton>
+            </Tooltip>
+            <Box sx={{ flexGrow: 1 }} />
+            <Button
+              size="small"
+              onClick={() => {
+                setYear(Number(now.slice(0, 4)));
+                setMonth0(Number(now.slice(5, 7)) - 1);
+              }}
+            >
+              {t('booking.calendar.today')}
+            </Button>
           </>
-        ) : null}
+        ) : (
+          <>
+            <Typography variant="h6" sx={{ px: 1 }}>
+              {t('booking.calendar.events_title')}
+            </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+          </>
+        )}
+        <IconButton onClick={(e) => setMenuEl(e.currentTarget)} aria-label={t('booking.calendar.more_options')}>
+          <MoreVertIcon />
+        </IconButton>
+        <Menu anchorEl={menuEl} open={menuEl !== null} onClose={() => setMenuEl(null)}>
+          <MenuItem
+            onClick={() => {
+              setMenuEl(null);
+              switchView(view === 'month' ? 'events' : 'month');
+            }}
+          >
+            {view === 'month' ? t('booking.calendar.events_view') : t('booking.calendar.month_view')}
+          </MenuItem>
+          {ctx.permissions.edit ? (
+            <MenuItem
+              onClick={() => {
+                setMenuEl(null);
+                setBlockOpen(true);
+              }}
+            >
+              {t('booking.calendar.block_dates')}
+            </MenuItem>
+          ) : null}
+        </Menu>
       </Box>
 
-      {loadError ? (
+      {loadError && view === 'month' ? (
         <Alert
           severity="error"
           action={
@@ -357,7 +428,9 @@ export default function BookingScreen() {
         </Alert>
       ) : null}
 
-      {loading ? (
+      {view === 'events' ? (
+        <EventsAgenda agenda={agenda} presets={presets} onOpen={(b) => setDetailId(b.id)} />
+      ) : loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
@@ -397,7 +470,7 @@ export default function BookingScreen() {
       {detailBooking ? (
         <BookingDetail
           booking={detailBooking}
-          payments={data.paymentsByBooking[detailBooking.id] ?? []}
+          payments={detailPayments}
           business={ctx.business}
           memberNames={ctx.memberNames}
           permissions={ctx.permissions}
@@ -409,6 +482,25 @@ export default function BookingScreen() {
           onCancelBooking={handleCancelBooking}
           onInvoicePdf={() => handleInvoice('pdf')}
           onInvoiceText={() => handleInvoice('text')}
+        />
+      ) : null}
+
+      {chooserDate ? (
+        <DayBookingsDialog
+          iso={chooserDate}
+          bookings={bookingsOnDate(chooserDate, data.bookings)}
+          paymentsByBooking={data.paymentsByBooking}
+          presets={presets}
+          canCreate={ctx.permissions.create}
+          onOpenBooking={(b) => {
+            setChooserDate(null);
+            setDetailId(b.id);
+          }}
+          onAddNew={() => {
+            setForm({ mode: 'add', booking: null, initialDate: chooserDate });
+            setChooserDate(null);
+          }}
+          onClose={() => setChooserDate(null)}
         />
       ) : null}
 

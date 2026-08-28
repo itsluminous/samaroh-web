@@ -120,3 +120,24 @@ repo interprets it where the spec leaves web-specific latitude.)
   tolerant either way: `fetchEventTypes` returns null on failure and the
   booking form/colour chain degrade to the static `event-types.json`
   template; only the manage page and seeding need the table to exist.
+- **Events view + day chooser (web, Android parity).** The Booking tab gets a
+  month-grid ↔ events-view toggle in the calendar overflow menu (now visible to
+  all members; the Block-dates entry inside stays edit-gated). Events view
+  replaces the grid + monthly agenda with ONE list of ALL bookings grouped by
+  start date, opening anchored on today — scroll up loads the past, scroll down
+  the future. Fetching is WINDOWED (`src/lib/booking/agenda.ts`): 50-row pages
+  keyed on `start_date` only (works on both PostgREST and the guest Dexie
+  client), advancing the cursor to the boundary date inclusively and deduping
+  by id so ties across page borders are never lost; a full page of known rows
+  turns the cursor strict to guarantee progress. Payments load per page for the
+  due/paid chips; a detail-drawer mutation re-reads only the loaded date range
+  so the scroll window survives. Rows are background-tinted by the resolved
+  booking colour (explicit `bookings.color` → event-type preset default →
+  themed primary tint; tentative keeps the distinct amber outline; cancelled
+  struck through + dimmed) via the shared `BookingRow`, now also used by the
+  monthly agenda and the new day chooser. The chosen view persists per device
+  in `localStorage` (`samaroh_booking_view`). Day-tap behaviour changed:
+  a date with ANY bookings (even one) opens a chooser dialog listing that
+  day's bookings plus a final create-gated "Add new event" row that opens the
+  add form prefilled with the date; empty dates still open the form directly
+  (routing in `dayTapAction`, §4.1).

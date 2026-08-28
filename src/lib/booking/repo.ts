@@ -35,7 +35,7 @@ export interface BusinessContext {
 const BOOKING_COLUMNS = '*';
 
 /** Fills schema-lag gaps: columns the app knows but the server may not have yet. */
-function normalizeBooking(row: Record<string, unknown>): Booking {
+export function normalizeBooking(row: Record<string, unknown>): Booking {
   const b = row as unknown as Booking;
   return { ...b, color: b.color ?? null };
 }
@@ -128,12 +128,21 @@ export async function fetchMonthData(
   const bookings = ((bookingsRes.data ?? []) as Record<string, unknown>[]).map(normalizeBooking);
   const blocks = (blocksRes.data ?? []) as DateBlock[];
 
+  const paymentsByBooking = await fetchPaymentsByBooking(db, bookings.map((b) => b.id));
+  return { bookings, blocks, paymentsByBooking };
+}
+
+/** Live payments of the given bookings, grouped by booking_id (oldest first). */
+export async function fetchPaymentsByBooking(
+  db: SupabaseClient,
+  bookingIds: string[],
+): Promise<Record<string, BookingPayment[]>> {
   const paymentsByBooking: Record<string, BookingPayment[]> = {};
-  if (bookings.length > 0) {
+  if (bookingIds.length > 0) {
     const { data: payments, error } = await db
       .from('booking_payments')
       .select('id, booking_id, business_id, amount, paid_on, method, notes, created_by, created_at, deleted_at')
-      .in('booking_id', bookings.map((b) => b.id))
+      .in('booking_id', bookingIds)
       .is('deleted_at', null)
       .order('paid_on', { ascending: true })
       .order('created_at', { ascending: true });
@@ -144,7 +153,7 @@ export async function fetchMonthData(
       (paymentsByBooking[p.booking_id] ??= []).push(p);
     }
   }
-  return { bookings, blocks, paymentsByBooking };
+  return paymentsByBooking;
 }
 
 export interface BookingInput {

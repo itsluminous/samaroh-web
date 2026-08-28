@@ -146,6 +146,21 @@ export function bookingsOnDate(iso: string, bookings: Booking[]): Booking[] {
   );
 }
 
+export type DayTapAction = 'chooser' | 'add' | 'none';
+
+/**
+ * What tapping a date does (§4.1): any bookings on the date — even just one —
+ * open the day chooser (its final "Add new event" row is create-gated inside);
+ * an empty date goes straight to the add form when the member may create;
+ * otherwise nothing.
+ */
+export function dayTapAction(bookingCount: number, canCreate: boolean): DayTapAction {
+  if (bookingCount > 0) {
+    return 'chooser';
+  }
+  return canCreate ? 'add' : 'none';
+}
+
 export function todayIso(): string {
   const now = new Date();
   return toIso(now.getFullYear(), now.getMonth(), now.getDate());

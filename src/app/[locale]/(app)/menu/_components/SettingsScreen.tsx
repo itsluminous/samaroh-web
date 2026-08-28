@@ -10,6 +10,7 @@
  *     client wiring is a deployment concern, tracked in docs/decisions.md)
  */
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CategoryIcon from '@mui/icons-material/Category';
 import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -92,6 +93,20 @@ export default function SettingsScreen() {
               <ToggleButton value="dark">{t('settings.theme.dark')}</ToggleButton>
             </ToggleButtonGroup>
           </ListItem>
+
+          {/* Event-type presets manager — writes need settings.manage_business
+              (owners implicitly), matching the event_types RLS policy. */}
+          {canEditBusiness ? (
+            <ListItem disablePadding divider>
+              <ListItemButton component={Link} href="/menu/settings/event-types">
+                <ListItemIcon>
+                  <CategoryIcon />
+                </ListItemIcon>
+                <ListItemText primary={t('settings.event_types.title')} />
+                <ChevronRightIcon color="action" />
+              </ListItemButton>
+            </ListItem>
+          ) : null}
 
           {/* Sync status page, with the live pending-outbox count. */}
           <ListItem disablePadding divider>

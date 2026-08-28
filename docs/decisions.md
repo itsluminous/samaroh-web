@@ -94,3 +94,29 @@ repo interprets it where the spec leaves web-specific latitude.)
   tolerant either way: booking selects switched to `select('*')` and a
   normalizer maps an absent/missing `color` to null (also covers legacy
   guest-mode Dexie rows).
+- **DB-backed event-type presets (web, shared migration 006).** Event types
+  become per-business, user-managed rows in the new `event_types` table
+  (plain-text `label`, emoji `icon`, optional `color` booking-palette key,
+  `sort_order`, soft delete; RLS: members read, `settings.manage_business`
+  writes). The booking form's type dropdown reads the LIVE presets (in
+  sort_order) plus the free-text "Custom" option; saving SNAPSHOTS the
+  preset's label/icon into `bookings.event_type`/`event_icon`, so renaming or
+  deleting a preset never rewrites existing bookings. Type-default colour now
+  resolves from the business's presets — label match (caseless, and
+  underscore/space-insensitive to bridge legacy pre-006 built-in KEYS like
+  `room_booking` to seeded labels) → the preset's colour key → palette hex;
+  legacy keys with no matching preset keep their static contract default;
+  everything else falls back to the themed purple. Seeding: the migration
+  backfills existing businesses (English labels); NEW businesses are seeded
+  client-side from `shared/event-types.json` at creation, labels resolved in
+  the creator's locale — in the sign-up flow (best effort, never blocks
+  sign-up) and in the guest bootstrap (Dexie store v2 adds an `event_types`
+  table for full guest parity). Management UI: Menu → Settings → Event types
+  (owner or `settings.manage_business`) with add/edit (duplicate-name
+  validation, emoji input, shared 16-swatch picker where Default = themed),
+  soft delete with a bookings-keep-their-snapshot confirmation, and up/down
+  reordering (renumbers `sort_order`). **Deploy ordering:** apply migration
+  006 (`supabase db push`) BEFORE deploying this app version. Reads are
+  tolerant either way: `fetchEventTypes` returns null on failure and the
+  booking form/colour chain degrade to the static `event-types.json`
+  template; only the manage page and seeding need the table to exist.

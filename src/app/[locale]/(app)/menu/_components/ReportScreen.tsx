@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchCurrentInventory } from '@/app/[locale]/(app)/inventory/_lib/queries';
 import { isBuiltInEventType } from '@/lib/booking/eventTypes';
+import { fetchEventTypes, presetKindForType } from '@/lib/booking/eventTypePresets';
 import { formatAmount } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import {
@@ -88,6 +89,8 @@ interface ReportModel {
   csv: CsvSection[];
   /** Optional headline (e.g. overall average) rendered above the chart. */
   headline: string | null;
+  /** Optional footnote rendered under the main table (e.g. marker exclusion). */
+  note?: string;
   empty: boolean;
   /** Report-specific empty state (falls back to the generic reports.empty.*). */
   emptyTitle?: string;
@@ -232,7 +235,14 @@ async function buildModel(
     case 'event_types':
     case 'sources': {
       const { bookings } = await fetchBookingsWithPayments(db, businessId, range);
-      const rows = key === 'event_types' ? eventTypeBreakdown(bookings) : sourceBreakdown(bookings);
+      // Marker-kind event types (Lagan/Tilak day indicators) are calendar-only:
+      // the event-type breakdown excludes them from counts and revenue.
+      const presets = key === 'event_types' ? await fetchEventTypes(db, businessId) : null;
+      const isMarker = (eventType: string) => presetKindForType(presets, eventType) === 'marker';
+      const hadMarkers =
+        key === 'event_types' &&
+        bookings.some((b) => b.status !== 'cancelled' && isMarker(b.event_type));
+      const rows = key === 'event_types' ? eventTypeBreakdown(bookings, isMarker) : sourceBreakdown(bookings);
       const labelOf = (rowKey: string) =>
         key === 'event_types'
           ? isBuiltInEventType(rowKey)
@@ -265,6 +275,7 @@ async function buildModel(
           },
         ],
         headline: null,
+        note: hadMarkers ? t('reports.event_types.marker_note') : undefined,
         empty: rows.length === 0,
       };
     }
@@ -705,6 +716,12 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
               </TableBody>
             </Table>
           </TableContainer>
+
+          {model.note ? (
+            <Typography variant="caption" color="text.secondary">
+              {model.note}
+            </Typography>
+          ) : null}
 
           {model.extraTable && model.extraTable.rows.length > 0 ? (
             <Box>

@@ -209,8 +209,17 @@ export interface BreakdownRow {
   revenue: number;
 }
 
-export function eventTypeBreakdown(bookings: ReportBooking[]): BreakdownRow[] {
-  return groupBreakdown(active(bookings), (b) => b.event_type);
+/**
+ * Bookings per event type. Marker-kind types (event_types.kind='marker' —
+ * Lagan/Tilak day indicators) are calendar-only and excluded via `isMarker`
+ * when provided: they are not bookings and carry no revenue.
+ */
+export function eventTypeBreakdown(
+  bookings: ReportBooking[],
+  isMarker?: (eventType: string) => boolean,
+): BreakdownRow[] {
+  const counted = isMarker ? active(bookings).filter((b) => !isMarker(b.event_type)) : active(bookings);
+  return groupBreakdown(counted, (b) => b.event_type);
 }
 
 /** Bookings without a recorded source group under 'other'. */

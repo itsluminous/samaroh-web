@@ -12,7 +12,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
-import { CUSTOM_EVENT_TYPE_KEY, EVENT_TYPES, findEventType } from './eventTypes';
+import { CUSTOM_EVENT_TYPE_KEY, EVENT_TYPES, findEventType, type EventTypeKind } from './eventTypes';
 
 export interface EventTypePreset {
   id: string;
@@ -23,6 +23,12 @@ export interface EventTypePreset {
   icon: string;
   /** booking-colors.json key; null = themed default. */
   color: string | null;
+  /**
+   * 'booking' = real customer booking; 'marker' = auspicious-day
+   * self-indicator (calendar highlight only — excluded from booking counts
+   * and revenue). Absent in pre-kind rows → 'booking' (schema contract).
+   */
+  kind: EventTypeKind;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -35,12 +41,18 @@ export interface EventTypeInput {
   label: string;
   icon: string;
   color: string | null;
+  kind: EventTypeKind;
 }
 
 /** Fills schema-lag gaps for rows read from a pre-006-shaped store. */
 function normalizePreset(row: Record<string, unknown>): EventTypePreset {
   const p = row as unknown as EventTypePreset;
-  return { ...p, color: p.color ?? null, sort_order: p.sort_order ?? 0 };
+  return {
+    ...p,
+    color: p.color ?? null,
+    sort_order: p.sort_order ?? 0,
+    kind: p.kind === 'marker' ? 'marker' : 'booking',
+  };
 }
 
 /**
@@ -82,6 +94,7 @@ export function fallbackPresets(translate: Translate): EventTypePreset[] {
     label: translate(et.label_key),
     icon: et.emoji,
     color: et.color,
+    kind: et.kind,
     sort_order: i,
     created_at: epoch,
     updated_at: epoch,
@@ -145,6 +158,7 @@ export async function createEventType(
     label: input.label,
     icon: input.icon,
     color: input.color,
+    kind: input.kind,
     sort_order: sortOrder,
   };
   await insertWithOutbox(db, {
@@ -232,6 +246,7 @@ export function buildEventTypeSeedRows(
     label: translate(et.label_key),
     icon: et.emoji,
     color: et.color,
+    kind: et.kind,
     sort_order: i,
   }));
 }
@@ -268,4 +283,23 @@ export function presetColorKey(
   // Pre-006 bookings store built-in keys; keep their contract default even
   // when presets are unavailable or the matching preset was renamed/deleted.
   return findEventType(eventType)?.color;
+}
+
+/**
+ * Kind of the event type a stored bookings.event_type refers to: the live
+ * preset's kind (label snapshot match), else the static contract's kind for
+ * legacy built-in keys, else 'booking' (the schema default — a custom
+ * free-text type or a renamed/deleted preset is a real booking).
+ */
+export function presetKindForType(
+  presets: EventTypePreset[] | null | undefined,
+  eventType: string,
+): EventTypeKind {
+  if (presets) {
+    const preset = findPresetForType(presets, eventType);
+    if (preset) {
+      return preset.kind;
+    }
+  }
+  return findEventType(eventType)?.kind ?? 'booking';
 }

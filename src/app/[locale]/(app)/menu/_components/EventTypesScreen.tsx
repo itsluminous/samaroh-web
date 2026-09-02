@@ -18,6 +18,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -34,8 +35,10 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
+import ChipRow from '@/components/ChipRow';
 import ColorSwatchPicker from '@/components/ColorSwatchPicker';
 import { findBookingColor } from '@/lib/booking/bookingColors';
+import type { EventTypeKind } from '@/lib/booking/eventTypes';
 import {
   createEventType,
   deleteEventType,
@@ -209,6 +212,10 @@ export default function EventTypesScreen() {
                     {preset.icon}
                   </Typography>
                   <ListItemText primary={preset.label} sx={{ pr: 14 }} />
+                  {/* Marker-kind presets carry a badge (calendar-only day indicators). */}
+                  {preset.kind === 'marker' ? (
+                    <Chip size="small" variant="outlined" label={t('booking.marker.badge')} sx={{ mr: 1 }} />
+                  ) : null}
                   {/* Default calendar colour dot (themed purple when unset). */}
                   <Box
                     sx={{
@@ -277,9 +284,12 @@ export function EventTypeDialog({
   const [label, setLabel] = useState(preset?.label ?? '');
   const [icon, setIcon] = useState(preset?.icon ?? '\u2728');
   const [color, setColor] = useState<string | null>(preset?.color ?? null);
+  const [kind, setKind] = useState<EventTypeKind>(preset?.kind ?? 'booking');
 
   const duplicate = isDuplicateLabel(presets, label, preset?.id);
   const valid = label.trim() !== '' && !duplicate;
+
+  const kinds: EventTypeKind[] = ['booking', 'marker'];
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xs">
@@ -306,6 +316,28 @@ export function EventTypeDialog({
               fullWidth
             />
           </Stack>
+          {/* Kind: booking vs marker — same pill-row UX as confirmed/tentative. */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
+              {t('settings.event_types.kind_label')}
+            </Typography>
+            <ChipRow>
+              {kinds.map((k) => (
+                <Chip
+                  key={k}
+                  label={t(`settings.event_types.kind_${k}`)}
+                  color={kind === k ? 'primary' : 'default'}
+                  variant={kind === k ? 'filled' : 'outlined'}
+                  onClick={() => setKind(k)}
+                />
+              ))}
+            </ChipRow>
+            {kind === 'marker' ? (
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                {t('settings.event_types.kind_marker_hint')}
+              </Typography>
+            ) : null}
+          </Box>
           <Box>
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
               {t('settings.event_types.color_label')}
@@ -323,7 +355,7 @@ export function EventTypeDialog({
         <Button
           variant="contained"
           disabled={!valid || busy === true}
-          onClick={() => onSave({ label: label.trim(), icon: icon.trim() || '\u2728', color })}
+          onClick={() => onSave({ label: label.trim(), icon: icon.trim() || '\u2728', color, kind })}
         >
           {t('common.action.save')}
         </Button>

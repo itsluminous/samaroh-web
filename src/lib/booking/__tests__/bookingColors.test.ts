@@ -131,6 +131,7 @@ function makePreset(overrides: Partial<EventTypePreset>): EventTypePreset {
     label: 'X',
     icon: '\u2728',
     color: null,
+    kind: 'booking',
     sort_order: 0,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',

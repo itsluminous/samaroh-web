@@ -16,6 +16,7 @@ function makePreset(overrides: Partial<EventTypePreset>): EventTypePreset {
     label: 'X',
     icon: '\u2728',
     color: null,
+    kind: 'booking',
     sort_order: 0,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
@@ -84,6 +85,7 @@ describe('EventTypeDialog', () => {
       label: 'Mehndi',
       icon: '\u{1F33F}',
       color: 'fuchsia',
+      kind: 'booking',
     } satisfies EventTypeInput);
   });
 
@@ -93,6 +95,28 @@ describe('EventTypeDialog', () => {
     fireEvent.change(nameField(), { target: { value: 'Farewell' } });
     fireEvent.click(screen.getByRole('button', { name: en.booking.color.default }));
     fireEvent.click(saveButton());
-    expect(onSave).toHaveBeenCalledWith({ label: 'Farewell', icon: '\u2728', color: null });
+    expect(onSave).toHaveBeenCalledWith({ label: 'Farewell', icon: '\u2728', color: null, kind: 'booking' });
+  });
+
+  it('the marker pill saves kind=marker and shows the helper hint', () => {
+    const onSave = jest.fn();
+    renderDialog({ onSave });
+    fireEvent.change(nameField(), { target: { value: 'Lagan' } });
+    // Hint only appears once the marker pill is selected.
+    expect(screen.queryByText(en.settings.event_types.kind_marker_hint)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText(en.settings.event_types.kind_marker));
+    expect(screen.getByText(en.settings.event_types.kind_marker_hint)).toBeInTheDocument();
+    fireEvent.click(saveButton());
+    expect(onSave).toHaveBeenCalledWith({ label: 'Lagan', icon: '\u2728', color: null, kind: 'marker' });
+  });
+
+  it('edit mode preselects the preset kind', () => {
+    const onSave = jest.fn();
+    const marker = makePreset({ id: 'p9', label: 'Tilak', kind: 'marker' });
+    renderDialog({ mode: 'edit', preset: marker, onSave });
+    // The marker hint is visible immediately — the pill came preselected.
+    expect(screen.getByText(en.settings.event_types.kind_marker_hint)).toBeInTheDocument();
+    fireEvent.click(saveButton());
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ kind: 'marker' }));
   });
 });

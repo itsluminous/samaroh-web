@@ -146,6 +146,42 @@ export function bookingsOnDate(iso: string, bookings: Booking[]): Booking[] {
   );
 }
 
+/**
+ * Month-grid visibility with marker-kind event types (event_types.kind):
+ * a marker booking (Lagan/Tilak day indicator) is hidden from the grid when
+ * EVERY date it covers also has a real booking-kind booking — the booking's
+ * colour/icon wins the shared date. Marker-only dates keep their marker pill.
+ * The day dialog lists all bookings regardless (use bookingsOnDate).
+ */
+export function visibleCalendarBookings(
+  bookings: Booking[],
+  isMarker: (booking: Booking) => boolean,
+): Booking[] {
+  const live = bookings.filter((b) => b.deleted_at === null && b.status !== 'cancelled');
+  const real = live.filter((b) => !isMarker(b));
+  if (real.length === live.length) {
+    return bookings; // no markers — nothing to hide
+  }
+  const covered = (iso: string) => real.some((b) => b.start_date <= iso && b.end_date >= iso);
+  const hidden = new Set<string>();
+  for (const m of live) {
+    if (!isMarker(m)) {
+      continue;
+    }
+    let allCovered = true;
+    for (let iso = m.start_date; iso <= m.end_date; iso = addDays(iso, 1)) {
+      if (!covered(iso)) {
+        allCovered = false;
+        break;
+      }
+    }
+    if (allCovered) {
+      hidden.add(m.id);
+    }
+  }
+  return hidden.size === 0 ? bookings : bookings.filter((b) => !hidden.has(b.id));
+}
+
 export type DayTapAction = 'chooser' | 'add' | 'none';
 
 /**

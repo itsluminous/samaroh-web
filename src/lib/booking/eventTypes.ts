@@ -10,9 +10,14 @@ export interface EventTypeDef {
   emoji: string;
   label_key: string;
   color: string;
+  /** 'booking' = real customer booking; 'marker' = calendar-only day indicator. */
+  kind: EventTypeKind;
 }
 
-export const EVENT_TYPES: EventTypeDef[] = eventTypesJson.event_types;
+/** event_types.kind contract (shared/event-types.json $comment): absent → 'booking'. */
+export type EventTypeKind = 'booking' | 'marker';
+
+export const EVENT_TYPES: EventTypeDef[] = eventTypesJson.event_types as EventTypeDef[];
 
 export const CUSTOM_EVENT_TYPE_KEY = 'custom';
 

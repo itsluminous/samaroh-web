@@ -113,7 +113,7 @@ describe('seeding from the shared template', () => {
 describe('CRUD round-trip on the guest Dexie client', () => {
   it('create → fetch → update → soft delete', async () => {
     const db = await freshDb();
-    const created = await createEventType(db, BIZ, { label: 'Mehndi', icon: '\u{1F58C}\uFE0F', color: 'fuchsia' }, 0);
+    const created = await createEventType(db, BIZ, { label: 'Mehndi', icon: '\u{1F58C}\uFE0F', color: 'fuchsia', kind: 'booking' }, 0);
 
     let presets = (await fetchEventTypes(db, BIZ)) ?? [];
     expect(presets).toHaveLength(1);
@@ -123,6 +123,7 @@ describe('CRUD round-trip on the guest Dexie client', () => {
       label: 'Mehndi Night',
       icon: '\u{1F33F}',
       color: null,
+      kind: 'booking',
     });
     presets = (await fetchEventTypes(db, BIZ)) ?? [];
     expect(presets[0]).toMatchObject({ id: updated.id, label: 'Mehndi Night', icon: '\u{1F33F}', color: null });
@@ -139,9 +140,9 @@ describe('CRUD round-trip on the guest Dexie client', () => {
 
   it('fetch excludes other businesses and orders by sort_order', async () => {
     const db = await freshDb();
-    await createEventType(db, BIZ, { label: 'B', icon: 'b', color: null }, 1);
-    await createEventType(db, BIZ, { label: 'A', icon: 'a', color: null }, 0);
-    await createEventType(db, 'biz-other', { label: 'X', icon: 'x', color: null }, 0);
+    await createEventType(db, BIZ, { label: 'B', icon: 'b', color: null, kind: 'booking' }, 1);
+    await createEventType(db, BIZ, { label: 'A', icon: 'a', color: null, kind: 'booking' }, 0);
+    await createEventType(db, 'biz-other', { label: 'X', icon: 'x', color: null, kind: 'booking' }, 0);
     const presets = await fetchEventTypes(db, BIZ);
     expect(presets?.map((p) => p.label)).toEqual(['A', 'B']);
   });
@@ -182,7 +183,7 @@ describe('offline outbox queues preset writes', () => {
       }),
     } as unknown as SupabaseClient;
 
-    await createEventType(remote, BIZ, { label: 'Haldi', icon: '\u{1F49B}', color: 'banana' }, 7);
+    await createEventType(remote, BIZ, { label: 'Haldi', icon: '\u{1F49B}', color: 'banana', kind: 'booking' }, 7);
     expect(inserts).toHaveLength(0);
     const items = await listItems();
     expect(items).toHaveLength(1);
@@ -224,7 +225,7 @@ describe('snapshot semantics: bookings keep their recorded label/icon', () => {
     expect(eventTypeDefaultColor(booking.event_type, presets)?.key).toBe('tomato');
 
     // Rename the preset — the booking row must stay untouched.
-    await updateEventType(db, wedding, { label: 'Shaadi', icon: wedding.icon, color: wedding.color });
+    await updateEventType(db, wedding, { label: 'Shaadi', icon: wedding.icon, color: wedding.color, kind: wedding.kind });
     const { guestDb } = await import('@/lib/guest/localDb');
     const stored = await guestDb.bookings.get(booking.id);
     expect(stored?.event_type).toBe('Wedding');

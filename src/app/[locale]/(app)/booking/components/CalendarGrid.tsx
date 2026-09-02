@@ -10,9 +10,9 @@ import ButtonBase from '@mui/material/ButtonBase';
 import Typography from '@mui/material/Typography';
 import { useLocale } from 'next-intl';
 import { useMemo } from 'react';
-import { buildMonthWeeks, todayIso } from '@/lib/booking/calendar';
+import { buildMonthWeeks, todayIso, visibleCalendarBookings } from '@/lib/booking/calendar';
 import { pillPaint } from '@/lib/booking/bookingColors';
-import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
+import { presetKindForType, type EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { weekdayNarrowNames } from '@/lib/booking/dates';
 import type { Booking, DateBlock } from '@/lib/booking/types';
 import { pillLabel } from './format';
@@ -43,9 +43,16 @@ export default function CalendarGrid({
 }) {
   const locale = useLocale();
   const today = todayIso();
+  // Marker-kind bookings (Lagan/Tilak day indicators) yield the pill to real
+  // bookings on fully shared dates; marker-only dates keep their marker pill.
+  // The day dialog still lists everything (BookingScreen uses bookingsOnDate).
+  const gridBookings = useMemo(
+    () => visibleCalendarBookings(bookings, (b) => presetKindForType(presets, b.event_type) === 'marker'),
+    [bookings, presets],
+  );
   const weeks = useMemo(
-    () => buildMonthWeeks(year, month0, bookings, blocks),
-    [year, month0, bookings, blocks],
+    () => buildMonthWeeks(year, month0, gridBookings, blocks),
+    [year, month0, gridBookings, blocks],
   );
   const weekdays = useMemo(() => weekdayNarrowNames(locale), [locale]);
 

@@ -11,8 +11,8 @@ import {
   type EventTypePreset,
 } from '@/lib/booking/eventTypePresets';
 import { EVENT_TYPES } from '@/lib/booking/eventTypes';
-import { eventTypeBreakdown } from '@/lib/reports/compute';
-import type { ReportBooking } from '@/lib/reports/types';
+import { eventTypeBreakdown, outstandingDues, revenueByMonth, collectionEfficiency } from '@/lib/reports/compute';
+import type { ReportBooking, ReportPayment } from '@/lib/reports/types';
 import { makeBooking } from '../test-utils/fixtures';
 
 function makePreset(overrides: Partial<EventTypePreset>): EventTypePreset {
@@ -147,5 +147,44 @@ describe('eventTypeBreakdown excludes marker-kind types', () => {
   it('without a predicate the breakdown is unchanged (back-compat)', () => {
     const bookings = [report({ event_type: 'Lagan' })];
     expect(eventTypeBreakdown(bookings)).toHaveLength(1);
+  });
+});
+
+describe('money reports ignore marker bookings (amounts forced to 0)', () => {
+  // The form forces marker amounts to 0 and hides record-payment, so a
+  // marker booking is invisible to every money computation.
+  const report = (overrides: Partial<ReportBooking>): ReportBooking => ({
+    id: `m-${Math.random()}`,
+    customer_name: 'X',
+    event_type: 'Wedding',
+    event_icon: '\u{1F492}',
+    start_date: '2026-07-10',
+    end_date: '2026-07-10',
+    total_amount: 50000,
+    status: 'confirmed',
+    source: null,
+    ...overrides,
+  });
+  const range = { start: '2026-07-01', end: '2026-07-31' };
+  const real = report({ id: 'real', event_type: 'Wedding', total_amount: 80000 });
+  const marker = report({ id: 'marker', event_type: 'Lagan', total_amount: 0 });
+  const payments: ReportPayment[] = [{ booking_id: 'real', amount: 30000, paid_on: '2026-07-11' }];
+
+  it('revenue summary counts nothing for markers', () => {
+    const withMarker = revenueByMonth([real, marker], payments, range);
+    const without = revenueByMonth([real], payments, range);
+    expect(withMarker).toEqual(without);
+    expect(withMarker[0]).toMatchObject({ collected: 30000, outstanding: 50000, total: 80000 });
+  });
+
+  it('dues aging never lists a marker (zero due)', () => {
+    const rows = outstandingDues([real, marker], payments, '2026-08-01');
+    expect(rows.map((r) => r.bookingId)).toEqual(['real']);
+  });
+
+  it('collection efficiency skips markers (zero total)', () => {
+    const settled: ReportPayment[] = [{ booking_id: 'real', amount: 80000, paid_on: '2026-07-12' }];
+    const { rows } = collectionEfficiency([real, marker], settled, '2026-08-01');
+    expect(rows.map((r) => r.bookingId)).toEqual(['real']);
   });
 });

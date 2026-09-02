@@ -259,6 +259,21 @@ repo interprets it where the spec leaves web-specific latitude.)
   resolution for stored snapshots: live preset label match → static contract
   key (legacy pre-006 bookings) → 'booking'.
 
+- **Marker bookings carry no payment status (parity with Android).** A
+  marker-kind booking shows no total/deposit/paid/due, no payment history and
+  no record-payment/invoice actions on the detail drawer; agenda/month rows
+  show no due or fully-paid chip; the month summary's Received/Pending
+  exclude them by KIND (`monthMoneySummary`, `src/lib/booking/due.ts`) — not
+  by amount, so legacy nonzero snapshots stay excluded. The booking form
+  hides the amount fields (total/deposit/advance + due preview) while a
+  marker-kind preset is selected (typed values persist in state and reappear
+  on switching back) and FORCES total/deposit/advance to 0 on save, add and
+  edit alike. Money reports need no marker filter beyond the event-type
+  breakdown: with amounts forced to 0 and payment recording blocked, markers
+  contribute nothing to revenue/dues/collection (unit-verified); occupancy
+  and the sources breakdown intentionally keep them (matches the recorded
+  Android analytics scope above).
+
 - **Membership resolution hardening (owner report: "no member management").**
   The Members entry was always routed (`/menu/members`) and linked from Menu
   home — but the `isOwner` gate in `useMembership` (a) validated the session

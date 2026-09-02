@@ -15,7 +15,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { maskAmount } from '@/components/MaskedAmount';
 import { computeDue } from '@/lib/booking/due';
 import { pillPaint, type PillPaint } from '@/lib/booking/bookingColors';
-import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
+import { presetKindForType, type EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment } from '@/lib/booking/types';
@@ -66,6 +66,9 @@ export default function BookingRow({
   const cancelled = booking.status === 'cancelled';
   const due = computeDue(booking.total_amount, payments);
   const paint = pillPaint(booking, presets);
+  // Marker-kind bookings (Lagan/Tilak day indicators) carry no payment
+  // status: no due / fully-paid chip (parity with Android).
+  const marker = presetKindForType(presets, booking.event_type) === 'marker';
 
   return (
     <ListItemButton
@@ -102,7 +105,7 @@ export default function BookingRow({
       />
       {cancelled ? (
         <Chip size="small" label={t('booking.status.cancelled')} />
-      ) : due > 0 ? (
+      ) : marker ? null : due > 0 ? (
         <Chip
           size="small"
           color="error"

@@ -31,7 +31,7 @@ import type { ReactNode } from 'react';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import { computeDue, computePaid } from '@/lib/booking/due';
 import { effectiveBookingColor } from '@/lib/booking/bookingColors';
-import type { EventTypePreset } from '@/lib/booking/eventTypePresets';
+import { presetKindForType, type EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { formatDate, formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment, BookingPermissions, Business } from '@/lib/booking/types';
@@ -87,6 +87,10 @@ export default function BookingDetail({
   const paid = computePaid(payments);
   const due = computeDue(booking.total_amount, payments);
   const cancelled = booking.status === 'cancelled';
+  // Marker-kind event types (Lagan/Tilak day indicators) are calendar-only:
+  // the card shows NO payment status — no amounts, no payment history, no
+  // record-payment or invoice actions (parity with Android).
+  const marker = presetKindForType(presets, booking.event_type) === 'marker';
   const statusLabel = t(`booking.status.${booking.status}`);
   const colorDef = effectiveBookingColor(booking, presets);
   // Creator attribution: the member's display name; an unknown creator id
@@ -170,38 +174,42 @@ export default function BookingDetail({
           </Typography>
         ) : null}
 
-        <Divider sx={{ my: 1.5 }} />
-        <AmountRow label={t('booking.card.total_label')} value={rupees(booking.total_amount)} />
-        {booking.security_deposit > 0 ? (
-          <AmountRow label={t('booking.card.deposit_label')} value={rupees(booking.security_deposit)} />
-        ) : null}
-        <AmountRow label={t('booking.card.paid_label')} value={rupees(paid)} />
-        <AmountRow
-          label={t('booking.card.due_label')}
-          value={rupees(Math.max(due, 0))}
-          bold
-          color={due > 0 ? 'error.main' : 'success.main'}
-        />
+        {marker ? null : (
+          <>
+            <Divider sx={{ my: 1.5 }} />
+            <AmountRow label={t('booking.card.total_label')} value={rupees(booking.total_amount)} />
+            {booking.security_deposit > 0 ? (
+              <AmountRow label={t('booking.card.deposit_label')} value={rupees(booking.security_deposit)} />
+            ) : null}
+            <AmountRow label={t('booking.card.paid_label')} value={rupees(paid)} />
+            <AmountRow
+              label={t('booking.card.due_label')}
+              value={rupees(Math.max(due, 0))}
+              bold
+              color={due > 0 ? 'error.main' : 'success.main'}
+            />
 
-        <Divider sx={{ my: 1.5 }} />
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-          {t('booking.card.payments_title')}
-        </Typography>
-        {payments.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {t('booking.card.no_payments')}
-          </Typography>
-        ) : (
-          payments.map((p) => (
-            <Box key={p.id} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+            <Divider sx={{ my: 1.5 }} />
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              {t('booking.card.payments_title')}
+            </Typography>
+            {payments.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                {paymentLine(p)}
+                {t('booking.card.no_payments')}
               </Typography>
-              <Typography variant="body2" fontWeight={500}>
-                {rupees(p.amount)}
-              </Typography>
-            </Box>
-          ))
+            ) : (
+              payments.map((p) => (
+                <Box key={p.id} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {paymentLine(p)}
+                  </Typography>
+                  <Typography variant="body2" fontWeight={500}>
+                    {rupees(p.amount)}
+                  </Typography>
+                </Box>
+              ))
+            )}
+          </>
         )}
 
         <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1.5 }}>
@@ -217,12 +225,12 @@ export default function BookingDetail({
               {t('common.action.edit')}
             </Button>
           ) : null}
-          {permissions.record_payment && !cancelled ? (
+          {permissions.record_payment && !cancelled && !marker ? (
             <Button variant="contained" startIcon={<PaymentsIcon />} onClick={onRecordPayment}>
               {t('booking.card.action_record_payment')}
             </Button>
           ) : null}
-          {permissions.generate_invoice && showAmounts ? (
+          {permissions.generate_invoice && showAmounts && !marker ? (
             <Button
               variant="outlined"
               startIcon={<PrintIcon />}

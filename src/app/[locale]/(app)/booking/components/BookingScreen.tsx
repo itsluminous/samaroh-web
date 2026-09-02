@@ -24,7 +24,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingsOnDate, dayTapAction, monthRange, todayIso } from '@/lib/booking/calendar';
 import { findBlockingBlocks, findConflicts } from '@/lib/booking/conflicts';
-import { computeDue, computePaid } from '@/lib/booking/due';
+import { computeDue, monthMoneySummary } from '@/lib/booking/due';
 import { formatMonthName } from '@/lib/booking/dates';
 import {
   cancelBooking,
@@ -45,6 +45,7 @@ import type { Booking, PaymentMethod } from '@/lib/booking/types';
 import {
   fallbackPresets,
   fetchEventTypes,
+  presetKindForType,
   type EventTypePreset,
 } from '@/lib/booking/eventTypePresets';
 import { createClient } from '@/lib/supabase/client';
@@ -220,19 +221,17 @@ export default function BookingScreen() {
     agendaRefresh();
   }, [reload, agendaRefresh]);
 
-  const summary = useMemo(() => {
-    let received = 0;
-    let pending = 0;
-    for (const b of data.bookings) {
-      if (b.status === 'cancelled') {
-        continue;
-      }
-      const payments = data.paymentsByBooking[b.id] ?? [];
-      received += computePaid(payments);
-      pending += Math.max(computeDue(b.total_amount, payments), 0);
-    }
-    return { received, pending };
-  }, [data]);
+  // Marker-kind bookings carry no payment status: the month summary's
+  // Received/Pending exclude them (parity with Android).
+  const summary = useMemo(
+    () =>
+      monthMoneySummary(
+        data.bookings,
+        data.paymentsByBooking,
+        (eventType) => presetKindForType(presets, eventType) === 'marker',
+      ),
+    [data, presets],
+  );
 
   function shiftMonth(delta: number) {
     const m = month0 + delta;

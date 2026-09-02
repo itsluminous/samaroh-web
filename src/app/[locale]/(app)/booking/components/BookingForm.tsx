@@ -116,6 +116,11 @@ export default function BookingForm({
   // types (and presets without a color) keep the themed (primary purple) look.
   const selectedPreset = typeId === CUSTOM_OPTION ? undefined : presets.find((p) => p.id === typeId);
   const typeDefaultColor = findBookingColor(selectedPreset?.color);
+  // Marker-kind event types (Lagan/Tilak day indicators) carry no payment
+  // status: the amount fields and due preview are hidden and the saved
+  // booking forces total/deposit/advance to 0 (parity with Android). The
+  // typed values stay in state, so switching back restores them.
+  const isMarkerType = selectedPreset?.kind === 'marker';
 
   function buildInput(): BookingInput | null {
     if (name.trim() === '') {
@@ -126,9 +131,9 @@ export default function BookingForm({
       setDateError(true);
       return null;
     }
-    const totalParsed = parseAmount(total === '' ? '0' : total);
-    const depositParsed = parseAmount(deposit === '' ? '0' : deposit);
-    const advanceParsed = parseAmount(advance === '' ? '0' : advance);
+    const totalParsed = isMarkerType ? 0 : parseAmount(total === '' ? '0' : total);
+    const depositParsed = isMarkerType ? 0 : parseAmount(deposit === '' ? '0' : deposit);
+    const advanceParsed = isMarkerType ? 0 : parseAmount(advance === '' ? '0' : advance);
     if (totalParsed === null || depositParsed === null || advanceParsed === null) {
       setAmountError(true);
       return null;
@@ -160,7 +165,9 @@ export default function BookingForm({
   async function save(input: BookingInput) {
     setSaving(true);
     try {
-      await onSave(input, mode === 'add' ? (parseAmount(advance === '' ? '0' : advance) ?? 0) : 0);
+      const advanceAmount =
+        mode === 'add' && !isMarkerType ? (parseAmount(advance === '' ? '0' : advance) ?? 0) : 0;
+      await onSave(input, advanceAmount);
     } finally {
       setSaving(false);
     }
@@ -321,50 +328,54 @@ export default function BookingForm({
             />
           </Stack>
 
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label={t('booking.form.total_amount')}
-              value={total}
-              error={amountError}
-              onChange={(e) => {
-                setTotal(e.target.value);
-                setAmountError(false);
-              }}
-              inputProps={{ inputMode: 'decimal' }}
-              fullWidth
-            />
-            <TextField
-              label={t('booking.form.security_deposit')}
-              value={deposit}
-              error={amountError}
-              onChange={(e) => {
-                setDeposit(e.target.value);
-                setAmountError(false);
-              }}
-              inputProps={{ inputMode: 'decimal' }}
-              fullWidth
-            />
-          </Stack>
-          {mode === 'add' ? (
-            <TextField
-              label={t('booking.form.advance')}
-              value={advance}
-              error={amountError}
-              helperText={amountError ? t('booking.payment.invalid_amount') : undefined}
-              onChange={(e) => {
-                setAdvance(e.target.value);
-                setAmountError(false);
-              }}
-              inputProps={{ inputMode: 'decimal' }}
-              fullWidth
-            />
-          ) : null}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography color="text.secondary">{t('booking.form.due_auto')}</Typography>
-            <Typography fontWeight={700} color={due > 0 ? 'error.main' : 'success.main'}>
-              {formatRupees(Math.max(due, 0))}
-            </Typography>
-          </Box>
+          {isMarkerType ? null : (
+            <>
+              <Stack direction="row" spacing={1}>
+                <TextField
+                  label={t('booking.form.total_amount')}
+                  value={total}
+                  error={amountError}
+                  onChange={(e) => {
+                    setTotal(e.target.value);
+                    setAmountError(false);
+                  }}
+                  inputProps={{ inputMode: 'decimal' }}
+                  fullWidth
+                />
+                <TextField
+                  label={t('booking.form.security_deposit')}
+                  value={deposit}
+                  error={amountError}
+                  onChange={(e) => {
+                    setDeposit(e.target.value);
+                    setAmountError(false);
+                  }}
+                  inputProps={{ inputMode: 'decimal' }}
+                  fullWidth
+                />
+              </Stack>
+              {mode === 'add' ? (
+                <TextField
+                  label={t('booking.form.advance')}
+                  value={advance}
+                  error={amountError}
+                  helperText={amountError ? t('booking.payment.invalid_amount') : undefined}
+                  onChange={(e) => {
+                    setAdvance(e.target.value);
+                    setAmountError(false);
+                  }}
+                  inputProps={{ inputMode: 'decimal' }}
+                  fullWidth
+                />
+              ) : null}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography color="text.secondary">{t('booking.form.due_auto')}</Typography>
+                <Typography fontWeight={700} color={due > 0 ? 'error.main' : 'success.main'}>
+                  {formatRupees(Math.max(due, 0))}
+                </Typography>
+              </Box>
+            </>
+          )}
 
           <Box>
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>

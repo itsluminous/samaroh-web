@@ -168,65 +168,81 @@ export default function EventTypesScreen() {
             {live.map((preset, i) => {
               const colorDef = findBookingColor(preset.color);
               return (
-                <ListItem
-                  key={preset.id}
-                  divider={i < live.length - 1}
-                  secondaryAction={
-                    <Stack direction="row" spacing={0}>
-                      <IconButton
-                        size="small"
-                        aria-label={t('settings.event_types.move_up')}
-                        disabled={busy || i === 0}
-                        onClick={() => move(i, -1)}
-                      >
-                        <ArrowUpwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        aria-label={t('settings.event_types.move_down')}
-                        disabled={busy || i === live.length - 1}
-                        onClick={() => move(i, 1)}
-                      >
-                        <ArrowDownwardIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        aria-label={t('common.action.edit')}
-                        disabled={busy}
-                        onClick={() => setDialog({ mode: 'edit', preset })}
-                      >
-                        <EditOutlinedIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        aria-label={t('common.action.delete')}
-                        disabled={busy}
-                        onClick={() => setDeleteFor(preset)}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                  }
-                >
-                  <Typography sx={{ mr: 1.5, fontSize: 20 }} component="span">
+                // Plain flex row (no absolutely-positioned secondaryAction):
+                // the text block truncates and the action buttons never
+                // overlap the badge/dot, even at 320px-wide viewports.
+                <ListItem key={preset.id} divider={i < live.length - 1} sx={{ gap: 1 }}>
+                  <Typography sx={{ fontSize: 20, flexShrink: 0 }} component="span">
                     {preset.icon}
                   </Typography>
-                  <ListItemText primary={preset.label} sx={{ pr: 14 }} />
-                  {/* Marker-kind presets carry a badge (calendar-only day indicators). */}
-                  {preset.kind === 'marker' ? (
-                    <Chip size="small" variant="outlined" label={t('booking.marker.badge')} sx={{ mr: 1 }} />
-                  ) : null}
-                  {/* Default calendar colour dot (themed purple when unset). */}
-                  <Box
-                    sx={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      flexShrink: 0,
-                      mr: 1,
-                      bgcolor: colorDef?.hex ?? 'primary.main',
-                    }}
+                  <ListItemText
+                    sx={{ minWidth: 0 }}
+                    primary={
+                      <>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                          <Box
+                            component="span"
+                            sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {preset.label}
+                          </Box>
+                          {/* Default calendar colour dot (themed purple when unset). */}
+                          <Box
+                            component="span"
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              flexShrink: 0,
+                              bgcolor: colorDef?.hex ?? 'primary.main',
+                            }}
+                          />
+                        </Box>
+                        {/* Marker-kind badge on its own line (same pattern as the
+                            expenses Personal tag) so it never collides with the
+                            reorder/edit/delete buttons. */}
+                        {preset.kind === 'marker' ? (
+                          <Box sx={{ mt: 0.25 }}>
+                            <Chip size="small" variant="outlined" label={t('booking.marker.badge')} />
+                          </Box>
+                        ) : null}
+                      </>
+                    }
                   />
+                  <Stack direction="row" spacing={0} sx={{ flexShrink: 0 }}>
+                    <IconButton
+                      size="small"
+                      aria-label={t('settings.event_types.move_up')}
+                      disabled={busy || i === 0}
+                      onClick={() => move(i, -1)}
+                    >
+                      <ArrowUpwardIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      aria-label={t('settings.event_types.move_down')}
+                      disabled={busy || i === live.length - 1}
+                      onClick={() => move(i, 1)}
+                    >
+                      <ArrowDownwardIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      aria-label={t('common.action.edit')}
+                      disabled={busy}
+                      onClick={() => setDialog({ mode: 'edit', preset })}
+                    >
+                      <EditOutlinedIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      aria-label={t('common.action.delete')}
+                      disabled={busy}
+                      onClick={() => setDeleteFor(preset)}
+                    >
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
                 </ListItem>
               );
             })}

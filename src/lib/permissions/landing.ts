@@ -26,9 +26,11 @@ export async function resolveLandingHref(db: SupabaseClient | null): Promise<str
       .from('businesses')
       .select('id, owner_user_id')
       .is('deleted_at', null)
-      .order('created_at', { ascending: true })
-      .limit(1);
-    const biz = businesses?.[0] as { id: string; owner_user_id: string } | undefined;
+      .order('created_at', { ascending: true });
+    // Owned-first, mirroring useMembership: membership resolves against the
+    // business the user owns when they belong to more than one.
+    const rows = (businesses ?? []) as { id: string; owner_user_id: string }[];
+    const biz = rows.find((b) => b.owner_user_id === userId) ?? rows[0];
     if (!biz || biz.owner_user_id === userId) {
       return HOME;
     }

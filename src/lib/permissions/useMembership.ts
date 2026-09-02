@@ -54,24 +54,37 @@ export function useMembership(): Membership {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data: auth, error: authError } = await supabase.auth.getUser();
+      // Resolve the user id from the LOCAL session first (no network round
+      // trip — auth.getUser() validates against the auth server and fails on
+      // flaky networks, silently hiding owner-only UI like the Members row).
+      // RLS enforces the real boundary, so an unvalidated id is fine for UI
+      // gating. Guest mode's local client has no session — its getUser() is
+      // local and infallible, so it stays as the fallback.
+      const { data: sessionData } = await supabase.auth.getSession();
+      let uid = sessionData.session?.user.id ?? null;
+      if (!uid) {
+        const { data: auth, error: authError } = await supabase.auth.getUser();
+        if (cancelled) {
+          return;
+        }
+        if (authError || !auth.user) {
+          setError(authError?.message ?? 'no session');
+          setLoading(false);
+          return;
+        }
+        uid = auth.user.id;
+      }
       if (cancelled) {
         return;
       }
-      if (authError || !auth.user) {
-        setError(authError?.message ?? 'no session');
-        setLoading(false);
-        return;
-      }
-      setUserId(auth.user.id);
+      setUserId(uid);
       const { data: businesses, error: bizError } = await supabase
         .from('businesses')
         .select(
           'id, name, business_type, address, owner_name, logo_path, invoice_prefix, invoice_counter, owner_user_id',
         )
         .is('deleted_at', null)
-        .order('created_at', { ascending: true })
-        .limit(1);
+        .order('created_at', { ascending: true });
       if (cancelled) {
         return;
       }
@@ -80,9 +93,13 @@ export function useMembership(): Membership {
         setLoading(false);
         return;
       }
-      const biz = businesses[0] as Business;
+      // Prefer the business this user OWNS: a user who is also a member of
+      // someone else's (earlier-created) business must not have their
+      // owner-only UI (Members) gated on the wrong business.
+      const rows = businesses as Business[];
+      const biz = rows.find((b) => b.owner_user_id === uid) ?? (rows[0] as Business);
       setBusiness(biz);
-      const owner = biz.owner_user_id === auth.user.id;
+      const owner = biz.owner_user_id === uid;
       setIsOwner(owner);
       if (owner) {
         setPermissions(ownerPermissions());
@@ -91,7 +108,7 @@ export function useMembership(): Membership {
           .from('business_members')
           .select('permissions, is_owner')
           .eq('business_id', biz.id)
-          .eq('user_id', auth.user.id)
+          .eq('user_id', uid)
           .eq('status', 'active')
           .is('deleted_at', null)
           .maybeSingle();

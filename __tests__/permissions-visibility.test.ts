@@ -96,8 +96,10 @@ function fakeDb(options: {
       is: () => chain,
       eq: () => chain,
       order: () => chain,
-      limit: () => Promise.resolve({ data: rows.businesses, error: null }),
+      limit: () => chain,
       maybeSingle: () => Promise.resolve({ data: rows.business_members, error: null }),
+      // Awaitable at any point in the chain (landing.ts ends on .order()).
+      then: (resolve: (v: unknown) => unknown) => resolve({ data: rows.businesses, error: null }),
     };
     void table;
     return chain;

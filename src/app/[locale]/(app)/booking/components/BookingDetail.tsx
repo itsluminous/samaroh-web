@@ -89,7 +89,10 @@ export default function BookingDetail({
   const cancelled = booking.status === 'cancelled';
   const statusLabel = t(`booking.status.${booking.status}`);
   const colorDef = effectiveBookingColor(booking, presets);
-  const addedBy = memberNames[booking.created_by] ?? business.owner_name;
+  // Creator attribution: the member's display name; an unknown creator id
+  // (removed member, not-yet-synced row) uses the neutral fallback — never
+  // another person's name (parity with Android's audit-line fix).
+  const addedBy = memberNames[booking.created_by] ?? t('booking.card.audit_added_unknown_member');
   // booking.view_amounts (absent = true): false masks every financial figure
   // on this card as ₹••• and hides invoice generation (an invoice IS amounts).
   const showAmounts = permissions.view_amounts;

@@ -226,6 +226,29 @@ describe('booking masking (booking.view_amounts)', () => {
     expect(screen.getByText(/Added by Meera on/)).toBeInTheDocument();
     expect(screen.queryByText(/Added by Owner Om/)).not.toBeInTheDocument();
   });
+
+  it('an unknown creator uses the neutral fallback, never another name', () => {
+    renderIntl(
+      <BookingDetail
+        booking={booking}
+        payments={[payment]}
+        business={business}
+        memberNames={{}}
+        permissions={{ ...OWNER_PERMISSIONS, view_amounts: true }}
+        onClose={jest.fn()}
+        onEdit={jest.fn()}
+        onRecordPayment={jest.fn()}
+        onCancelBooking={jest.fn()}
+        onInvoicePdf={jest.fn()}
+        onInvoiceText={jest.fn()}
+        invoiceBusy={false}
+      />,
+    );
+    expect(
+      screen.getByText(new RegExp(`Added by ${en.booking.card.audit_added_unknown_member} on`)),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Added by Owner Om/)).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------

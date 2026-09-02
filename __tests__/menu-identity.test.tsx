@@ -3,7 +3,7 @@
  * session email under the localized "Signed in as" label, and the localized
  * "Not signed in" state in guest mode or without a session.
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import en from '../messages/en.json';
 import hi from '../messages/hi.json';
@@ -17,6 +17,7 @@ jest.mock('@/lib/guest/guest', () => ({
 
 jest.mock('@/lib/supabase/client', () => ({
   createRemoteClient: jest.fn(() => null),
+  createClient: jest.fn(() => null),
 }));
 
 const mockIsGuestMode = isGuestMode as jest.Mock;
@@ -84,5 +85,24 @@ describe('MenuIdentityRow', () => {
     renderRow();
 
     expect(await screen.findByText(en.menu.identity.not_signed_in)).toBeInTheDocument();
+  });
+
+  it('signed in: the sign-out icon opens the confirmation dialog (ADR-040)', async () => {
+    mockCreateRemoteClient.mockReturnValue(clientWithUser({ email: 'owner@example.com' }));
+    renderRow();
+    await screen.findByText('owner@example.com');
+
+    fireEvent.click(screen.getByRole('button', { name: en.menu.identity.sign_out }));
+    expect(screen.getByText(en.menu.sign_out.confirm_title)).toBeInTheDocument();
+    expect(screen.getByText(en.menu.sign_out.confirm_message)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.menu.sign_out.confirm_action })).toBeInTheDocument();
+  });
+
+  it('not signed in: no sign-out icon', async () => {
+    mockCreateRemoteClient.mockReturnValue(clientWithUser(null));
+    renderRow();
+
+    await screen.findByText(en.menu.identity.not_signed_in);
+    expect(screen.queryByRole('button', { name: en.menu.identity.sign_out })).not.toBeInTheDocument();
   });
 });

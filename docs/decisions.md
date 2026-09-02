@@ -242,3 +242,30 @@ repo interprets it where the spec leaves web-specific latitude.)
   the app; a refused activation surfaces `onboarding.join.accept_failed`.
   Mirrors the Android flow (samaroh-android ADR-037); reuses the shared
   `onboarding.join.*` keys.
+
+- **Marker-kind event types (event_types.kind, shared contract).** `kind`
+  ('booking' | 'marker'; absent → 'booking') carries through the preset model,
+  the seed template (server AND guest Dexie via `buildEventTypeSeedRows`), the
+  manage page (pill-row selector + list badge) and the static fallbacks. Web
+  interpretation of "month cells show only booking-kind colour/icon when both
+  kinds share a date": the month grid draws each booking as its own pill, so a
+  MARKER booking's pill is suppressed when EVERY date of its span also has a
+  live booking-kind booking (`visibleCalendarBookings`,
+  `src/lib/booking/calendar.ts`); partially covered or marker-only spans keep
+  their pill, and the day dialog always lists everything. Analytics: the
+  event-type breakdown excludes marker-kind bookings from counts and revenue
+  (`eventTypeBreakdown(bookings, isMarker)`) with the
+  `reports.event_types.marker_note` footnote when any were excluded. Kind
+  resolution for stored snapshots: live preset label match → static contract
+  key (legacy pre-006 bookings) → 'booking'.
+
+- **Membership resolution hardening (owner report: "no member management").**
+  The Members entry was always routed (`/menu/members`) and linked from Menu
+  home — but the `isOwner` gate in `useMembership` (a) validated the session
+  against the auth server (`auth.getUser()`) on every mount, so a flaky
+  network silently hid owner-only UI, and (b) gated on `businesses[0]` (oldest
+  created), the wrong business for a user who is also a member of someone
+  else's. Now: local-session-first (`auth.getSession()`, no network;
+  `getUser()` stays as the guest-local-client fallback — RLS enforces the real
+  boundary) and owned-business preference (`find(owner_user_id === uid)` before
+  `[0]`), mirrored in the server-side `resolveLandingHref`.

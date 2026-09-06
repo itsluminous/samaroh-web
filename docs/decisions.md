@@ -284,3 +284,15 @@ repo interprets it where the spec leaves web-specific latitude.)
   `getUser()` stays as the guest-local-client fallback — RLS enforces the real
   boundary) and owned-business preference (`find(owner_user_id === uid)` before
   `[0]`), mirrored in the server-side `resolveLandingHref`.
+
+- **Attachment viewing opens Google Drive directly; guest chips are always
+  pending.** Ledger attachment chips with a `drive_file_id` are plain links to
+  `https://drive.google.com/file/d/{id}/view` in a new tab (`rel="noopener"`,
+  tooltip says it opens in Drive) — no proxy/preview layer, because Drive is
+  the authoritative file store (schema §expense_attachments) and the user's
+  browser is signed into the owning Google account, which is what authorizes
+  the view. Pending chips (`drive_file_id` null) render disabled with a
+  localized "not uploaded yet" tooltip. Guest mode falls into the pending path
+  by construction: the Dexie store keeps attachment METADATA only (no blobs,
+  see `localDb.ts` / `insertAttachments`), so there is never a local object
+  URL to show and we deliberately do not build blob storage for it.

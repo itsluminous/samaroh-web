@@ -13,6 +13,7 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -230,20 +231,46 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                 )}
                 {record.expense_attachments.length > 0 && (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                    {record.expense_attachments.map((attachment) => (
-                      <Chip
-                        key={attachment.id}
-                        size="small"
-                        icon={<AttachFileIcon />}
-                        variant="outlined"
-                        color={attachment.drive_file_id === null ? 'warning' : 'default'}
-                        label={
-                          attachment.drive_file_id === null
-                            ? `${attachment.file_name} — ${t('entry.attachment_pending')}`
-                            : attachment.file_name
-                        }
-                      />
-                    ))}
+                    {record.expense_attachments.map((attachment) =>
+                      // Drive holds the file (authoritative store, schema §expense_attachments):
+                      // an uploaded chip is a plain link into the user's own Drive — the
+                      // browser session of the owning Google account authorizes the view.
+                      // A pending chip (no drive_file_id yet — includes ALL guest-mode
+                      // attachments, which are metadata-only in the local store) has no
+                      // file anywhere to open, so it renders disabled with an explainer.
+                      attachment.drive_file_id === null ? (
+                        <Tooltip key={attachment.id} title={t('entry.attachment_not_uploaded')}>
+                          {/* span: disabled elements fire no events for the tooltip */}
+                          <span>
+                            <Chip
+                              size="small"
+                              icon={<AttachFileIcon />}
+                              variant="outlined"
+                              color="warning"
+                              disabled
+                              label={`${attachment.file_name} — ${t('entry.attachment_pending')}`}
+                            />
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip key={attachment.id} title={t('entry.attachment_open_drive')}>
+                          <Chip
+                            size="small"
+                            icon={<AttachFileIcon />}
+                            variant="outlined"
+                            clickable
+                            component="a"
+                            href={`https://drive.google.com/file/d/${attachment.drive_file_id}/view`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            // The row itself is the edit affordance — opening the
+                            // bill must not also open the edit dialog.
+                            onClick={(event) => event.stopPropagation()}
+                            label={attachment.file_name}
+                          />
+                        </Tooltip>
+                      ),
+                    )}
                   </Box>
                 )}
                 <Chip

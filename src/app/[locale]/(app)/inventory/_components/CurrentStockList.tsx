@@ -110,14 +110,74 @@ export default function CurrentStockList() {
     [t],
   );
 
-  const visibleRows = useMemo(() => {
+  // Zero-stock / no-transaction master items are not hidden: they are
+  // appended after the in-stock rows (alphabetical within each group),
+  // dimmed, with 0 qty and ₹0 value, and stay searchable.
+  const { inStockRows, zeroStockRows } = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return rows
-      .filter((row) => row.currentQuantity > 0)
-      .filter((row) => query === '' || row.name.toLowerCase().includes(query));
+    const matches = (row: CurrentInventoryRow) =>
+      query === '' || row.name.toLowerCase().includes(query);
+    const byName = (a: CurrentInventoryRow, b: CurrentInventoryRow) =>
+      a.name.localeCompare(b.name);
+    return {
+      inStockRows: rows.filter((row) => row.currentQuantity > 0 && matches(row)).sort(byName),
+      zeroStockRows: rows.filter((row) => row.currentQuantity <= 0 && matches(row)).sort(byName),
+    };
   }, [rows, search]);
 
-  const hasStock = useMemo(() => rows.some((row) => row.currentQuantity > 0), [rows]);
+  // Shared row renderer; `dimmed` marks the zero-stock group, which always
+  // shows 0 qty and ₹0 value at reduced opacity.
+  const renderRow = (row: CurrentInventoryRow, dimmed: boolean) => {
+    const imageUrl = row.imagePath ? imageUrls.get(row.imagePath) : undefined;
+    const quantity = dimmed ? 0 : row.currentQuantity;
+    const value = dimmed ? 0 : row.currentValue;
+    const quantityText = `${formatIndianNumber(quantity)} ${unitLabel(row.unit)}`;
+    return (
+      <ListItem key={row.masterItemId} divider disablePadding>
+        <ListItemButton
+          sx={dimmed ? { opacity: 0.55 } : undefined}
+          onClick={() => router.push(`/inventory/${row.masterItemId}`)}
+        >
+          <ListItemAvatar>
+            {imageUrl ? (
+              <Avatar
+                src={imageUrl}
+                alt={row.name}
+                variant="rounded"
+                sx={{ cursor: 'pointer', width: 48, height: 48 }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedImage({ url: imageUrl, name: row.name });
+                }}
+              />
+            ) : (
+              <Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
+                <Inventory2OutlinedIcon />
+              </Avatar>
+            )}
+          </ListItemAvatar>
+          <ListItemText
+            primary={row.name}
+            secondary={
+              row.lastTransactionAt
+                ? `${quantityText} · ${t('stock.updated', {
+                    time: format.relativeTime(new Date(row.lastTransactionAt)),
+                  })}`
+                : quantityText
+            }
+          />
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="subtitle1">
+              {showAmounts ? formatAmount(value) : <MaskedAmount />}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t('stock.value_label')}
+            </Typography>
+          </Box>
+        </ListItemButton>
+      </ListItem>
+    );
+  };
 
   if (businessLoading || loading) {
     return (
@@ -162,60 +222,18 @@ export default function CurrentStockList() {
         sx={{ mb: 1 }}
       />
 
-      {!hasStock ? (
+      {rows.length === 0 ? (
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
           {t('stock.empty')}
         </Typography>
-      ) : visibleRows.length === 0 ? (
+      ) : inStockRows.length === 0 && zeroStockRows.length === 0 ? (
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
           {t('stock.no_results')}
         </Typography>
       ) : (
         <List disablePadding>
-          {visibleRows.map((row) => {
-            const imageUrl = row.imagePath ? imageUrls.get(row.imagePath) : undefined;
-            const quantityText = `${formatIndianNumber(row.currentQuantity)} ${unitLabel(row.unit)}`;
-            return (
-              <ListItem key={row.masterItemId} divider disablePadding>
-                <ListItemButton onClick={() => router.push(`/inventory/${row.masterItemId}`)}>
-                  <ListItemAvatar>
-                    {imageUrl ? (
-                      <Avatar
-                        src={imageUrl}
-                        alt={row.name}
-                        variant="rounded"
-                        sx={{ cursor: 'pointer', width: 48, height: 48 }}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setExpandedImage({ url: imageUrl, name: row.name });
-                        }}
-                      />
-                    ) : (
-                      <Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
-                        <Inventory2OutlinedIcon />
-                      </Avatar>
-                    )}
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={row.name}
-                    secondary={
-                      row.lastTransactionAt
-                        ? `${quantityText} · ${t('stock.updated', {
-                            time: format.relativeTime(new Date(row.lastTransactionAt)),
-                          })}`
-                        : quantityText
-                    }
-                  />
-                  <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="subtitle1">{showAmounts ? formatAmount(row.currentValue) : <MaskedAmount />}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {t('stock.value_label')}
-                    </Typography>
-                  </Box>
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
+          {inStockRows.map((row) => renderRow(row, false))}
+          {zeroStockRows.map((row) => renderRow(row, true))}
         </List>
       )}
 

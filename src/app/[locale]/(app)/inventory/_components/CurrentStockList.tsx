@@ -32,7 +32,7 @@ import {
   fetchMasterItems,
   type MasterItemRecord,
 } from '../_lib/queries';
-import { isBuiltInUnit, unitLabelKey } from '../_lib/units';
+import { unitLabelKey } from '../_lib/units';
 import RecordTransactionDialog from './RecordTransactionDialog';
 
 /**
@@ -106,7 +106,10 @@ export default function CurrentStockList() {
   }, [businessLoading, supabase, businessId, reload]);
 
   const unitLabel = useCallback(
-    (unit: string) => (isBuiltInUnit(unit) ? t(`master.${unitLabelKey(unit)}`) : unit),
+    (unit: string) => {
+      const key = unitLabelKey(unit);
+      return key ? t(key) : unit;
+    },
     [t],
   );
 

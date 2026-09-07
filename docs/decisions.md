@@ -319,3 +319,20 @@ repo interprets it where the spec leaves web-specific latitude.)
   fragment (`booking.card.action_restore_booking`, `restored`,
   `restore_conflict_warning`, `action_delete_booking`, `delete_confirm_*`,
   `deleted`).
+
+- **Inventory units come from the shared catalog (`shared/units.json`).** The
+  hardcoded four-entry list in `_lib/units.ts` is replaced by a binding to the
+  canonical grouped catalog introduced by the Android track (same
+  single-source-of-truth pattern as `shared/event-types.json`): 20 wire values
+  across Count/Weight/Liquid/Distance groups plus the special free-text Custom
+  entry. Wire values are the exact strings stored in `master_items.unit`; the
+  original values (`pcs`, `qty`, `kg`, `litre`) and free-text custom are frozen
+  for compatibility, and any stored string matching no wire value renders
+  verbatim as a custom unit. The master-item dialog dropdown renders groups in
+  file order with localized `ListSubheader` headers and Custom last; all unit
+  display surfaces (master list, stock list, item detail, transaction dialog)
+  resolve wires through the catalog's `label_key`s (`inventory.masterlist.*`,
+  en + hi). Parity with the shared file is enforced by
+  `__tests__/inventory-units.test.tsx` (web counterpart of Android's
+  UnitCatalogParityTest): group/unit order, unique wires, frozen legacy values,
+  and label-key resolution in both generated locale catalogs.

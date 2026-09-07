@@ -9,6 +9,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import ListSubheader from '@mui/material/ListSubheader';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -24,7 +25,7 @@ import {
   uploadItemImage,
   type MasterItemRecord,
 } from '../_lib/queries';
-import { BUILT_IN_UNITS, isBuiltInUnit, unitLabelKey } from '../_lib/units';
+import { CUSTOM_UNIT_LABEL_KEY, isKnownUnit, UNIT_GROUPS } from '../_lib/units';
 
 const CUSTOM_UNIT = '__custom__';
 
@@ -80,7 +81,7 @@ export default function MasterItemDialog({
       return;
     }
     setName(item?.name ?? '');
-    if (item && !isBuiltInUnit(item.unit)) {
+    if (item && !isKnownUnit(item.unit)) {
       setUnitChoice(CUSTOM_UNIT);
       setCustomUnit(item.unit);
     } else {
@@ -231,12 +232,15 @@ export default function MasterItemDialog({
             setError(null);
           }}
         >
-          {BUILT_IN_UNITS.map((unit) => (
-            <MenuItem key={unit} value={unit}>
-              {t(unitLabelKey(unit))}
-            </MenuItem>
-          ))}
-          <MenuItem value={CUSTOM_UNIT}>{t('unit_custom')}</MenuItem>
+          {UNIT_GROUPS.flatMap((group) => [
+            <ListSubheader key={`group-${group.key}`}>{tInventory(group.labelKey)}</ListSubheader>,
+            ...group.units.map((unit) => (
+              <MenuItem key={unit.wire} value={unit.wire}>
+                {tInventory(unit.labelKey)}
+              </MenuItem>
+            )),
+          ])}
+          <MenuItem value={CUSTOM_UNIT}>{tInventory(CUSTOM_UNIT_LABEL_KEY)}</MenuItem>
         </TextField>
         {unitChoice === CUSTOM_UNIT && (
           <TextField

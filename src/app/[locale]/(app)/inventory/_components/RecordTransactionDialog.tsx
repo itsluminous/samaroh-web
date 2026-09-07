@@ -24,7 +24,7 @@ import {
   recordRemoveTransaction,
   type MasterItemRecord,
 } from '../_lib/queries';
-import { isBuiltInUnit, unitLabelKey } from '../_lib/units';
+import { unitLabelKey } from '../_lib/units';
 
 interface RecordTransactionDialogProps {
   open: boolean;
@@ -98,7 +98,10 @@ export default function RecordTransactionDialog({
   }, [open, initialType, preselectedItem]);
 
   const unitLabel = useCallback(
-    (unit: string) => (isBuiltInUnit(unit) ? t(`master.${unitLabelKey(unit)}`) : unit),
+    (unit: string) => {
+      const key = unitLabelKey(unit);
+      return key ? t(key) : unit;
+    },
     [t],
   );
 

@@ -273,6 +273,40 @@ export async function cancelBooking(db: SupabaseClient, booking: Booking, userId
   });
 }
 
+/**
+ * Restore = the inverse status transition for a cancelled booking. The
+ * pre-cancellation status is not stored (schema freeze — no prior-status
+ * column), so restore lands on 'confirmed' (docs/decisions.md). Callers
+ * surface a NON-blocking conflict warning when the dates meanwhile filled up.
+ */
+export async function restoreBooking(db: SupabaseClient, booking: Booking, userId: string): Promise<void> {
+  await updateWithOutbox(db, {
+    module: 'booking',
+    table: 'bookings',
+    entityId: booking.id,
+    patch: { status: 'confirmed', updated_by: userId, updated_at: new Date().toISOString() },
+    baseUpdatedAt: booking.updated_at,
+    label: booking.customer_name,
+  });
+}
+
+/**
+ * Permanent delete for a cancelled booking = soft-delete tombstone (shared
+ * convention: never hard-delete). Every read filters `deleted_at IS NULL`,
+ * so the booking and its payment history vanish from all views.
+ */
+export async function deleteBooking(db: SupabaseClient, booking: Booking, userId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await updateWithOutbox(db, {
+    module: 'booking',
+    table: 'bookings',
+    entityId: booking.id,
+    patch: { deleted_at: now, updated_by: userId, updated_at: now },
+    baseUpdatedAt: booking.updated_at,
+    label: booking.customer_name,
+  });
+}
+
 export async function recordPayment(
   db: SupabaseClient,
   booking: Booking,

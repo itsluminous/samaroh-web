@@ -74,6 +74,8 @@ function renderDetail(booking: Booking) {
       onEdit={jest.fn()}
       onRecordPayment={jest.fn()}
       onCancelBooking={jest.fn()}
+      onRestoreBooking={jest.fn()}
+      onDeleteBooking={jest.fn()}
       onInvoicePdf={jest.fn()}
       onInvoiceText={jest.fn()}
       invoiceBusy={false}

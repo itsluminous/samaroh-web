@@ -5,9 +5,11 @@
 
 import CallIcon from '@mui/icons-material/Call';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import EditIcon from '@mui/icons-material/Edit';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import PrintIcon from '@mui/icons-material/Print';
+import RestoreIcon from '@mui/icons-material/Restore';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -60,6 +62,8 @@ export default function BookingDetail({
   onEdit,
   onRecordPayment,
   onCancelBooking,
+  onRestoreBooking,
+  onDeleteBooking,
   onInvoicePdf,
   onInvoiceText,
   invoiceBusy,
@@ -75,6 +79,10 @@ export default function BookingDetail({
   onEdit: () => void;
   onRecordPayment: () => void;
   onCancelBooking: () => void;
+  /** Cancelled bookings only: puts the booking back on the calendar as Confirmed. */
+  onRestoreBooking: () => void;
+  /** Cancelled bookings only: permanent (tombstone) delete. */
+  onDeleteBooking: () => void;
   onInvoicePdf: () => void;
   onInvoiceText: () => void;
   invoiceBusy: boolean;
@@ -83,6 +91,7 @@ export default function BookingDetail({
   const locale = useLocale();
   const [invoiceMenuEl, setInvoiceMenuEl] = useState<HTMLElement | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const paid = computePaid(payments);
   const due = computeDue(booking.total_amount, payments);
@@ -230,7 +239,8 @@ export default function BookingDetail({
               {t('booking.card.action_record_payment')}
             </Button>
           ) : null}
-          {permissions.generate_invoice && showAmounts && !marker ? (
+          {/* An invoice is a live financial document — none on cancelled bookings (Android parity). */}
+          {permissions.generate_invoice && showAmounts && !marker && !cancelled ? (
             <Button
               variant="outlined"
               startIcon={<PrintIcon />}
@@ -256,6 +266,17 @@ export default function BookingDetail({
           {permissions.delete && !cancelled ? (
             <Button variant="text" color="error" onClick={() => setConfirmCancel(true)}>
               {t('booking.card.action_cancel_booking')}
+            </Button>
+          ) : null}
+          {/* Cancelled bookings swap Cancel for Restore (edit gate) + permanent Delete (delete gate). */}
+          {permissions.edit && cancelled ? (
+            <Button variant="contained" startIcon={<RestoreIcon />} onClick={onRestoreBooking}>
+              {t('booking.card.action_restore_booking')}
+            </Button>
+          ) : null}
+          {permissions.delete && cancelled ? (
+            <Button variant="text" color="error" startIcon={<DeleteForeverIcon />} onClick={() => setConfirmDelete(true)}>
+              {t('booking.card.action_delete_booking')}
             </Button>
           ) : null}
         </Stack>
@@ -294,6 +315,25 @@ export default function BookingDetail({
               }}
             >
               {t('booking.card.action_cancel_booking')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)}>
+          <DialogTitle>{t('booking.card.delete_confirm_title')}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>{t('booking.card.delete_confirm_message')}</DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmDelete(false)}>{t('common.action.cancel')}</Button>
+            <Button
+              color="error"
+              onClick={() => {
+                setConfirmDelete(false);
+                onDeleteBooking();
+              }}
+            >
+              {t('booking.card.action_delete_booking')}
             </Button>
           </DialogActions>
         </Dialog>

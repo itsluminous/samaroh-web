@@ -296,3 +296,26 @@ repo interprets it where the spec leaves web-specific latitude.)
   by construction: the Dexie store keeps attachment METADATA only (no blobs,
   see `localDb.ts` / `insertAttachments`), so there is never a local object
   URL to show and we deliberately do not build blob storage for it.
+
+- **Cancelled bookings: Restore + permanent Delete replace the dead-end.**
+  Previously a cancelled booking's detail drawer offered no way forward (Cancel
+  hidden, nothing in its place) while still exposing invoice generation. Now the
+  drawer swaps the action set: **Restore booking** (gated on `booking.edit`)
+  transitions the status back to **Confirmed** — the pre-cancellation status is
+  not stored anywhere (schema freeze: no prior-status column, and adding one is
+  a contract change), so Confirmed is the deterministic target; no Android
+  decision to the contrary was published in shared/docs at implementation time.
+  Restoring checks overlaps afterwards and shows a **non-blocking** snackbar
+  warning when the dates meanwhile gained other active bookings (same
+  halls-can-host-multiple-events stance as the form's conflict popup); a failed
+  overlap check (offline) degrades to the plain "restored" message. **Delete
+  permanently** (gated on `booking.delete`) applies the shared soft-delete
+  tombstone (`deleted_at`, via the outbox-aware layer — never a hard delete)
+  behind a localized confirmation dialog; every read filters
+  `deleted_at IS NULL`, so the booking and its payment history leave all views.
+  Payment-recording and invoice actions are hidden on cancelled bookings
+  (invoice previously leaked through) — an invoice is a live financial
+  document (Android parity). New keys live in the `web-booking` shared
+  fragment (`booking.card.action_restore_booking`, `restored`,
+  `restore_conflict_warning`, `action_delete_booking`, `delete_confirm_*`,
+  `deleted`).

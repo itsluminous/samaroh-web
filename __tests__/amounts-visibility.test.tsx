@@ -181,6 +181,8 @@ function renderBookingDetail(viewAmounts: boolean) {
       onEdit={jest.fn()}
       onRecordPayment={jest.fn()}
       onCancelBooking={jest.fn()}
+      onRestoreBooking={jest.fn()}
+      onDeleteBooking={jest.fn()}
       onInvoicePdf={jest.fn()}
       onInvoiceText={jest.fn()}
       invoiceBusy={false}
@@ -239,6 +241,8 @@ describe('booking masking (booking.view_amounts)', () => {
         onEdit={jest.fn()}
         onRecordPayment={jest.fn()}
         onCancelBooking={jest.fn()}
+        onRestoreBooking={jest.fn()}
+        onDeleteBooking={jest.fn()}
         onInvoicePdf={jest.fn()}
         onInvoiceText={jest.fn()}
         invoiceBusy={false}

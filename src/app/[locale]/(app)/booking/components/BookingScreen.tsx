@@ -30,12 +30,14 @@ import {
   cancelBooking,
   createBooking,
   createDateBlock,
+  deleteBooking,
   ensureInvoiceNumber,
   fetchBusinessContext,
   fetchMonthData,
   fetchOverlaps,
   recordPayment,
   removeDateBlock,
+  restoreBooking,
   updateBooking,
   type BookingInput,
   type BusinessContext,
@@ -302,6 +304,42 @@ export default function BookingScreen() {
     reloadBoth();
   }
 
+  async function handleRestoreBooking() {
+    if (!db || !ctx || !detailBooking) {
+      return;
+    }
+    const booking = detailBooking;
+    await restoreBooking(db, booking, ctx.userId);
+    setDetailId(null);
+    // NON-blocking conflict warning: the dates may have filled up since the
+    // cancellation — the restore always goes through (halls can host multiple
+    // events); we only tell the user about the overlap. A failed check never
+    // blocks the flow (e.g. offline) — plain restored message then.
+    let conflictCount = 0;
+    try {
+      const { bookings } = await fetchOverlaps(db, ctx.business.id, booking.start_date, booking.end_date);
+      conflictCount = findConflicts(bookings, booking.start_date, booking.end_date, booking.id).length;
+    } catch {
+      conflictCount = 0;
+    }
+    setSnack(
+      conflictCount > 0
+        ? t('booking.card.restore_conflict_warning', { count: conflictCount })
+        : t('booking.card.restored'),
+    );
+    reloadBoth();
+  }
+
+  async function handleDeleteBooking() {
+    if (!db || !ctx || !detailBooking) {
+      return;
+    }
+    await deleteBooking(db, detailBooking, ctx.userId);
+    setDetailId(null);
+    setSnack(t('booking.card.deleted'));
+    reloadBoth();
+  }
+
   async function handleInvoice(kind: 'pdf' | 'text') {
     if (!db || !ctx || !detailBooking) {
       return;
@@ -480,6 +518,8 @@ export default function BookingScreen() {
           onEdit={() => setForm({ mode: 'edit', booking: detailBooking, initialDate: null })}
           onRecordPayment={() => setPayFor(detailBooking)}
           onCancelBooking={handleCancelBooking}
+          onRestoreBooking={handleRestoreBooking}
+          onDeleteBooking={handleDeleteBooking}
           onInvoicePdf={() => handleInvoice('pdf')}
           onInvoiceText={() => handleInvoice('text')}
         />

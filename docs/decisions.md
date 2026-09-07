@@ -336,3 +336,40 @@ repo interprets it where the spec leaves web-specific latitude.)
   `__tests__/inventory-units.test.tsx` (web counterpart of Android's
   UnitCatalogParityTest): group/unit order, unique wires, frozen legacy values,
   and label-key resolution in both generated locale catalogs.
+
+- **Item photos render from Google Drive; web photo upload is disabled**
+  (2026-09-07, counterpart of Android ADR-063). The owner deleted the Supabase
+  `inventory-images` Storage bucket — Storage serving and upload are dead. Item
+  photos live in the owner's Drive with anyone-with-link sharing (the Android
+  repair pass is enabling the existing 33), and `master_items.drive_image_id`
+  is the **authoritative** cross-device photo reference; `image_path` now
+  carries Android device-local paths and is never read or written by web.
+  - **Rendering** (`src/lib/images/drive.ts` + the shared
+    `ItemPhotoAvatar` used by the stock list, item detail and master list):
+    thumbnails load from `https://drive.google.com/thumbnail?id={id}&sz=w320`.
+    Endpoint verified against a real anyone-with-link file: it 303-redirects
+    to `https://lh3.googleusercontent.com/d/{id}=w320` and serves image bytes
+    with no cookies, so it renders in a plain `<img>`; a NOT-link-shared file
+    redirects to a Google sign-in HTML page instead (the `<img>` errors). The
+    lh3 URL is kept as a one-step `onError` fallback (same backend, but the
+    direct host is known to rate-limit independently); a second error — or a
+    row without `drive_image_id` — lands on the existing icon placeholder.
+    This mirrors Android's own-token → public-link → placeholder ladder for
+    the anonymous-web case. Full view opens
+    `https://drive.google.com/file/d/{id}/view` in a new tab — the exact
+    pattern the expenses ledger already uses for bill attachments (the old
+    in-app expand dialog showed the ≤320px signed thumbnail anyway; Drive's
+    viewer serves the original). The frozen `get_current_inventory` RPC does
+    not return `drive_image_id`, so the stock query merges it from
+    `master_items` client-side rather than touching the shared schema.
+  - **Upload disabled**: Storage upload is gone and web has no Drive OAuth,
+    so the master-item dialog's photo picker is removed and replaced by the
+    current photo (from Drive) plus a localized hint
+    (`inventory.master.photo_mobile_hint`, "Add photos from the mobile
+    app") — honest UX instead of a broken picker. `createMasterItem` /
+    `updateMasterItem` no longer take or touch photo columns (Android owns
+    `drive_image_id`/`image_path`; a web edit must never clobber them). The
+    photo section stays mounted as the insertion point for a future
+    **server-side** upload flow (an API route holding Drive credentials);
+    `src/lib/images/compress.ts` and its tests are kept as that flow's
+    client half.

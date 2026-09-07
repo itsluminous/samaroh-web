@@ -121,14 +121,16 @@ export interface MasterItemLike {
   id: string;
   name: string;
   unit: string;
-  imagePath: string | null;
+  /** Google Drive photo file id — the authoritative photo reference. */
+  driveImageId: string | null;
 }
 
 export interface CurrentInventoryRow {
   masterItemId: string;
   name: string;
   unit: string;
-  imagePath: string | null;
+  /** Google Drive photo file id — the authoritative photo reference. */
+  driveImageId: string | null;
   currentQuantity: number;
   currentValue: number;
   /** ISO timestamp of the latest transaction, or null when none. */
@@ -162,7 +164,7 @@ export function computeCurrentInventory(
       masterItemId: item.id,
       name: item.name,
       unit: item.unit,
-      imagePath: item.imagePath,
+      driveImageId: item.driveImageId,
       currentQuantity: computeCurrentStock(txns),
       currentValue: computeFifoValue(txns),
       lastTransactionAt,

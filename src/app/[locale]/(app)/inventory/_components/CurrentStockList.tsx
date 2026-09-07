@@ -1,13 +1,10 @@
 'use client';
 
 import AddIcon from '@mui/icons-material/Add';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import Alert from '@mui/material/Alert';
-import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
 import GlassFab from '@/components/GlassFab';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
@@ -27,17 +24,18 @@ import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import type { CurrentInventoryRow } from '@/lib/inventory/fifo';
 import {
-  createImageUrls,
   fetchCurrentInventory,
   fetchMasterItems,
   type MasterItemRecord,
 } from '../_lib/queries';
 import { unitLabelKey } from '../_lib/units';
+import ItemPhotoAvatar from './ItemPhotoAvatar';
 import RecordTransactionDialog from './RecordTransactionDialog';
 
 /**
- * Current stock list (spec §4.3): item image (tap to expand), name, qty +
- * unit, FIFO value, last-updated relative time, search, master-list toggle,
+ * Current stock list (spec §4.3): item photo rendered from Google Drive by
+ * `drive_image_id` (tap opens the Drive full view), name, qty + unit, FIFO
+ * value, last-updated relative time, search, master-list toggle,
  * record-transaction FAB.
  */
 export default function CurrentStockList() {
@@ -63,13 +61,11 @@ export default function CurrentStockList() {
 
   const [rows, setRows] = useState<CurrentInventoryRow[]>([]);
   const [items, setItems] = useState<MasterItemRecord[]>([]);
-  const [imageUrls, setImageUrls] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [txnOpen, setTxnOpen] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);
-  const [expandedImage, setExpandedImage] = useState<{ url: string; name: string } | null>(null);
 
   const reload = useCallback(async () => {
     if (!supabase || !businessId) {
@@ -83,10 +79,6 @@ export default function CurrentStockList() {
       ]);
       setRows(inventoryRows);
       setItems(masterItems);
-      const paths = inventoryRows
-        .map((row) => row.imagePath)
-        .filter((path): path is string => path !== null);
-      setImageUrls(await createImageUrls(supabase, paths));
     } catch {
       setLoadError(true);
     } finally {
@@ -131,7 +123,6 @@ export default function CurrentStockList() {
   // Shared row renderer; `dimmed` marks the zero-stock group, which always
   // shows 0 qty and ₹0 value at reduced opacity.
   const renderRow = (row: CurrentInventoryRow, dimmed: boolean) => {
-    const imageUrl = row.imagePath ? imageUrls.get(row.imagePath) : undefined;
     const quantity = dimmed ? 0 : row.currentQuantity;
     const value = dimmed ? 0 : row.currentValue;
     const quantityText = `${formatIndianNumber(quantity)} ${unitLabel(row.unit)}`;
@@ -142,22 +133,7 @@ export default function CurrentStockList() {
           onClick={() => router.push(`/inventory/${row.masterItemId}`)}
         >
           <ListItemAvatar>
-            {imageUrl ? (
-              <Avatar
-                src={imageUrl}
-                alt={row.name}
-                variant="rounded"
-                sx={{ cursor: 'pointer', width: 48, height: 48 }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setExpandedImage({ url: imageUrl, name: row.name });
-                }}
-              />
-            ) : (
-              <Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
-                <Inventory2OutlinedIcon />
-              </Avatar>
-            )}
+            <ItemPhotoAvatar driveImageId={row.driveImageId} alt={row.name} size={48} expandable />
           </ListItemAvatar>
           <ListItemText
             primary={row.name}
@@ -281,23 +257,6 @@ export default function CurrentStockList() {
         onClose={() => setSnack(null)}
         message={snack ?? ''}
       />
-
-      <Dialog
-        open={expandedImage !== null}
-        onClose={() => setExpandedImage(null)}
-        maxWidth="md"
-        aria-label={expandedImage?.name}
-      >
-        {expandedImage && (
-          <Box
-            component="img"
-            src={expandedImage.url}
-            alt={expandedImage.name}
-            sx={{ maxWidth: '100%', maxHeight: '80vh', display: 'block' }}
-            onClick={() => setExpandedImage(null)}
-          />
-        )}
-      </Dialog>
     </Box>
   );
 }

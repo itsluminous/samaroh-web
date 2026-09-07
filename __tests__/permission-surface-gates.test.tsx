@@ -53,7 +53,6 @@ jest.mock('@/app/[locale]/(app)/expenses/_lib/queries', () => ({
 jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   fetchCurrentInventory: jest.fn(() => Promise.resolve([])),
   fetchMasterItems: jest.fn(() => Promise.resolve([])),
-  createImageUrls: jest.fn(() => Promise.resolve(new Map())),
 }));
 
 function membership(permissions: MemberPermissions, isOwner = false) {

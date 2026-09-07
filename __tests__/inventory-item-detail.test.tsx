@@ -12,7 +12,7 @@ const item = {
   id: 'item1',
   name: 'Basmati Rice',
   unit: 'kg',
-  image_path: null,
+  drive_image_id: null,
   created_at: '2026-01-01T00:00:00Z',
 };
 
@@ -48,7 +48,6 @@ jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   fetchMasterItem: jest.fn(() => Promise.resolve(item)),
   fetchItemTransactions: jest.fn(() => Promise.resolve(transactions)),
   fetchMasterItems: jest.fn(() => Promise.resolve([item])),
-  createImageUrls: jest.fn(() => Promise.resolve(new Map())),
 }));
 
 function renderDetail() {

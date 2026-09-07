@@ -34,7 +34,7 @@ function row(overrides: Partial<CurrentInventoryRow> & { name: string }): Curren
   return {
     masterItemId: overrides.name.toLowerCase(),
     unit: 'pcs',
-    imagePath: null,
+    driveImageId: null,
     currentQuantity: 0,
     currentValue: 0,
     lastTransactionAt: null,
@@ -58,7 +58,6 @@ const fetchCurrentInventory = jest.fn(() => Promise.resolve(rows));
 jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   fetchCurrentInventory: () => fetchCurrentInventory(),
   fetchMasterItems: jest.fn(() => Promise.resolve([])),
-  createImageUrls: jest.fn(() => Promise.resolve(new Map())),
 }));
 
 function renderList() {

@@ -20,7 +20,7 @@ const item = {
   id: 'item1',
   name: 'Basmati Rice',
   unit: 'kg',
-  image_path: null,
+  drive_image_id: null,
   created_at: '2026-01-01T00:00:00Z',
 };
 
@@ -28,7 +28,7 @@ const otherItem = {
   id: 'item2',
   name: 'Chana Dal',
   unit: 'kg',
-  image_path: null,
+  drive_image_id: null,
   created_at: '2026-01-02T00:00:00Z',
 };
 
@@ -72,11 +72,9 @@ jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   fetchMasterItem: jest.fn(() => Promise.resolve(item)),
   fetchItemTransactions: jest.fn(() => Promise.resolve([])),
   fetchMasterItems: jest.fn(() => Promise.resolve([item, otherItem])),
-  createImageUrls: jest.fn(() => Promise.resolve(new Map())),
   createMasterItem: jest.fn().mockResolvedValue('new-id'),
   updateMasterItem: jest.fn().mockResolvedValue(undefined),
   deleteMasterItem: jest.fn().mockResolvedValue(undefined),
-  uploadItemImage: jest.fn().mockResolvedValue('path.webp'),
 }));
 
 const mockFetchItemTransactions = fetchItemTransactions as jest.Mock;
@@ -153,7 +151,6 @@ describe('ItemDetail edit affordance', () => {
       'item1',
       'Basmati Rice Premium',
       'kg',
-      null,
     );
     expect(await screen.findByText(en.inventory.master.save_success)).toBeInTheDocument();
   });

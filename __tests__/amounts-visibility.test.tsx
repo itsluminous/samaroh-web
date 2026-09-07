@@ -73,7 +73,7 @@ const stockRow = {
   masterItemId: 'i1',
   name: 'Chairs',
   unit: 'pcs',
-  imagePath: null,
+  driveImageId: null,
   currentQuantity: 250,
   currentValue: 12500,
   lastTransactionAt: null,
@@ -82,7 +82,6 @@ const stockRow = {
 jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   fetchCurrentInventory: jest.fn(() => Promise.resolve([stockRow])),
   fetchMasterItems: jest.fn(() => Promise.resolve([])),
-  createImageUrls: jest.fn(() => Promise.resolve(new Map())),
 }));
 
 function membership(permissions: MemberPermissions, isOwner = false) {

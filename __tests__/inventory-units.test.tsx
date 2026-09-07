@@ -27,7 +27,6 @@ import {
 jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   createMasterItem: jest.fn(),
   updateMasterItem: jest.fn(),
-  uploadItemImage: jest.fn(),
 }));
 
 type Messages = typeof en;
@@ -169,7 +168,7 @@ describe('back-compat: stored unit values round-trip', () => {
       id: 'item1',
       name: 'Basmati Rice',
       unit,
-      image_path: null,
+      drive_image_id: null,
       created_at: '2026-01-01T00:00:00Z',
     }) as MasterItemRecord;
 

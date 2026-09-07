@@ -19,7 +19,7 @@ const item: MasterItemRecord = {
   id: 'item1',
   name: 'Basmati Rice',
   unit: 'kg',
-  image_path: null,
+  drive_image_id: null,
   created_at: '2026-01-01T00:00:00Z',
 };
 

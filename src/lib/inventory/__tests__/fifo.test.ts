@@ -109,8 +109,8 @@ describe('canRemoveQuantity', () => {
 describe('computeCurrentInventory', () => {
   it('mirrors the server helper: per-item stock, value and last transaction', () => {
     const items = [
-      { id: 'item-1', name: 'Chair', unit: 'pcs', imagePath: null },
-      { id: 'item-2', name: 'Rice', unit: 'kg', imagePath: 'p.webp' },
+      { id: 'item-1', name: 'Chair', unit: 'pcs', driveImageId: null },
+      { id: 'item-2', name: 'Rice', unit: 'kg', driveImageId: 'drive-id-2' },
     ];
     const rows = computeCurrentInventory(items, [
       txn({ id: 'a', quantity: 10, unitPrice: 100, remainingQuantity: 7 }),
@@ -125,7 +125,7 @@ describe('computeCurrentInventory', () => {
       masterItemId: 'item-1',
       name: 'Chair',
       unit: 'pcs',
-      imagePath: null,
+      driveImageId: null,
       currentQuantity: 7,
       currentValue: 700,
       lastTransactionAt: '2026-08-03T00:00:00Z',

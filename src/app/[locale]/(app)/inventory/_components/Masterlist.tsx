@@ -4,9 +4,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import Alert from '@mui/material/Alert';
-import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -31,13 +29,13 @@ import { useRouter } from '@/i18n/navigation';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import { useMembership } from '@/lib/permissions/useMembership';
 import {
-  createImageUrls,
   deleteMasterItem,
   fetchItemIdsWithTransactions,
   fetchMasterItems,
   type MasterItemRecord,
 } from '../_lib/queries';
 import { unitLabelKey } from '../_lib/units';
+import ItemPhotoAvatar from './ItemPhotoAvatar';
 import MasterItemDialog from './MasterItemDialog';
 
 /**
@@ -57,7 +55,6 @@ export default function Masterlist() {
 
   const [items, setItems] = useState<MasterItemRecord[]>([]);
   const [itemsWithTxns, setItemsWithTxns] = useState<Set<string>>(new Set());
-  const [imageUrls, setImageUrls] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
@@ -79,10 +76,6 @@ export default function Masterlist() {
       ]);
       setItems(itemRows);
       setItemsWithTxns(txnItemIds);
-      const paths = itemRows
-        .map((item) => item.image_path)
-        .filter((path): path is string => path !== null);
-      setImageUrls(await createImageUrls(supabase, paths));
     } catch {
       setLoadError(true);
     } finally {
@@ -179,7 +172,6 @@ export default function Masterlist() {
       ) : (
         <List disablePadding>
           {visibleItems.map((item) => {
-            const imageUrl = item.image_path ? imageUrls.get(item.image_path) : undefined;
             const hasTxns = itemsWithTxns.has(item.id);
             return (
               <ListItem
@@ -213,9 +205,7 @@ export default function Masterlist() {
                 }
               >
                 <ListItemAvatar>
-                  <Avatar src={imageUrl} alt={item.name} variant="rounded" sx={{ width: 48, height: 48 }}>
-                    <Inventory2OutlinedIcon />
-                  </Avatar>
+                  <ItemPhotoAvatar driveImageId={item.drive_image_id} alt={item.name} size={48} />
                 </ListItemAvatar>
                 <ListItemText primary={item.name} secondary={unitLabel(item.unit)} />
               </ListItem>
@@ -244,9 +234,6 @@ export default function Masterlist() {
         open={dialogOpen}
         item={editingItem}
         items={items}
-        currentImageUrl={
-          editingItem?.image_path ? (imageUrls.get(editingItem.image_path) ?? null) : null
-        }
         supabase={supabase}
         businessId={businessId}
         onClose={() => setDialogOpen(false)}

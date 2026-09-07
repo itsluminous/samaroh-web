@@ -1,8 +1,12 @@
 /**
  * Supabase data access for the inventory section (master_items,
- * inventory_transactions, inventory-images storage). Current stock/value use
- * the Postgres helper `get_current_inventory` when available and fall back to
- * the client-side FIFO computation from `@/lib/inventory/fifo` otherwise.
+ * inventory_transactions). Current stock/value use the Postgres helper
+ * `get_current_inventory` when available and fall back to the client-side
+ * FIFO computation from `@/lib/inventory/fifo` otherwise. Item photos are
+ * referenced by `drive_image_id` (Google Drive, anyone-with-link — see
+ * `@/lib/images/drive`); the former `inventory-images` Storage bucket is
+ * gone and `image_path` now carries Android device-local paths, so web
+ * never reads or writes it.
  * Writes follow the app-wide contract: client UUIDs, soft deletes, RLS.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -15,13 +19,11 @@ import {
 } from '@/lib/inventory/fifo';
 import { insertWithOutbox } from '@/lib/outbox/mutate';
 
-export const INVENTORY_IMAGES_BUCKET = 'inventory-images';
-
 export interface MasterItemRecord {
   id: string;
   name: string;
   unit: string;
-  image_path: string | null;
+  drive_image_id: string | null;
   created_at: string;
 }
 
@@ -31,7 +33,7 @@ export async function fetchMasterItems(
 ): Promise<MasterItemRecord[]> {
   const { data, error } = await supabase
     .from('master_items')
-    .select('id, name, unit, image_path, created_at')
+    .select('id, name, unit, drive_image_id, created_at')
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('name', { ascending: true });
@@ -45,7 +47,6 @@ interface RpcInventoryRow {
   master_item_id: string;
   name: string;
   unit: string;
-  image_path: string | null;
   current_quantity: number;
   current_value: number;
   last_transaction_at: string | null;
@@ -64,37 +65,38 @@ interface DbTransactionRow {
 /**
  * Current inventory per item: prefers the server-side FIFO helper
  * (`get_current_inventory`), falling back to a client-side computation over
- * raw transactions when the RPC is unavailable.
+ * raw transactions when the RPC is unavailable. The frozen RPC does not
+ * return `drive_image_id`, so photo references are merged in from
+ * `master_items` on both paths.
  */
 export async function fetchCurrentInventory(
   supabase: SupabaseClient,
   businessId: string,
 ): Promise<CurrentInventoryRow[]> {
-  const { data, error } = await supabase.rpc('get_current_inventory', {
-    p_business_id: businessId,
-  });
-  if (!error && data) {
-    return (data as RpcInventoryRow[]).map((row) => ({
+  const [items, rpc] = await Promise.all([
+    fetchMasterItems(supabase, businessId),
+    supabase.rpc('get_current_inventory', { p_business_id: businessId }),
+  ]);
+  if (!rpc.error && rpc.data) {
+    const driveIdByItemId = new Map(items.map((item) => [item.id, item.drive_image_id]));
+    return (rpc.data as RpcInventoryRow[]).map((row) => ({
       masterItemId: row.master_item_id,
       name: row.name,
       unit: row.unit,
-      imagePath: row.image_path,
+      driveImageId: driveIdByItemId.get(row.master_item_id) ?? null,
       currentQuantity: Number(row.current_quantity),
       currentValue: Number(row.current_value),
       lastTransactionAt: row.last_transaction_at,
     }));
   }
   // Fallback: compute FIFO stock/value client-side from raw transactions.
-  const [items, transactions] = await Promise.all([
-    fetchMasterItems(supabase, businessId),
-    fetchTransactions(supabase, businessId),
-  ]);
+  const transactions = await fetchTransactions(supabase, businessId);
   return computeCurrentInventory(
     items.map((item) => ({
       id: item.id,
       name: item.name,
       unit: item.unit,
-      imagePath: item.image_path,
+      driveImageId: item.drive_image_id,
     })),
     transactions,
   );
@@ -133,7 +135,7 @@ export async function fetchMasterItem(
 ): Promise<MasterItemRecord | null> {
   const { data, error } = await supabase
     .from('master_items')
-    .select('id, name, unit, image_path, created_at')
+    .select('id, name, unit, drive_image_id, created_at')
     .eq('business_id', businessId)
     .eq('id', itemId)
     .is('deleted_at', null)
@@ -322,12 +324,16 @@ export async function recordRemoveTransaction(
   return plan.removedValue;
 }
 
+/**
+ * Creates a master item. Photos are not settable from web: they upload to
+ * Google Drive from the Android app, which owns `drive_image_id` /
+ * `image_path` (see docs/decisions.md — Drive-first item images).
+ */
 export async function createMasterItem(
   supabase: SupabaseClient,
   businessId: string,
   name: string,
   unit: string,
-  imagePath: string | null,
 ): Promise<string> {
   const id = crypto.randomUUID();
   const { error } = await supabase.from('master_items').insert({
@@ -335,7 +341,6 @@ export async function createMasterItem(
     business_id: businessId,
     name: name.trim(),
     unit,
-    image_path: imagePath,
   });
   if (error) {
     throw new Error(error.message);
@@ -343,16 +348,19 @@ export async function createMasterItem(
   return id;
 }
 
+/**
+ * Updates a master item's name/unit. Never touches `drive_image_id` /
+ * `image_path` — the Android app owns the photo columns.
+ */
 export async function updateMasterItem(
   supabase: SupabaseClient,
   itemId: string,
   name: string,
   unit: string,
-  imagePath: string | null,
 ): Promise<void> {
   const { error } = await supabase
     .from('master_items')
-    .update({ name: name.trim(), unit, image_path: imagePath })
+    .update({ name: name.trim(), unit })
     .eq('id', itemId);
   if (error) {
     throw new Error(error.message);
@@ -368,47 +376,4 @@ export async function deleteMasterItem(supabase: SupabaseClient, itemId: string)
   if (error) {
     throw new Error(error.message);
   }
-}
-
-/**
- * Uploads a compressed item photo to the private `inventory-images` bucket
- * using the `{business_id}/{entity_id}/{filename}` path convention (§2).
- */
-export async function uploadItemImage(
-  supabase: SupabaseClient,
-  businessId: string,
-  itemId: string,
-  blob: Blob,
-): Promise<string> {
-  const path = `${businessId}/${itemId}/${Date.now()}.webp`;
-  const { error } = await supabase.storage
-    .from(INVENTORY_IMAGES_BUCKET)
-    .upload(path, blob, { contentType: 'image/webp', upsert: false });
-  if (error) {
-    throw new Error(error.message);
-  }
-  return path;
-}
-
-/** Signed URLs for a private-bucket image set, keyed by storage path. */
-export async function createImageUrls(
-  supabase: SupabaseClient,
-  paths: string[],
-): Promise<Map<string, string>> {
-  const urls = new Map<string, string>();
-  if (paths.length === 0) {
-    return urls;
-  }
-  const { data, error } = await supabase.storage
-    .from(INVENTORY_IMAGES_BUCKET)
-    .createSignedUrls(paths, 3600);
-  if (error || !data) {
-    return urls;
-  }
-  for (const entry of data) {
-    if (entry.signedUrl && entry.path) {
-      urls.set(entry.path, entry.signedUrl);
-    }
-  }
-  return urls;
 }

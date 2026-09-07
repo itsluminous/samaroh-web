@@ -1,9 +1,14 @@
 /**
  * Client-side image compression for inventory item photos: center-crop to a
- * 1:1 square, scale the edge down to ≤320px and encode as WebP before
- * uploading to Supabase Storage (spec §4.3 — keeps the `inventory-images`
- * bucket tiny and matches the square crop the Android app produces, so
- * synced photos render consistently in the rounded avatars).
+ * 1:1 square, scale the edge down to ≤320px and encode as WebP (matches the
+ * square crop the Android app produces, so photos render consistently in the
+ * rounded avatars).
+ *
+ * Currently UNUSED by app code: web photo upload is disabled — item photos
+ * live in Google Drive and only the Android app can upload them (the old
+ * `inventory-images` Storage bucket is gone and web has no Drive OAuth).
+ * Kept, with its tests, as the client half of a future server-side upload
+ * flow (docs/decisions.md — Drive-first item images).
  */
 
 export const INVENTORY_IMAGE_MAX_DIMENSION = 320;

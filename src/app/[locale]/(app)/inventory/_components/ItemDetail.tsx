@@ -3,9 +3,7 @@
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import Alert from '@mui/material/Alert';
-import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -38,7 +36,6 @@ import {
 } from '@/lib/inventory/fifo';
 import { useMembership } from '@/lib/permissions/useMembership';
 import {
-  createImageUrls,
   deleteMasterItem,
   fetchItemTransactions,
   fetchMasterItem,
@@ -47,6 +44,7 @@ import {
   type MasterItemRecord,
 } from '../_lib/queries';
 import { unitLabelKey } from '../_lib/units';
+import ItemPhotoAvatar from './ItemPhotoAvatar';
 import MasterItemDialog from './MasterItemDialog';
 import RecordTransactionDialog from './RecordTransactionDialog';
 
@@ -83,7 +81,6 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   const [notFound, setNotFound] = useState(false);
   const [transactions, setTransactions] = useState<ItemTransactionRecord[]>([]);
   const [items, setItems] = useState<MasterItemRecord[]>([]);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [shownCount, setShownCount] = useState(ITEM_TXN_PAGE_SIZE);
@@ -95,7 +92,6 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);
-  const [imageExpanded, setImageExpanded] = useState(false);
 
   const reload = useCallback(async () => {
     if (!supabase || !businessId) {
@@ -115,12 +111,6 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
       setItem(itemRow);
       setTransactions(txns);
       setItems(allItems);
-      if (itemRow.image_path) {
-        const urls = await createImageUrls(supabase, [itemRow.image_path]);
-        setImageUrl(urls.get(itemRow.image_path) ?? null);
-      } else {
-        setImageUrl(null);
-      }
     } catch {
       setLoadError(true);
     } finally {
@@ -259,19 +249,7 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-        {imageUrl ? (
-          <Avatar
-            src={imageUrl}
-            alt={item.name}
-            variant="rounded"
-            sx={{ width: 72, height: 72, cursor: 'pointer' }}
-            onClick={() => setImageExpanded(true)}
-          />
-        ) : (
-          <Avatar variant="rounded" sx={{ width: 72, height: 72 }}>
-            <Inventory2OutlinedIcon />
-          </Avatar>
-        )}
+        <ItemPhotoAvatar driveImageId={item.drive_image_id} alt={item.name} size={72} expandable />
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="body2" color="text.secondary">
             {t('txn.current_stock', {
@@ -396,7 +374,6 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
         open={editOpen}
         item={item}
         items={items}
-        currentImageUrl={imageUrl}
         supabase={supabase}
         businessId={businessId}
         onClose={() => setEditOpen(false)}
@@ -440,23 +417,6 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
         onClose={() => setSnack(null)}
         message={snack ?? ''}
       />
-
-      <Dialog
-        open={imageExpanded}
-        onClose={() => setImageExpanded(false)}
-        maxWidth="md"
-        aria-label={item.name}
-      >
-        {imageUrl && (
-          <Box
-            component="img"
-            src={imageUrl}
-            alt={item.name}
-            sx={{ maxWidth: '100%', maxHeight: '80vh', display: 'block' }}
-            onClick={() => setImageExpanded(false)}
-          />
-        )}
-      </Dialog>
     </Box>
   );
 }

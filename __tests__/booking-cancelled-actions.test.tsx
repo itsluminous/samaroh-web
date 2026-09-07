@@ -194,6 +194,38 @@ describe('BookingDetail restore + delete interactions', () => {
   });
 });
 
+describe('BookingDetail action tones — Restore positive, Delete destructive', () => {
+  function buttonFor(text: string, index = 0) {
+    return screen.getAllByText(text)[index]!.closest('button') as HTMLButtonElement;
+  }
+
+  it('Restore is a contained success (moneyIn green) button', () => {
+    renderDetail(makeBooking({ status: 'cancelled' }), OWNER_PERMISSIONS);
+    const restore = buttonFor(label.restore);
+    expect(restore).toHaveClass('MuiButton-containedSuccess');
+    expect(restore).not.toHaveClass('MuiButton-colorError');
+  });
+
+  it('Delete permanently is error red, and so is its dialog confirm button', () => {
+    renderDetail(makeBooking({ status: 'cancelled' }), OWNER_PERMISSIONS);
+    const del = buttonFor(label.delete);
+    expect(del).toHaveClass('MuiButton-colorError');
+    fireEvent.click(del);
+    // Two matches now: the drawer button and the dialog confirm — check the confirm.
+    const confirm = buttonFor(label.delete, screen.getAllByText(label.delete).length - 1);
+    expect(confirm).toHaveClass('MuiButton-colorError');
+  });
+
+  it('Cancel booking on an active card stays error red (consistent destructive tone)', () => {
+    renderDetail(makeBooking({ status: 'confirmed' }), OWNER_PERMISSIONS);
+    const cancel = buttonFor(label.cancel);
+    expect(cancel).toHaveClass('MuiButton-colorError');
+    fireEvent.click(cancel);
+    const confirm = buttonFor(label.cancel, screen.getAllByText(label.cancel).length - 1);
+    expect(confirm).toHaveClass('MuiButton-colorError');
+  });
+});
+
 describe('restoreBooking / deleteBooking repo mutations', () => {
   function mockDb() {
     const eq = jest.fn(() => Promise.resolve({ error: null }));

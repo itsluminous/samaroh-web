@@ -268,9 +268,11 @@ export default function BookingDetail({
               {t('booking.card.action_cancel_booking')}
             </Button>
           ) : null}
-          {/* Cancelled bookings swap Cancel for Restore (edit gate) + permanent Delete (delete gate). */}
+          {/* Cancelled bookings swap Cancel for Restore (edit gate) + permanent Delete (delete gate).
+              Restore is the positive path (success/moneyIn green), Delete the destructive one (error red) —
+              Android-parity tone differentiation. */}
           {permissions.edit && cancelled ? (
-            <Button variant="contained" startIcon={<RestoreIcon />} onClick={onRestoreBooking}>
+            <Button variant="contained" color="success" startIcon={<RestoreIcon />} onClick={onRestoreBooking}>
               {t('booking.card.action_restore_booking')}
             </Button>
           ) : null}

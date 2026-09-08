@@ -80,11 +80,12 @@ degrade gracefully, middleware skips protection). Never remove that guard.
 - `src/lib/` — domain logic: `booking/`, `expenses/`, `inventory/` (FIFO), `reports/`,
   `invoice/` (pdf-lib renderer), `outbox/` (Dexie offline outbox: `mutate.ts`,
   `outbox.ts` with `isReplaying()` + sync-state events, `useOutbox.ts`), `guest/`
-  (local client + seed), `permissions/`, `format/`, `fuzzy.ts`, `images/`.
+  (local client + seed), `permissions/`, `format/`, `fuzzy.ts`, `images/` (Drive
+  thumbnail/download URL helpers), `hooks/`.
 - `src/theme/theme.ts` — Material-You-like MUI theme from `shared/brand/palette.md`
   (light/dark/system via CSS variables).
 - `src/components/` — `AppShell` (left rail / bottom nav + toolbar with
-  `SyncIndicator`), `ChipRow` (scrollable single-line filter pills),
+  `SyncIndicator`), `AppTheme`, `ChipRow` (scrollable single-line filter pills),
   `ColorSwatchPicker`, `GuestBanner`, `GlassFab`, `LocaleSwitcher`,
   `MaskedAmount` (view_amounts masking), `SectionGuard` (route permission
   guard), `SignInForm`, `ServiceWorkerRegistrar`.

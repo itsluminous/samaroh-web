@@ -20,6 +20,14 @@ An animated cloud **sync indicator** in the app bar shows pending offline writes
 spins while the outbox replays (static fallback under reduced motion); it links to
 Menu → Settings → Sync status.
 
+**Image architecture**: item photos and expense bills live in **Google Drive**
+(referenced by `master_items.drive_image_id` / `expense_attachments.drive_file_id`);
+the business logo is the only Supabase Storage object (`logos` bucket, read for
+invoice PDFs). The web app **renders** photos and bill attachments (thumbnail +
+lightbox, attachment chips with remove) but has **no upload path** — photos and bills
+are added from the Android app; the web dialogs show a localized
+"add from the mobile app" hint instead of a picker (see `docs/decisions.md`).
+
 ## Tech
 
 Next.js 15 (App Router) · TypeScript (strict) · MUI v6 (Material-You-like theme,

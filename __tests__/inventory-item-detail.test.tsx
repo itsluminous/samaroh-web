@@ -1,6 +1,7 @@
 // Item detail page: header with FIFO stock/value, newest-first transaction
-// table windowed 20/page with Load more + "Showing N of M", and Add/Remove
-// entry points opening the transaction dialog pre-selected to the item.
+// table windowed 20/page with Load more + "Showing N of M", and the fixed
+// bottom-bar Add/Remove buttons (inventory palette, gated on
+// inventory.create) opening the transaction dialog pre-selected to the item.
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
@@ -37,14 +38,31 @@ jest.mock('@/lib/hooks/useBusiness', () => ({
   }),
 }));
 
+// Owner: the bottom-bar Add/Remove buttons (inventory.create) are visible.
+jest.mock('@/lib/permissions/useMembership', () => ({
+  useMembership: () => ({
+    supabase: {},
+    business: { id: 'b1', name: 'Biz' },
+    userId: 'u1',
+    isOwner: true,
+    permissions: {},
+    loading: false,
+    error: null,
+    refresh: jest.fn(),
+  }),
+}));
+
 jest.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
 jest.mock('@/app/[locale]/(app)/inventory/_lib/queries', () => ({
   InsufficientStockError: class InsufficientStockError extends Error {},
+  HistoricalNegativeStockError: class HistoricalNegativeStockError extends Error {},
   recordAddTransaction: jest.fn().mockResolvedValue(undefined),
   recordRemoveTransaction: jest.fn().mockResolvedValue(0),
+  updateInventoryTransaction: jest.fn().mockResolvedValue(undefined),
+  deleteInventoryTransaction: jest.fn().mockResolvedValue(undefined),
   fetchMasterItem: jest.fn(() => Promise.resolve(item)),
   fetchItemTransactions: jest.fn(() => Promise.resolve(transactions)),
   fetchMasterItems: jest.fn(() => Promise.resolve([item])),

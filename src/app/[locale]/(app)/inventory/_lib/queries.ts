@@ -13,11 +13,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   computeCurrentInventory,
   planFifoRemoval,
+  replayFifo,
   type CurrentInventoryRow,
   type FifoTransaction,
   type OpenLot,
+  type ReplayUpdate,
 } from '@/lib/inventory/fifo';
-import { insertWithOutbox } from '@/lib/outbox/mutate';
+import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
 
 export interface MasterItemRecord {
   id: string;
@@ -322,6 +324,172 @@ export async function recordRemoveTransaction(
     }
   }
   return plan.removedValue;
+}
+
+/**
+ * Raised when an edit/delete would make some historical remove exceed the
+ * stock available at its point in time (stock would go negative in the past).
+ */
+export class HistoricalNegativeStockError extends Error {
+  constructor() {
+    super('historical stock would go negative');
+    this.name = 'HistoricalNegativeStockError';
+  }
+}
+
+/** One item's live transactions in the pure-FIFO shape the replay consumes. */
+async function fetchItemFifoTransactions(
+  supabase: SupabaseClient,
+  businessId: string,
+  itemId: string,
+): Promise<FifoTransaction[]> {
+  const txns = await fetchItemTransactions(supabase, businessId, itemId);
+  return txns.map((txn) => ({
+    id: txn.id,
+    masterItemId: itemId,
+    transactionType: txn.transactionType,
+    quantity: txn.quantity,
+    unitPrice: txn.unitPrice,
+    remainingQuantity: txn.remainingQuantity,
+    transactionDate: txn.transactionDate,
+  }));
+}
+
+/**
+ * Persists a replay's column patches through the outbox-aware update path
+ * (offline queues + guest Dexie both work unchanged). `baseUpdatedAt` is null:
+ * FIFO columns are derived state, so replay applies them blindly.
+ */
+async function persistReplayUpdates(
+  supabase: SupabaseClient,
+  updates: ReplayUpdate[],
+  label: string,
+): Promise<void> {
+  for (const update of updates) {
+    const patch: Record<string, unknown> = {};
+    if (update.remainingQuantity !== undefined) {
+      patch.remaining_quantity = update.remainingQuantity;
+    }
+    if (update.unitPrice !== undefined) {
+      patch.unit_price = update.unitPrice;
+    }
+    await updateWithOutbox(supabase, {
+      module: 'inventory',
+      table: 'inventory_transactions',
+      entityId: update.id,
+      patch,
+      baseUpdatedAt: null,
+      label,
+    });
+  }
+}
+
+/** Editable fields of an inventory transaction (item-detail row menu). */
+export interface TransactionEdit {
+  quantity: number;
+  /** New per-unit price — add transactions only (removes derive theirs from FIFO). */
+  unitPrice?: number;
+  notes: string | null;
+}
+
+/**
+ * Edits one transaction and replays the item's whole live history to rewrite
+ * every FIFO-derived column (add lots' remaining_quantity, removes'
+ * cost-per-unit). Throws {@link HistoricalNegativeStockError} — persisting
+ * NOTHING — when the edited history would drive stock negative at any point.
+ * All writes go through the outbox-aware update path.
+ */
+export async function updateInventoryTransaction(
+  supabase: SupabaseClient,
+  businessId: string,
+  itemId: string,
+  txnId: string,
+  edit: TransactionEdit,
+  label: string,
+): Promise<void> {
+  const txns = await fetchItemFifoTransactions(supabase, businessId, itemId);
+  const target = txns.find((txn) => txn.id === txnId);
+  if (!target) {
+    throw new Error('transaction not found');
+  }
+  const editedHistory = txns.map((txn) =>
+    txn.id === txnId
+      ? {
+          ...txn,
+          quantity: edit.quantity,
+          unitPrice:
+            txn.transactionType === 'add' && edit.unitPrice !== undefined
+              ? edit.unitPrice
+              : txn.unitPrice,
+        }
+      : txn,
+  );
+  const updates = replayFifo(editedHistory);
+  if (updates === null) {
+    throw new HistoricalNegativeStockError();
+  }
+
+  // The edited row's own patch merges the user fields with its replay fields.
+  const targetReplay = updates.find((u) => u.id === txnId);
+  const siblingUpdates = updates.filter((u) => u.id !== txnId);
+  const targetPatch: Record<string, unknown> = {
+    quantity: edit.quantity,
+    notes: edit.notes,
+  };
+  if (target.transactionType === 'add' && edit.unitPrice !== undefined) {
+    targetPatch.unit_price = edit.unitPrice;
+  }
+  if (targetReplay?.remainingQuantity !== undefined) {
+    targetPatch.remaining_quantity = targetReplay.remainingQuantity;
+  }
+  if (targetReplay?.unitPrice !== undefined) {
+    targetPatch.unit_price = targetReplay.unitPrice;
+  }
+
+  await updateWithOutbox(supabase, {
+    module: 'inventory',
+    table: 'inventory_transactions',
+    entityId: txnId,
+    patch: targetPatch,
+    baseUpdatedAt: null,
+    label,
+  });
+  await persistReplayUpdates(supabase, siblingUpdates, label);
+}
+
+/**
+ * Tombstone-deletes one transaction and replays the remaining live history
+ * (same engine as {@link updateInventoryTransaction}). Throws
+ * {@link HistoricalNegativeStockError} — persisting NOTHING — when removing
+ * the row would drive stock negative at any point (e.g. deleting an add lot
+ * that later removes already consumed). Sibling rewrites land first so a
+ * mid-way failure leaves the delete unapplied and the history consistent.
+ */
+export async function deleteInventoryTransaction(
+  supabase: SupabaseClient,
+  businessId: string,
+  itemId: string,
+  txnId: string,
+  label: string,
+): Promise<void> {
+  const txns = await fetchItemFifoTransactions(supabase, businessId, itemId);
+  const remaining = txns.filter((txn) => txn.id !== txnId);
+  if (remaining.length === txns.length) {
+    throw new Error('transaction not found');
+  }
+  const updates = replayFifo(remaining);
+  if (updates === null) {
+    throw new HistoricalNegativeStockError();
+  }
+  await persistReplayUpdates(supabase, updates, label);
+  await updateWithOutbox(supabase, {
+    module: 'inventory',
+    table: 'inventory_transactions',
+    entityId: txnId,
+    patch: { deleted_at: new Date().toISOString() },
+    baseUpdatedAt: null,
+    label,
+  });
 }
 
 /**

@@ -3,6 +3,7 @@
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -14,6 +15,10 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Snackbar from '@mui/material/Snackbar';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -36,14 +41,17 @@ import {
 } from '@/lib/inventory/fifo';
 import { useMembership } from '@/lib/permissions/useMembership';
 import {
+  deleteInventoryTransaction,
   deleteMasterItem,
   fetchItemTransactions,
   fetchMasterItem,
   fetchMasterItems,
+  HistoricalNegativeStockError,
   type ItemTransactionRecord,
   type MasterItemRecord,
 } from '../_lib/queries';
 import { unitLabelKey } from '../_lib/units';
+import EditTransactionDialog from './EditTransactionDialog';
 import ItemPhotoAvatar from './ItemPhotoAvatar';
 import MasterItemDialog from './MasterItemDialog';
 import RecordTransactionDialog from './RecordTransactionDialog';
@@ -59,8 +67,11 @@ interface ItemDetailProps {
  * Per-item detail page (spec §4.3): header with photo, name, unit, current
  * FIFO stock and total value; newest-first transaction table (date, add/remove
  * chip, qty, unit price, total price, notes) windowed 20 rows per page with a
- * Load-more button and a "Showing N of M" caption; Add/Remove buttons that
- * open the record-transaction dialog pre-selected to this item.
+ * Load-more button and a "Showing N of M" caption; a per-row three-dots menu
+ * (Edit gated on inventory.edit, Delete on inventory.delete) whose mutations
+ * replay the item's whole FIFO history; and a fixed bottom bar with big
+ * Add/Remove buttons (inventory.create) opening the record-transaction dialog
+ * pre-selected to this item.
  */
 export default function ItemDetail({ itemId }: ItemDetailProps) {
   const t = useTranslations('inventory');
@@ -73,6 +84,12 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   // inventory.manage_master_items (shared/permissions/permissions-schema.json).
   const { isOwner, permissions } = useMembership();
   const canManageItems = isOwner || permissions.inventory.manage_master_items;
+  // Recording transactions is a write — gated on inventory.create like the
+  // stock-list FAB (§3). The row menu splits per action: edit / delete.
+  const canCreate = isOwner || permissions.inventory.create;
+  const canEditTxn = isOwner || permissions.inventory.edit;
+  const canDeleteTxn = isOwner || permissions.inventory.delete;
+  const hasTxnMenu = canEditTxn || canDeleteTxn;
   // inventory.view_amounts (absent = true): false masks the stock value, unit
   // prices and transaction totals as ₹••• — quantities stay visible.
   const showAmounts = isOwner || permissions.inventory.view_amounts;
@@ -92,6 +109,15 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);
+  // Per-row three-dots menu + the edit/delete flows it opens.
+  const [txnMenu, setTxnMenu] = useState<{
+    anchorEl: HTMLElement;
+    txn: ItemTransactionRecord;
+  } | null>(null);
+  const [editingTxn, setEditingTxn] = useState<ItemTransactionRecord | null>(null);
+  const [deletingTxn, setDeletingTxn] = useState<ItemTransactionRecord | null>(null);
+  const [txnDeleteError, setTxnDeleteError] = useState<string | null>(null);
+  const [txnDeleting, setTxnDeleting] = useState(false);
 
   const reload = useCallback(async () => {
     if (!supabase || !businessId) {
@@ -193,6 +219,33 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
     }
   };
 
+  /**
+   * Deletes one transaction and lets the data layer replay the item's FIFO
+   * history; a delete that would drive historical stock negative is rejected
+   * with a localized message inside the confirm dialog (nothing persisted).
+   */
+  const handleTxnDelete = async () => {
+    if (!supabase || !businessId || !item || !deletingTxn) {
+      return;
+    }
+    setTxnDeleting(true);
+    setTxnDeleteError(null);
+    try {
+      await deleteInventoryTransaction(supabase, businessId, item.id, deletingTxn.id, item.name);
+      setDeletingTxn(null);
+      setTxnDeleting(false);
+      setSnack(t('item.txn_delete_success'));
+      void reload();
+    } catch (error) {
+      setTxnDeleteError(
+        error instanceof HistoricalNegativeStockError
+          ? t('item.txn_history_negative')
+          : t('error.save_failed'),
+      );
+      setTxnDeleting(false);
+    }
+  };
+
   if (businessLoading || loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -214,7 +267,7 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
   }
 
   return (
-    <Box sx={{ pb: 10 }}>
+    <Box sx={{ pb: 12 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <Tooltip title={t('item.back')}>
           <IconButton aria-label={t('item.back')} onClick={() => router.push('/inventory')}>
@@ -262,22 +315,6 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
             {t('stock.value_label')}
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={() => setDialog({ open: true, type: 'add' })}
-          >
-            {t('txn.add')}
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() => setDialog({ open: true, type: 'remove' })}
-          >
-            {t('txn.remove')}
-          </Button>
-        </Box>
       </Box>
 
       <Typography variant="subtitle1" component="h3" sx={{ mb: 0.5 }}>
@@ -306,6 +343,7 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
                   <TableCell align="right">{t('item.col_unit_price')}</TableCell>
                   <TableCell align="right">{t('item.col_total_price')}</TableCell>
                   <TableCell>{t('item.col_notes')}</TableCell>
+                  {hasTxnMenu && <TableCell />}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -330,6 +368,20 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
                       {showAmounts ? formatAmount(Math.round(txn.quantity * txn.unitPrice * 100) / 100) : <MaskedAmount />}
                     </TableCell>
                     <TableCell>{txn.notes ?? ''}</TableCell>
+                    {hasTxnMenu && (
+                      <TableCell align="right" sx={{ py: 0, pr: 0.5 }}>
+                        <IconButton
+                          size="small"
+                          aria-label={t('item.txn_more')}
+                          aria-haspopup="menu"
+                          onClick={(event) =>
+                            setTxnMenu({ anchorEl: event.currentTarget, txn })
+                          }
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -344,6 +396,111 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
           )}
         </>
       )}
+
+      {/* Big Add/Remove bottom bar (parity with the expenses gave/got bar),
+          in the inventory palette — primary/secondary, not red/green. */}
+      {canCreate ? (
+        <Box
+          sx={{
+            position: 'fixed',
+            left: { xs: 0, md: 220 },
+            right: 0,
+            bottom: { xs: 56, md: 0 },
+            display: 'flex',
+            gap: 2,
+            p: 2,
+            bgcolor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Button
+            fullWidth
+            size="large"
+            variant="contained"
+            color="primary"
+            onClick={() => setDialog({ open: true, type: 'add' })}
+          >
+            {t('txn.add')}
+          </Button>
+          <Button
+            fullWidth
+            size="large"
+            variant="contained"
+            color="secondary"
+            onClick={() => setDialog({ open: true, type: 'remove' })}
+          >
+            {t('txn.remove')}
+          </Button>
+        </Box>
+      ) : null}
+
+      <Menu
+        open={txnMenu !== null}
+        anchorEl={txnMenu?.anchorEl ?? null}
+        onClose={() => setTxnMenu(null)}
+      >
+        {canEditTxn && (
+          <MenuItem
+            onClick={() => {
+              setEditingTxn(txnMenu?.txn ?? null);
+              setTxnMenu(null);
+            }}
+          >
+            <ListItemIcon>
+              <EditIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{tCommon('action.edit')}</ListItemText>
+          </MenuItem>
+        )}
+        {canDeleteTxn && (
+          <MenuItem
+            onClick={() => {
+              setTxnDeleteError(null);
+              setDeletingTxn(txnMenu?.txn ?? null);
+              setTxnMenu(null);
+            }}
+          >
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{tCommon('action.delete')}</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+
+      <EditTransactionDialog
+        open={editingTxn !== null}
+        transaction={editingTxn}
+        supabase={supabase}
+        businessId={businessId}
+        itemId={item.id}
+        itemName={item.name}
+        onClose={() => setEditingTxn(null)}
+        onSaved={() => {
+          setEditingTxn(null);
+          setSnack(t('item.txn_update_success'));
+          void reload();
+        }}
+      />
+
+      <Dialog open={deletingTxn !== null} onClose={() => setDeletingTxn(null)} maxWidth="xs">
+        <DialogTitle>{t('item.txn_delete_title')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('item.txn_delete_message')}</DialogContentText>
+          {txnDeleteError && (
+            <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+              {txnDeleteError}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeletingTxn(null)}>{tCommon('action.cancel')}</Button>
+          <Button color="error" variant="contained" disabled={txnDeleting} onClick={handleTxnDelete}>
+            {tCommon('action.delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <RecordTransactionDialog
         open={dialog.open}

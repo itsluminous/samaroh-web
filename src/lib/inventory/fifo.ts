@@ -117,6 +117,99 @@ export function planFifoRemoval(openLots: OpenLot[], quantity: number): FifoRemo
   return { consumptions, removedValue: round2(removedValue) };
 }
 
+/**
+ * Column patch produced by a FIFO replay for one stored transaction row.
+ * `remainingQuantity` rewrites an add lot's open remainder (or pins a
+ * remove's remainder to 0); `unitPrice` rewrites a remove's derived
+ * FIFO-cost-per-unit. Only fields that differ from the stored values are set.
+ */
+export interface ReplayUpdate {
+  id: string;
+  remainingQuantity?: number;
+  unitPrice?: number;
+}
+
+/**
+ * Replays ONE item's live transactions chronologically (transaction_date
+ * ascending, id as the deterministic tie-break) and recomputes every
+ * FIFO-derived column from scratch: each add lot's `remaining_quantity`
+ * (consumed oldest-first by later removes) and each remove's `unit_price`
+ * (its FIFO cost per removed unit — informational, never a lot).
+ *
+ * This is the edit/delete engine: callers apply the mutation in memory
+ * (drop the deleted row / swap the edited row's quantity, unit price or
+ * date) and pass the WOULD-BE history here. Returns the minimal set of
+ * column patches vs the values carried on the input rows, or **null when
+ * the history is invalid** — some remove would exceed the stock available
+ * at its point in time (historical negative stock), so the mutation must
+ * be rejected.
+ */
+export function replayFifo(transactions: FifoTransaction[]): ReplayUpdate[] | null {
+  const sorted = [...transactions].sort((a, b) =>
+    a.transactionDate < b.transactionDate
+      ? -1
+      : a.transactionDate > b.transactionDate
+        ? 1
+        : a.id < b.id
+          ? -1
+          : 1,
+  );
+
+  const lots = new Map<string, { remaining: number; unitPrice: number }>();
+  const removeCostPerUnit = new Map<string, number>();
+
+  for (const txn of sorted) {
+    if (txn.transactionType === 'add') {
+      lots.set(txn.id, { remaining: round3(txn.quantity), unitPrice: txn.unitPrice });
+      continue;
+    }
+    let need = round3(txn.quantity);
+    let cost = 0;
+    // Map preserves insertion order == chronological order == FIFO order.
+    for (const lot of lots.values()) {
+      if (need <= QTY_EPSILON) {
+        break;
+      }
+      if (lot.remaining <= QTY_EPSILON) {
+        continue;
+      }
+      const consumed = Math.min(need, lot.remaining);
+      lot.remaining = round3(lot.remaining - consumed);
+      need = round3(need - consumed);
+      cost += consumed * lot.unitPrice;
+    }
+    if (need > QTY_EPSILON) {
+      // Historical negative stock — the mutation that produced this history
+      // must be rejected.
+      return null;
+    }
+    removeCostPerUnit.set(txn.id, txn.quantity > 0 ? round2(cost / txn.quantity) : 0);
+  }
+
+  const updates: ReplayUpdate[] = [];
+  for (const txn of sorted) {
+    const patch: ReplayUpdate = { id: txn.id };
+    if (txn.transactionType === 'add') {
+      const remaining = round3(lots.get(txn.id)!.remaining);
+      if (remaining !== round3(txn.remainingQuantity)) {
+        patch.remainingQuantity = remaining;
+      }
+    } else {
+      const costPerUnit = removeCostPerUnit.get(txn.id)!;
+      if (costPerUnit !== round2(txn.unitPrice)) {
+        patch.unitPrice = costPerUnit;
+      }
+      if (round3(txn.remainingQuantity) !== 0) {
+        patch.remainingQuantity = 0;
+      }
+    }
+    if (patch.remainingQuantity !== undefined || patch.unitPrice !== undefined) {
+      updates.push(patch);
+    }
+  }
+  return updates;
+}
+
 export interface MasterItemLike {
   id: string;
   name: string;

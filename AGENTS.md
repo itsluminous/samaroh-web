@@ -84,8 +84,10 @@ degrade gracefully, middleware skips protection). Never remove that guard.
 - `src/theme/theme.ts` — Material-You-like MUI theme from `shared/brand/palette.md`
   (light/dark/system via CSS variables).
 - `src/components/` — `AppShell` (left rail / bottom nav + toolbar with
-  `SyncIndicator`), `ChipRow` (scrollable single-line filter pills), `GuestBanner`,
-  `GlassFab`, `LocaleSwitcher`, `SignInForm`, `ServiceWorkerRegistrar`.
+  `SyncIndicator`), `ChipRow` (scrollable single-line filter pills),
+  `ColorSwatchPicker`, `GuestBanner`, `GlassFab`, `LocaleSwitcher`,
+  `MaskedAmount` (view_amounts masking), `SectionGuard` (route permission
+  guard), `SignInForm`, `ServiceWorkerRegistrar`.
 - `src/app/[locale]/(app)/{booking,expenses,inventory,menu}/` — the 4 sections
   (inventory includes the per-item detail page with permission-gated edit/delete via
   the shared `MasterItemDialog`).
@@ -146,6 +148,9 @@ No two concurrent agents edit the same directory. Shared components
   task. Never force-push. Never push without being asked.
 - Run the full local gate before every commit.
 - TypeScript strict; no `any` escapes without a comment explaining why.
+- **Test layout**: component/integration suites live in the root `__tests__/`
+  directory; pure-logic unit tests may colocate next to their module under
+  `src/**/__tests__/`. Don't mix a third convention.
 - **Fragments per namespace**: new string keys go in the shared repo's
   `strings/fragments/<namespace>.{en,hi}.json` (web-specific keys in the `web-*`
   fragments). Never edit another feature's fragment or the base catalog.

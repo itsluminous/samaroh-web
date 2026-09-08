@@ -12,8 +12,8 @@ Supabase project with the Android app, so data is live-identical across both cli
 |---|---|---|
 | 📅 Booking | calendar-first booking management, payments & dues, date blocks, invoice PDF (shared layout contract) | ✅ |
 | 📒 Expenses | party ledger ("You gave / You got"), business/personal party flag, party edit + cascade delete, scrollable filter chips | ✅ |
-| 📦 Inventory | stock, transactions, masterlist with fuzzy duplicate chips, per-item detail page with history + permission-gated edit/delete, square photo crop | ✅ |
-| ☰ Menu | settings (language/theme/business/sync status), 9 reports incl. personal expenses + TOTAL rows + machine-readable CSV, members, about | ✅ |
+| 📦 Inventory | stock, transactions, masterlist with fuzzy duplicate chips, per-item detail page with history + permission-gated edit/delete, Drive-backed item photos with in-app lightbox | ✅ |
+| ☰ Menu | settings (language/theme/business/booking-form fields/sync status), 10 reports incl. personal expenses + TOTAL rows + machine-readable CSV, members, about | ✅ |
 | 🔐 Auth | email sign-in + **sign-up** with first-run business creation, **guest mode** ("try without an account") | ✅ |
 
 An animated cloud **sync indicator** in the app bar shows pending offline writes and

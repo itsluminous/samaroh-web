@@ -419,3 +419,77 @@ repo interprets it where the spec leaves web-specific latitude.)
   Google session, not anyone-with-link images, so the public thumbnail
   endpoints the lightbox depends on would 403 there; owner feedback was
   scoped to inventory photos.
+
+- **Expense-attachment picker removed — display + remove only on web**
+  (2026-09-08, cleanup wave; the expenses counterpart of the item-photo
+  decision above). The entry dialog's Camera/Gallery/PDF pills only ever
+  inserted METADATA rows (`drive_file_id: null`) — web has no Drive upload
+  path, so the picked bytes were silently discarded and the chips stayed
+  "Upload pending" forever: a data-loss trap worse than honest absence. The
+  picker (and the `insertAttachments` metadata insert in `_lib/queries.ts`)
+  is deleted and replaced by the localized hint
+  `expenses.entry.attachments_mobile_hint` ("Attach bills from the mobile
+  app"). Existing attachments still render as chips — pending badge for rows
+  the Android app has not uploaded yet — and can still be removed (a
+  legitimate metadata tombstone). The future fix stays the reserved
+  server-side Drive upload route (an API route holding Drive credentials),
+  same as item photos.
+
+- **Sign-out wipes the Dexie outbox** (2026-09-08, web mirror of Android
+  ADR-040). Queued writes belong to the session that made them: leaving them
+  behind lets a later account (or the same user in a different business) on
+  the same browser replay them — RLS rejects cross-business rows, but only
+  after producing confusing error entries in Sync status. Both sign-out
+  triggers (app-bar icon and the menu identity row's confirmed sign-out) now
+  run `clearOutbox()` (outbox + last-sync marker, `src/lib/outbox/outbox.ts`)
+  before posting to `/auth/sign-out`. The identity row's confirm dialog
+  already warns with the pending count — confirming now means "discard them",
+  which the wipe makes true. **Guest-mode local data intentionally
+  survives**: the guest contract keeps it on-device for re-entry, and the
+  guest client never queues into the outbox anyway.
+
+- **Manual invoice numbers in the booking form** (2026-09-08, parity with
+  Android ADR-020 #4). Optional text field: unique per business
+  (`invoiceNumberExists` in `src/lib/booking/repo.ts`, tombstoned bookings
+  excluded; a duplicate blocks the save with
+  `booking.form.invoice_number_duplicate`), frozen read-only once
+  `bookings.invoice_number` is set — manually or by the first-invoice
+  allocator, which keeps returning an existing number without consuming a
+  counter value. Blank leaves `null` so the allocator assigns
+  `{prefix}-{YYYY}-{counter}` on first invoice as before. The uniqueness
+  check is best-effort like the overlap check (offline it cannot run; the
+  invoice flow itself is online-only on web).
+
+- **Booking-form field visibility prefs** (2026-09-08, parity with Android
+  ADR-020 #5). Device-local booleans decide whether the booking form shows
+  the security deposit (default OFF — Android's opt-in default now applies
+  on web too), source chips and event times (both default ON). Stored in
+  localStorage (`src/lib/booking/formFieldPrefs.ts`, key names mirror the
+  Android DataStore keys), edited from Settings → "Booking form fields"
+  (three switches). Hidden fields keep their loaded values on save — editing
+  a booking with a deposit while the field is hidden never zeroes it.
+
+- **Tentative bookings render 👤** (2026-09-08, parity with Android ADR-020
+  #3). `displayIcon` (`src/lib/booking/displayIcon.ts`) returns 👤 for
+  tentative bookings regardless of event type; the booking-title and
+  calendar-pill helpers use it, covering agenda rows, day chooser, card and
+  detail titles and month-grid pills. Presentation-only: the stored
+  `event_icon` is untouched (confirming reverts automatically), and invoice
+  PDFs/receipts and WhatsApp messages keep the stored icon — the same scope
+  Android applies.
+
+- **Cleanup wave 2026-09-08** (audit-driven; no contract changes).
+  - `PlaceholderScreen` (WW-0 scaffold, zero references) and the unused
+    `dexie-react-hooks` dependency deleted. `@emotion/cache` stays pinned in
+    package.json: it is a direct peer dependency of `@mui/material-nextjs`'
+    AppRouterCacheProvider, not an unused dep.
+  - The About page reads its source-code URL from the shared catalog
+    (`menu.about.source_code_url_web`, non-translatable data key — ADR-034
+    pattern) instead of a hardcoded constant; Android's About keeps using
+    `menu.about.source_code_url`.
+  - "Delete permanently" on cancelled bookings is now an OUTLINED error
+    button, matching the ADR-054 addendum spec (was `variant="text"`, a
+    cosmetic drift from the Android M3 treatment).
+  - Test-layout convention documented in AGENTS.md: component/integration
+    suites live in the root `__tests__/`; pure-logic unit tests may colocate
+    under `src/**/__tests__/`. Existing files already match — no moves.

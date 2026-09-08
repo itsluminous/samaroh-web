@@ -506,3 +506,20 @@ repo interprets it where the spec leaves web-specific latitude.)
   mobile app", the `inventory.master.photo_mobile_hint` pattern). Guest mode:
   the local client has no storage, so guests always see the placeholder +
   hint.
+
+- **List sorting parity** (2026-09-08, Android-parity feature). The Inventory
+  stock list and the Expenses party list get a sort control (`SwapVert` icon
+  + menu, `src/components/SortMenuButton.tsx`) with three orders — default
+  **last updated** (newest first: a party's most recent entry `created_at`, a
+  stock item's last transaction), Name A to Z, Name Z to A. Labels reuse the
+  cross-platform `common.sort.*` keys (`open`/`last_updated`/`name_asc`/
+  `name_desc`) added to the shared `designsystem` fragment by the Android
+  track; the web `ListSortOrder` values are deliberately the key leaf names.
+  Interpretations: the choice is a **device-local UI pref** persisted per
+  list in localStorage (`samaroh_inventory_stock_sort`,
+  `samaroh_expenses_party_sort` — same contract as the booking view toggle),
+  never synced; zero-stock items stay grouped dimmed at the END with the
+  chosen order applied *within* each group (so "last updated" never lets a
+  recently-emptied item jump above in-stock rows); search filtering is
+  orthogonal to the sort choice. Undated rows (no entries / never transacted)
+  sort last under "last updated", ties fall back to A to Z (`src/lib/listSort.ts`).

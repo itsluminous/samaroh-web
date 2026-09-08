@@ -1,9 +1,10 @@
 /**
  * Zero-stock rows on the current-stock list: master items with zero stock
  * (or no transactions at all) are no longer hidden — they are appended after
- * the in-stock rows, alphabetical within each group, rendered dimmed with
- * 0 qty and ₹0 value, and remain searchable. The empty state only shows when
- * the master list itself is empty.
+ * the in-stock rows (sorted by the chosen list order within each group;
+ * default is last-updated, see list-sort-control.test.tsx), rendered dimmed
+ * with 0 qty and ₹0 value, and remain searchable. The empty state only shows
+ * when the master list itself is empty.
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
@@ -43,7 +44,9 @@ function row(overrides: Partial<CurrentInventoryRow> & { name: string }): Curren
 }
 
 // Deliberately unsorted and interleaved: display must be in-stock (Chairs,
-// Tables) then zero-stock (Bowls, Plates), alphabetical within each group.
+// Tables — undated rows tie-break A to Z under the default last-updated
+// sort) then zero-stock (Plates has a transaction, so it precedes
+// never-transacted Bowls).
 const rows: CurrentInventoryRow[] = [
   row({ name: 'Tables', currentQuantity: 10, currentValue: 5000 }),
   // Zero stock after full FIFO removal — has a last transaction.
@@ -83,10 +86,10 @@ describe('CurrentStockList zero-stock rows', () => {
     fetchCurrentInventory.mockResolvedValue(rows);
   });
 
-  it('appends zero-stock items after in-stock items, alphabetical within group', async () => {
+  it('appends zero-stock items after in-stock items, sorted within each group', async () => {
     renderList();
     await screen.findByText('Chairs');
-    expect(listedNames()).toEqual(['Chairs', 'Tables', 'Bowls', 'Plates']);
+    expect(listedNames()).toEqual(['Chairs', 'Tables', 'Plates', 'Bowls']);
   });
 
   it('renders zero-stock rows dimmed with 0 qty and ₹0 value', async () => {

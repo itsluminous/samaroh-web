@@ -20,7 +20,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
 import MaskedAmount from '@/components/MaskedAmount';
+import SortMenuButton from '@/components/SortMenuButton';
 import { formatAmount } from '@/lib/format/amount';
+import {
+  PARTY_LIST_SORT_STORAGE_KEY,
+  listSortComparator,
+  readListSort,
+  writeListSort,
+  type ListSortOrder,
+} from '@/lib/listSort';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
 import { fetchBusinessExpenses, fetchParties, PARTY_DELETED_NOTICE_KEY, type ExpenseRecord, type PartyRecord } from '../_lib/queries';
@@ -32,7 +40,7 @@ interface PartyListRow {
   lastEntryAt: string | null;
 }
 
-/** Expenses home (spec §4.2): gave/got totals, search, party list, add person. */
+/** Expenses home (spec §4.2): gave/got totals, search, sorted party list, add person. */
 export default function ExpensesHome() {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
@@ -57,8 +65,16 @@ export default function ExpensesHome() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ListSortOrder>(() =>
+    readListSort(PARTY_LIST_SORT_STORAGE_KEY),
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
+
+  const changeSort = useCallback((order: ListSortOrder) => {
+    setSort(order);
+    writeListSort(PARTY_LIST_SORT_STORAGE_KEY, order);
+  }, []);
 
   // Party deletion navigates back here; the ledger leaves the name behind.
   useEffect(() => {
@@ -129,8 +145,16 @@ export default function ExpensesHome() {
           netBalance: computeNetBalance(partyExpenses.map(toLedgerEntry)),
           lastEntryAt,
         };
-      });
-  }, [parties, expenses, search]);
+      })
+      // Chosen order (default: most recent entry first). The sort choice
+      // never affects which rows the search matches.
+      .sort(
+        listSortComparator<PartyListRow>(sort, {
+          name: (row) => row.party.name,
+          lastActivityAt: (row) => row.lastEntryAt,
+        }),
+      );
+  }, [parties, expenses, search, sort]);
 
   if (businessLoading || loading) {
     return (
@@ -169,16 +193,18 @@ export default function ExpensesHome() {
         </Box>
       </Card>
 
-      <TextField
-        fullWidth
-        size="small"
-        type="search"
-        placeholder={t('home.search_placeholder')}
-        inputProps={{ 'aria-label': t('home.search_placeholder') }}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        sx={{ mb: 1 }}
-      />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+        <TextField
+          fullWidth
+          size="small"
+          type="search"
+          placeholder={t('home.search_placeholder')}
+          inputProps={{ 'aria-label': t('home.search_placeholder') }}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <SortMenuButton value={sort} onChange={changeSort} />
+      </Box>
 
       {parties.length === 0 ? (
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>

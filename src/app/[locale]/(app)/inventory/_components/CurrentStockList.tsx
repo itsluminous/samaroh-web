@@ -20,7 +20,15 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
+import SortMenuButton from '@/components/SortMenuButton';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
+import {
+  STOCK_LIST_SORT_STORAGE_KEY,
+  listSortComparator,
+  readListSort,
+  writeListSort,
+  type ListSortOrder,
+} from '@/lib/listSort';
 import { useMembership } from '@/lib/permissions/useMembership';
 import type { CurrentInventoryRow } from '@/lib/inventory/fifo';
 import {
@@ -35,7 +43,8 @@ import RecordTransactionDialog from './RecordTransactionDialog';
 /**
  * Current stock list (spec §4.3): item photo rendered from Google Drive by
  * `drive_image_id` (tap opens the Drive full view), name, qty + unit, FIFO
- * value, last-updated relative time, search, master-list toggle,
+ * value, last-updated relative time, search, sort menu (last updated /
+ * A to Z / Z to A, persisted per list), master-list toggle,
  * record-transaction FAB.
  */
 export default function CurrentStockList() {
@@ -64,8 +73,16 @@ export default function CurrentStockList() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ListSortOrder>(() =>
+    readListSort(STOCK_LIST_SORT_STORAGE_KEY),
+  );
   const [txnOpen, setTxnOpen] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);
+
+  const changeSort = useCallback((order: ListSortOrder) => {
+    setSort(order);
+    writeListSort(STOCK_LIST_SORT_STORAGE_KEY, order);
+  }, []);
 
   const reload = useCallback(async () => {
     if (!supabase || !businessId) {
@@ -106,19 +123,24 @@ export default function CurrentStockList() {
   );
 
   // Zero-stock / no-transaction master items are not hidden: they are
-  // appended after the in-stock rows (alphabetical within each group),
-  // dimmed, with 0 qty and ₹0 value, and stay searchable.
+  // appended after the in-stock rows (sorted by the chosen order within each
+  // group), dimmed, with 0 qty and ₹0 value, and stay searchable. The sort
+  // choice never affects which rows the search matches.
   const { inStockRows, zeroStockRows } = useMemo(() => {
     const query = search.trim().toLowerCase();
     const matches = (row: CurrentInventoryRow) =>
       query === '' || row.name.toLowerCase().includes(query);
-    const byName = (a: CurrentInventoryRow, b: CurrentInventoryRow) =>
-      a.name.localeCompare(b.name);
+    const comparator = listSortComparator<CurrentInventoryRow>(sort, {
+      name: (row) => row.name,
+      lastActivityAt: (row) => row.lastTransactionAt,
+    });
     return {
-      inStockRows: rows.filter((row) => row.currentQuantity > 0 && matches(row)).sort(byName),
-      zeroStockRows: rows.filter((row) => row.currentQuantity <= 0 && matches(row)).sort(byName),
+      inStockRows: rows.filter((row) => row.currentQuantity > 0 && matches(row)).sort(comparator),
+      zeroStockRows: rows
+        .filter((row) => row.currentQuantity <= 0 && matches(row))
+        .sort(comparator),
     };
-  }, [rows, search]);
+  }, [rows, search, sort]);
 
   // Shared row renderer; `dimmed` marks the zero-stock group, which always
   // shows 0 qty and ₹0 value at reduced opacity.
@@ -180,6 +202,7 @@ export default function CurrentStockList() {
         <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
           {t('stock.title')}
         </Typography>
+        <SortMenuButton value={sort} onChange={changeSort} />
         <Tooltip title={t('stock.open_masterlist')}>
           <IconButton
             aria-label={t('stock.open_masterlist')}

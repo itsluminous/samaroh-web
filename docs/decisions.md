@@ -523,3 +523,48 @@ repo interprets it where the spec leaves web-specific latitude.)
   recently-emptied item jump above in-stock rows); search filtering is
   orthogonal to the sort choice. Undated rows (no entries / never transacted)
   sort last under "last updated", ties fall back to A to Z (`src/lib/listSort.ts`).
+
+- **Inventory transaction edit/delete = full FIFO replay** (2026-09-08,
+  Android-parity feature). The item-detail transaction rows get a three-dots
+  menu — Edit gated on `inventory.edit`, Delete on `inventory.delete` (§3
+  hidden-not-disabled). Because every FIFO-derived column downstream of a
+  mutated row becomes stale, an edit/delete **replays the item's whole live
+  history chronologically** (`replayFifo` in `src/lib/inventory/fifo.ts`:
+  `transaction_date` ascending, id as the deterministic tie-break) and
+  rewrites every add lot's `remaining_quantity` plus every remove's derived
+  cost-per-unit (`unit_price`), persisting only changed columns through the
+  outbox-aware `updateWithOutbox` path — so offline queues and guest Dexie
+  work unchanged, and a delete is the usual `deleted_at` tombstone (applied
+  AFTER the sibling rewrites, so a mid-way failure leaves the delete
+  unapplied rather than the history inconsistent). A mutation whose replay
+  would make some historical remove exceed the stock available at its point
+  in time is **rejected before anything persists**
+  (`HistoricalNegativeStockError` → the localized
+  `inventory.item.txn_history_negative`). Editable fields: quantity, unit
+  price (adds only — removes derive theirs), notes; dates stay fixed.
+  Interpretation: replay reads the item's current live rows at mutation time
+  (last-write-wins with concurrent editors, same §8 posture as other web
+  writes). Keys live in the web `web-expinv` fragment
+  (`inventory.item.txn_*`) — the Android track had not published row-menu
+  keys at implementation time; fold into cross-platform keys if/when it does.
+
+- **Item-detail Add/Remove bottom bar** (2026-09-08, expenses-parity layout).
+  The header Add/Remove buttons became a fixed bottom bar styled like the
+  party ledger's gave/got bar, but in the **inventory palette** —
+  Add = `primary` (the section's FAB color), Remove = `secondary` — NOT the
+  expenses red/green, which encode money direction, not stock direction. The
+  bar is gated on `inventory.create`, matching the stock-list FAB.
+
+- **Responsive section FABs** (2026-09-08). The expenses add-party and
+  inventory record-transaction FABs are icon-only (circular) below the
+  shell's `md` boundary and extended (icon + text) at `md` and up
+  (`src/components/ResponsiveGlassFab.tsx`), keeping the GlassFab glass
+  styling and the aria-label in both modes.
+
+- **Report amount autoshrink** (2026-09-08). Report-table number cells that
+  would wrap instead shrink their font-size per cell to fit one line
+  (`AutoShrinkText` in `menu/_components/`: scrollWidth-vs-clientWidth
+  measurement re-run via ResizeObserver, floored at 9px), totals rows
+  included. "Number cell" is detected by content — digits/₹/• and **no
+  letters in any script** — so month labels, names, the TOTAL label and
+  quantity-with-unit cells keep wrapping normally.

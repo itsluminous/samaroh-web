@@ -493,3 +493,16 @@ repo interprets it where the spec leaves web-specific latitude.)
   - Test-layout convention documented in AGENTS.md: component/integration
     suites live in the root `__tests__/`; pure-logic unit tests may colocate
     under `src/**/__tests__/`. Existing files already match — no moves.
+
+- **Business logo on web is read-only** (2026-09-08, owner feedback: the web
+  business profile had no image). The Settings → business profile card shows
+  the logo fetched from the private `logos` bucket via the same
+  `fetchLogoPng` helper the invoice header uses
+  (`src/app/[locale]/(app)/menu/_components/BusinessLogoAvatar.tsx`), with a
+  business-name-initials placeholder when absent. The web app deliberately
+  has **no logo upload path** — capture/crop lives in the Android app and the
+  bucket write policy is scoped to it — so the card pairs the preview with
+  the localized `settings.business.logo_mobile_hint` ("change it from the
+  mobile app", the `inventory.master.photo_mobile_hint` pattern). Guest mode:
+  the local client has no storage, so guests always see the placeholder +
+  hint.

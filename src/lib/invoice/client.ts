@@ -90,7 +90,10 @@ export async function fetchInvoiceFonts(): Promise<{ regular: ArrayBuffer; bold:
 }
 
 /** Optional header logo from the private `logos` bucket. */
-export async function fetchLogoPng(db: SupabaseClient, business: Business): Promise<Uint8Array | undefined> {
+export async function fetchLogoPng(
+  db: SupabaseClient,
+  business: Pick<Business, 'logo_path'>,
+): Promise<Uint8Array | undefined> {
   if (!business.logo_path || !business.logo_path.toLowerCase().endsWith('.png')) {
     return undefined;
   }

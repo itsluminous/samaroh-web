@@ -37,6 +37,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { ChangeEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from '@/i18n/navigation';
+import BusinessLogoAvatar from './BusinessLogoAvatar';
 import {
   DEFAULT_FORM_FIELD_PREFS,
   readFormFieldPrefs,
@@ -217,10 +218,11 @@ interface BusinessLike {
   business_type: string;
   address: string | null;
   owner_name: string;
+  logo_path: string | null;
   invoice_prefix: string;
 }
 
-function BusinessProfileCard({
+export function BusinessProfileCard({
   supabase,
   business,
   onSaved,
@@ -289,6 +291,14 @@ function BusinessProfileCard({
         {t('title')}
       </Typography>
       <Stack spacing={2}>
+        {/* Read-only logo preview (logos bucket, same fetch as the invoice
+            header); no upload path on web — changed from the mobile app. */}
+        <Stack direction="row" spacing={2} alignItems="center">
+          <BusinessLogoAvatar supabase={supabase} business={business} size={64} />
+          <Typography variant="body2" color="text.secondary">
+            {t('logo_mobile_hint')}
+          </Typography>
+        </Stack>
         <TextField label={t('name')} value={form.name} onChange={set('name')} required />
         <TextField label={t('type')} value={form.business_type} onChange={set('business_type')} />
         <TextField label={t('address')} value={form.address} onChange={set('address')} multiline minRows={2} />

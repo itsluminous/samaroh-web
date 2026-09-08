@@ -50,6 +50,7 @@ function renderForm({
         presets={presets}
         isOwner
         onCheckOverlaps={async () => ({ conflictCount: 0, blocked: false })}
+        onCheckInvoiceNumber={async () => false}
         onSave={onSave}
         onClose={() => {}}
       />

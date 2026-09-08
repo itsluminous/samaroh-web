@@ -35,6 +35,7 @@ import {
   fetchBusinessContext,
   fetchMonthData,
   fetchOverlaps,
+  invoiceNumberExists,
   recordPayment,
   removeDateBlock,
   restoreBooking,
@@ -263,6 +264,17 @@ export default function BookingScreen() {
         conflictCount: findConflicts(bookings, start, end, excludeId).length,
         blocked: findBlockingBlocks(blocks, start, end).length > 0,
       };
+    },
+    [db, ctx],
+  );
+
+  // Per-business uniqueness for MANUAL invoice numbers (ADR-020 #4 parity).
+  const checkInvoiceNumber = useCallback(
+    async (invoiceNumber: string, excludeId?: string) => {
+      if (!db || !ctx) {
+        return false;
+      }
+      return invoiceNumberExists(db, ctx.business.id, invoiceNumber, excludeId);
     },
     [db, ctx],
   );
@@ -554,6 +566,7 @@ export default function BookingScreen() {
           presets={presets ?? fallbackPresets((key) => t(key))}
           isOwner={ctx.isOwner}
           onCheckOverlaps={checkOverlaps}
+          onCheckInvoiceNumber={checkInvoiceNumber}
           onSave={handleSave}
           onClose={() => setForm(null)}
         />

@@ -66,6 +66,7 @@ function makeInput(color: string | null): BookingInput {
     notes: null,
     status: 'confirmed',
     color,
+    invoice_number: null,
   };
 }
 

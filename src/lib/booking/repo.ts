@@ -182,6 +182,13 @@ export interface BookingInput {
   status: BookingStatus;
   /** Key from shared/booking-colors.json; null = default themed look. */
   color: string | null;
+  /**
+   * Optional MANUAL invoice number (ADR-020 #4 parity): unique per business,
+   * editable only while the stored value is null — once set (manually or by
+   * the first-invoice allocator) it is frozen and the form passes the
+   * existing value through unchanged.
+   */
+  invoice_number: string | null;
 }
 
 /**
@@ -212,7 +219,6 @@ export async function createBooking(
   });
   const booking: Booking = {
     ...row,
-    invoice_number: null,
     updated_by: null,
     created_at: now,
     updated_at: now,
@@ -387,6 +393,34 @@ export async function fetchOverlaps(
     bookings: ((bookingsRes.data ?? []) as Record<string, unknown>[]).map(normalizeBooking),
     blocks: (blocksRes.data ?? []) as DateBlock[],
   };
+}
+
+/**
+ * Per-business uniqueness check for MANUAL invoice numbers (ADR-020 #4
+ * parity — Android's `invoiceNumberExists`). Tombstoned bookings don't
+ * count (mirrors the Android DAO's `deleted_at IS NULL` filter).
+ */
+export async function invoiceNumberExists(
+  db: SupabaseClient,
+  businessId: string,
+  invoiceNumber: string,
+  excludingBookingId?: string,
+): Promise<boolean> {
+  let query = db
+    .from('bookings')
+    .select('id')
+    .eq('business_id', businessId)
+    .eq('invoice_number', invoiceNumber)
+    .is('deleted_at', null)
+    .limit(1);
+  if (excludingBookingId) {
+    query = query.neq('id', excludingBookingId);
+  }
+  const { data, error } = await query;
+  if (error) {
+    throw error;
+  }
+  return (data ?? []).length > 0;
 }
 
 /**

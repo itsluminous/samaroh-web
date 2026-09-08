@@ -51,6 +51,7 @@ export default function BookingForm({
   presets,
   isOwner,
   onCheckOverlaps,
+  onCheckInvoiceNumber,
   onSave,
   onClose,
 }: {
@@ -63,6 +64,8 @@ export default function BookingForm({
   presets: EventTypePreset[];
   isOwner: boolean;
   onCheckOverlaps: (start: string, end: string, excludeId?: string) => Promise<OverlapCheck>;
+  /** Per-business uniqueness check for a MANUAL invoice number (ADR-020 #4). */
+  onCheckInvoiceNumber: (invoiceNumber: string, excludeId?: string) => Promise<boolean>;
   onSave: (input: BookingInput, advance: number) => Promise<void>;
   onClose: () => void;
 }) {
@@ -96,6 +99,11 @@ export default function BookingForm({
   const [source, setSource] = useState<BookingSource | null>(initial?.source ?? null);
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  // Manual invoice number (ADR-020 #4 parity): editable only until a number
+  // is frozen (manually or by the first-invoice allocator).
+  const frozenInvoiceNumber = initial?.invoice_number ?? null;
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceNumberError, setInvoiceNumberError] = useState(false);
 
   const [nameError, setNameError] = useState(false);
   const [dateError, setDateError] = useState(false);
@@ -159,6 +167,9 @@ export default function BookingForm({
       notes: notes.trim() === '' ? null : notes.trim(),
       status,
       color,
+      // Frozen numbers pass through unchanged; otherwise the manual text (or
+      // null, leaving the first-invoice allocator to assign one later).
+      invoice_number: frozenInvoiceNumber ?? (invoiceNumber.trim() === '' ? null : invoiceNumber.trim()),
     };
   }
 
@@ -179,6 +190,20 @@ export default function BookingForm({
       return;
     }
     setSaving(true);
+    // Manual invoice numbers must be unique per business (ADR-020 #4). The
+    // check is best-effort like the overlap check below — offline it cannot
+    // run, and the invoice flow itself is online-only on web.
+    if (frozenInvoiceNumber === null && input.invoice_number !== null) {
+      try {
+        if (await onCheckInvoiceNumber(input.invoice_number, initial?.id)) {
+          setInvoiceNumberError(true);
+          setSaving(false);
+          return;
+        }
+      } catch {
+        // Best-effort; never lose a booking because the check failed.
+      }
+    }
     try {
       const overlap = await onCheckOverlaps(input.start_date, input.end_date, initial?.id);
       if (overlap.blocked) {
@@ -376,6 +401,26 @@ export default function BookingForm({
               </Box>
             </>
           )}
+
+          {/* Manual invoice number (ADR-020 #4): read-only once frozen. */}
+          <TextField
+            label={t('booking.form.invoice_number')}
+            value={frozenInvoiceNumber ?? invoiceNumber}
+            error={invoiceNumberError}
+            helperText={
+              invoiceNumberError
+                ? t('booking.form.invoice_number_duplicate')
+                : frozenInvoiceNumber === null
+                  ? t('booking.form.invoice_number_hint')
+                  : undefined
+            }
+            onChange={(e) => {
+              setInvoiceNumber(e.target.value);
+              setInvoiceNumberError(false);
+            }}
+            InputProps={{ readOnly: frozenInvoiceNumber !== null }}
+            fullWidth
+          />
 
           <Box>
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>

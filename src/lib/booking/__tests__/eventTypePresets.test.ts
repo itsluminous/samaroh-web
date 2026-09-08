@@ -211,6 +211,7 @@ describe('snapshot semantics: bookings keep their recorded label/icon', () => {
       notes: null,
       status: 'confirmed',
       color: null,
+      invoice_number: null,
     };
   }
 

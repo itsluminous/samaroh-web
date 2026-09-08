@@ -71,6 +71,16 @@ const advanceField = () => screen.queryByLabelText(new RegExp(en.booking.form.ad
 const duePreview = () => screen.queryByText(en.booking.form.due_auto);
 
 describe('BookingForm — marker kind hides the amount fields', () => {
+  beforeEach(() => {
+    // The deposit field is opt-in since the ADR-020 #5 field-prefs parity
+    // work (hidden by default); this suite exercises the FULL field set.
+    window.localStorage.setItem('samaroh_booking_form_show_security_deposit', 'true');
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
   it('selecting a marker preset hides total/deposit/advance and the due preview', () => {
     renderForm();
     expect(totalField()).toBeInTheDocument();

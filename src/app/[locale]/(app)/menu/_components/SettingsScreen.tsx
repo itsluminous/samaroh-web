@@ -27,6 +27,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -36,6 +37,12 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { ChangeEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from '@/i18n/navigation';
+import {
+  DEFAULT_FORM_FIELD_PREFS,
+  readFormFieldPrefs,
+  writeFormFieldPref,
+  type BookingFormFieldPrefs,
+} from '@/lib/booking/formFieldPrefs';
 import { useOutbox } from '@/lib/outbox/useOutbox';
 import { useMembership } from '@/lib/permissions/useMembership';
 
@@ -141,6 +148,9 @@ export default function SettingsScreen() {
         </List>
       </Paper>
 
+      {/* Booking-form field visibility (ADR-020 #5 parity, device-local). */}
+      <BookingFormFieldsSection />
+
       {canEditBusiness && supabase && business ? (
         <BusinessProfileCard
           supabase={supabase}
@@ -149,6 +159,55 @@ export default function SettingsScreen() {
         />
       ) : null}
     </Stack>
+  );
+}
+
+/**
+ * Which OPTIONAL fields the booking form shows (ADR-020 #5 parity):
+ * device-local localStorage booleans, read by the booking form. Deposit is
+ * opt-in (hidden by default); source and times are opt-out.
+ */
+function BookingFormFieldsSection() {
+  const t = useTranslations('settings.booking_form');
+  const [prefs, setPrefs] = useState<BookingFormFieldPrefs>(DEFAULT_FORM_FIELD_PREFS);
+  useEffect(() => {
+    setPrefs(readFormFieldPrefs());
+  }, []);
+
+  const toggle = (key: keyof BookingFormFieldPrefs) => (_e: ChangeEvent, checked: boolean) => {
+    writeFormFieldPref(key, checked);
+    setPrefs((p) => ({ ...p, [key]: checked }));
+  };
+
+  const rows: { key: keyof BookingFormFieldPrefs; label: string }[] = [
+    { key: 'showSecurityDeposit', label: t('show_deposit') },
+    { key: 'showSource', label: t('show_source') },
+    { key: 'showTimes', label: t('show_times') },
+  ];
+
+  return (
+    <Paper variant="outlined">
+      <List
+        disablePadding
+        subheader={
+          <ListItem divider>
+            <ListItemText primary={t('title')} secondary={t('subtitle')} />
+          </ListItem>
+        }
+      >
+        {rows.map((row, index) => (
+          <ListItem key={row.key} divider={index < rows.length - 1}>
+            <ListItemText primary={row.label} />
+            <Switch
+              edge="end"
+              checked={prefs[row.key]}
+              onChange={toggle(row.key)}
+              inputProps={{ 'aria-label': row.label }}
+            />
+          </ListItem>
+        ))}
+      </List>
+    </Paper>
   );
 }
 

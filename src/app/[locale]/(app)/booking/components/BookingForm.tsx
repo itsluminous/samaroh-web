@@ -24,9 +24,14 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { computePaid } from '@/lib/booking/due';
 import { findBookingColor } from '@/lib/booking/bookingColors';
+import {
+  DEFAULT_FORM_FIELD_PREFS,
+  readFormFieldPrefs,
+  type BookingFormFieldPrefs,
+} from '@/lib/booking/formFieldPrefs';
 import { findPresetForType, type EventTypePreset } from '@/lib/booking/eventTypePresets';
 import { formatRupees, parseAmount } from '@/lib/booking/money';
 import type { BookingInput } from '@/lib/booking/repo';
@@ -104,6 +109,12 @@ export default function BookingForm({
   const frozenInvoiceNumber = initial?.invoice_number ?? null;
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceNumberError, setInvoiceNumberError] = useState(false);
+  // Field-visibility prefs (ADR-020 #5, device-local): defaults on the server
+  // render, the persisted choice after mount (samaroh_booking_view pattern).
+  const [fieldPrefs, setFieldPrefs] = useState<BookingFormFieldPrefs>(DEFAULT_FORM_FIELD_PREFS);
+  useEffect(() => {
+    setFieldPrefs(readFormFieldPrefs());
+  }, []);
 
   const [nameError, setNameError] = useState(false);
   const [dateError, setDateError] = useState(false);
@@ -334,24 +345,27 @@ export default function BookingForm({
               fullWidth
             />
           </Stack>
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label={t('booking.form.start_time')}
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              fullWidth
-            />
-            <TextField
-              label={t('booking.form.end_time')}
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              fullWidth
-            />
-          </Stack>
+          {/* Event times — hideable via Settings → Booking form fields. */}
+          {fieldPrefs.showTimes ? (
+            <Stack direction="row" spacing={1}>
+              <TextField
+                label={t('booking.form.start_time')}
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+              />
+              <TextField
+                label={t('booking.form.end_time')}
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+              />
+            </Stack>
+          ) : null}
 
           {isMarkerType ? null : (
             <>
@@ -367,17 +381,21 @@ export default function BookingForm({
                   inputProps={{ inputMode: 'decimal' }}
                   fullWidth
                 />
-                <TextField
-                  label={t('booking.form.security_deposit')}
-                  value={deposit}
-                  error={amountError}
-                  onChange={(e) => {
-                    setDeposit(e.target.value);
-                    setAmountError(false);
-                  }}
-                  inputProps={{ inputMode: 'decimal' }}
-                  fullWidth
-                />
+                {/* Deposit — hidden by default (ADR-020 #5); the stored
+                    value survives a save while hidden. */}
+                {fieldPrefs.showSecurityDeposit ? (
+                  <TextField
+                    label={t('booking.form.security_deposit')}
+                    value={deposit}
+                    error={amountError}
+                    onChange={(e) => {
+                      setDeposit(e.target.value);
+                      setAmountError(false);
+                    }}
+                    inputProps={{ inputMode: 'decimal' }}
+                    fullWidth
+                  />
+                ) : null}
               </Stack>
               {mode === 'add' ? (
                 <TextField
@@ -422,22 +440,25 @@ export default function BookingForm({
             fullWidth
           />
 
-          <Box>
-            <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
-              {t('booking.form.source')}
-            </Typography>
-            <ChipRow>
-              {SOURCES.map((s) => (
-                <Chip
-                  key={s}
-                  label={t(`booking.source.${s}`)}
-                  variant={source === s ? 'filled' : 'outlined'}
-                  color={source === s ? 'primary' : 'default'}
-                  onClick={() => setSource(source === s ? null : s)}
-                />
-              ))}
-            </ChipRow>
-          </Box>
+          {/* Source chips — hideable via Settings → Booking form fields. */}
+          {fieldPrefs.showSource ? (
+            <Box>
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>
+                {t('booking.form.source')}
+              </Typography>
+              <ChipRow>
+                {SOURCES.map((s) => (
+                  <Chip
+                    key={s}
+                    label={t(`booking.source.${s}`)}
+                    variant={source === s ? 'filled' : 'outlined'}
+                    color={source === s ? 'primary' : 'default'}
+                    onClick={() => setSource(source === s ? null : s)}
+                  />
+                ))}
+              </ChipRow>
+            </Box>
+          ) : null}
 
           <Box>
             <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 0.5 }}>

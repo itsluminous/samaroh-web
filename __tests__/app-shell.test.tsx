@@ -86,7 +86,7 @@ describe('AppShell', () => {
   });
 
   it('renders its children in the main region', () => {
-    const probe = en.app.placeholder.title;
+    const probe = 'main-region-probe';
     renderShell('en', en, <span>{probe}</span>);
     expect(screen.getByRole('main')).toHaveTextContent(probe);
   });

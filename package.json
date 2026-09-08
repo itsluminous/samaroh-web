@@ -26,7 +26,6 @@
     "@supabase/ssr": "0.6.1",
     "@supabase/supabase-js": "2.55.0",
     "dexie": "4.0.11",
-    "dexie-react-hooks": "1.1.7",
     "next": "15.5.23",
     "next-intl": "4.13.7",
     "pdf-lib": "1.17.1",

@@ -7,7 +7,7 @@ import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import GlassFab from '@/components/GlassFab';
+import ResponsiveGlassFab from '@/components/ResponsiveGlassFab';
 import List from '@mui/material/List';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -275,16 +275,12 @@ export default function ExpensesHome() {
       )}
 
       {canManageParties ? (
-        <GlassFab
-          color="primary"
-          variant="extended"
-          aria-label={t('home.add_person')}
+        <ResponsiveGlassFab
+          icon={<PersonAddAlt1Icon />}
+          label={t('home.add_person')}
           onClick={() => setAddOpen(true)}
           sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
-        >
-          <PersonAddAlt1Icon sx={{ mr: 1 }} />
-          {t('home.add_person')}
-        </GlassFab>
+        />
       ) : null}
 
       <AddPersonDialog

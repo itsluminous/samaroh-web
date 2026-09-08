@@ -214,3 +214,26 @@ describe('ExpensesHome party sorting', () => {
     expect(listedNames(container)).toEqual(['Zubin', 'Anaya', 'Meera']);
   });
 });
+
+describe('sort control placement (expenses parity)', () => {
+  it('inventory: the sort button sits beside the search bar, not in the title row', async () => {
+    renderWithIntl(<CurrentStockList />);
+    await screen.findByText('Chairs');
+    const sortButton = screen.getByRole('button', { name: en.common.sort.open });
+    const search = screen.getByRole('searchbox');
+    // Same flex container as the search field…
+    expect(sortButton.parentElement).toContainElement(search);
+    // …and not next to the title/masterlist toggle.
+    const masterlistButton = screen.getByRole('button', {
+      name: en.inventory.stock.open_masterlist,
+    });
+    expect(sortButton.parentElement).not.toBe(masterlistButton.parentElement);
+  });
+
+  it('expenses: the sort button shares the search bar container (the mirrored layout)', async () => {
+    renderWithIntl(<ExpensesHome />);
+    await screen.findByText('Anaya');
+    const sortButton = screen.getByRole('button', { name: en.common.sort.open });
+    expect(sortButton.parentElement).toContainElement(screen.getByRole('searchbox'));
+  });
+});

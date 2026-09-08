@@ -5,7 +5,7 @@ import ListAltIcon from '@mui/icons-material/ListAlt';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import GlassFab from '@/components/GlassFab';
+import ResponsiveGlassFab from '@/components/ResponsiveGlassFab';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -202,7 +202,6 @@ export default function CurrentStockList() {
         <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
           {t('stock.title')}
         </Typography>
-        <SortMenuButton value={sort} onChange={changeSort} />
         <Tooltip title={t('stock.open_masterlist')}>
           <IconButton
             aria-label={t('stock.open_masterlist')}
@@ -213,16 +212,19 @@ export default function CurrentStockList() {
         </Tooltip>
       </Box>
 
-      <TextField
-        fullWidth
-        size="small"
-        type="search"
-        placeholder={t('stock.search_placeholder')}
-        inputProps={{ 'aria-label': t('stock.search_placeholder') }}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        sx={{ mb: 1 }}
-      />
+      {/* Sort sits beside the search bar, mirroring the expenses home. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+        <TextField
+          fullWidth
+          size="small"
+          type="search"
+          placeholder={t('stock.search_placeholder')}
+          inputProps={{ 'aria-label': t('stock.search_placeholder') }}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+        <SortMenuButton value={sort} onChange={changeSort} />
+      </Box>
 
       {rows.length === 0 ? (
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
@@ -240,16 +242,12 @@ export default function CurrentStockList() {
       )}
 
       {canRecord ? (
-        <GlassFab
-          color="primary"
-          variant="extended"
-          aria-label={t('stock.record_transaction')}
+        <ResponsiveGlassFab
+          icon={<AddIcon />}
+          label={t('stock.record_transaction')}
           onClick={() => setTxnOpen(true)}
           sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 } }}
-        >
-          <AddIcon sx={{ mr: 1 }} />
-          {t('stock.record_transaction')}
-        </GlassFab>
+        />
       ) : null}
 
       <RecordTransactionDialog

@@ -59,7 +59,17 @@ import {
 import { isMoneyReport } from '@/lib/reports/types';
 import type { DateRange, ReportKey } from '@/lib/reports/types';
 import { BarChart, HBarList, LineChart, type BarDatum, type HBarRow, type LineSeries } from './charts';
+import AutoShrinkText, { isNumericCellText } from './AutoShrinkText';
 import DateRangeFilter, { presetRange, type RangePreset } from './DateRangeFilter';
+
+/**
+ * Table cell content: number/amount cells render through the per-cell
+ * autoshrink (one line, font scaled to fit — totals rows included); label
+ * cells stay plain and wrap normally.
+ */
+function cellContent(cell: string) {
+  return isNumericCellText(cell) ? <AutoShrinkText>{cell}</AutoShrinkText> : cell;
+}
 
 type ChartColor = 'primary' | 'secondary' | 'success' | 'warning' | 'error';
 
@@ -702,14 +712,14 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
                 {model.rows.map((row, i) => (
                   <TableRow key={i}>
                     {row.map((cell, j) => (
-                      <TableCell key={j}>{cell}</TableCell>
+                      <TableCell key={j}>{cellContent(cell)}</TableCell>
                     ))}
                   </TableRow>
                 ))}
                 {model.totalRow ? (
                   <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: 2, borderColor: 'divider' } }}>
                     {model.totalRow.map((cell, j) => (
-                      <TableCell key={j}>{cell}</TableCell>
+                      <TableCell key={j}>{cellContent(cell)}</TableCell>
                     ))}
                   </TableRow>
                 ) : null}
@@ -741,14 +751,14 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
                     {model.extraTable.rows.map((row, i) => (
                       <TableRow key={i}>
                         {row.map((cell, j) => (
-                          <TableCell key={j}>{cell}</TableCell>
+                          <TableCell key={j}>{cellContent(cell)}</TableCell>
                         ))}
                       </TableRow>
                     ))}
                     {model.extraTable.totalRow ? (
                       <TableRow sx={{ '& td': { fontWeight: 'bold', borderTop: 2, borderColor: 'divider' } }}>
                         {model.extraTable.totalRow.map((cell, j) => (
-                          <TableCell key={j}>{cell}</TableCell>
+                          <TableCell key={j}>{cellContent(cell)}</TableCell>
                         ))}
                       </TableRow>
                     ) : null}

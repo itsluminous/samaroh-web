@@ -51,8 +51,6 @@ export interface ExpenseRecord {
   expense_attachments: ExpenseAttachmentRecord[];
 }
 
-export const MAX_ATTACHMENTS_PER_ENTRY = 4;
-
 /**
  * sessionStorage key carrying the just-deleted party's name across the
  * ledger → list navigation so the list can show the deleted notice.
@@ -258,11 +256,6 @@ export async function deleteParty(supabase: SupabaseClient, party: PartyRecord):
   });
 }
 
-export interface NewAttachmentInput {
-  fileName: string;
-  mimeType: string;
-}
-
 export interface ExpenseInput {
   direction: ExpenseDirection;
   amount: number;
@@ -270,13 +263,19 @@ export interface ExpenseInput {
   notes: string | null;
 }
 
+// NOTE: no attachment-create path on web. Bill files are uploaded to Google
+// Drive by the Android app (compress → upload → row op); the web app has no
+// Drive credentials, so inserting metadata-only rows here would strand them
+// in the "pending" state forever. Attachments are display + remove only
+// (see docs/decisions.md — a server-side Drive upload route is the reserved
+// future design).
+
 export async function createExpense(
   supabase: SupabaseClient,
   businessId: string,
   partyId: string,
   userId: string,
   input: ExpenseInput,
-  attachments: NewAttachmentInput[],
 ): Promise<void> {
   const expenseId = crypto.randomUUID();
   await insertWithOutbox(supabase, {
@@ -295,15 +294,12 @@ export async function createExpense(
     // The ledger entry itself is the label (amount is formatted at display time).
     label: input.notes ?? input.expenseDate,
   });
-  await insertAttachments(supabase, businessId, expenseId, attachments);
 }
 
 export async function updateExpense(
   supabase: SupabaseClient,
-  businessId: string,
   expenseId: string,
   input: ExpenseInput,
-  newAttachments: NewAttachmentInput[],
   removedAttachmentIds: string[],
 ): Promise<void> {
   await updateWithOutbox(supabase, {
@@ -319,7 +315,6 @@ export async function updateExpense(
     baseUpdatedAt: null,
     label: input.notes ?? input.expenseDate,
   });
-  await insertAttachments(supabase, businessId, expenseId, newAttachments);
   if (removedAttachmentIds.length > 0) {
     const { error: attachmentError } = await supabase
       .from('expense_attachments')
@@ -348,34 +343,5 @@ export async function deleteExpense(supabase: SupabaseClient, expenseId: string)
     .is('deleted_at', null);
   if (attachmentError) {
     throw new Error(attachmentError.message);
-  }
-}
-
-/**
- * Inserts attachment METADATA rows with `drive_file_id = null` — the pending
- * state. The Google Drive upload itself (which fills drive_file_id) is the
- * sync/Drive integration's responsibility; files never touch Supabase Storage.
- */
-async function insertAttachments(
-  supabase: SupabaseClient,
-  businessId: string,
-  expenseId: string,
-  attachments: NewAttachmentInput[],
-): Promise<void> {
-  if (attachments.length === 0) {
-    return;
-  }
-  const { error } = await supabase.from('expense_attachments').insert(
-    attachments.map((a) => ({
-      id: crypto.randomUUID(),
-      expense_id: expenseId,
-      business_id: businessId,
-      drive_file_id: null,
-      mime_type: a.mimeType,
-      file_name: a.fileName,
-    })),
-  );
-  if (error) {
-    throw new Error(error.message);
   }
 }

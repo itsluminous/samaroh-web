@@ -1,9 +1,6 @@
 'use client';
 
 import AttachFileIcon from '@mui/icons-material/AttachFile';
-import CollectionsIcon from '@mui/icons-material/Collections';
-import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -15,18 +12,15 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
-import { useEffect, useRef, useState } from 'react';
-import ChipRow from '@/components/ChipRow';
+import { useEffect, useState } from 'react';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
 import { parseAmount } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import {
   createExpense,
   deleteExpense,
-  MAX_ATTACHMENTS_PER_ENTRY,
   updateExpense,
   type ExpenseRecord,
-  type NewAttachmentInput,
 } from '../_lib/queries';
 
 interface EntryDialogProps {
@@ -49,9 +43,13 @@ function todayIsoDate(): string {
 }
 
 /**
- * Add/edit ledger entry dialog (spec §4.2): amount, date, notes, attachment
- * metadata rows (Google Drive upload is handled by the Drive integration —
- * rows stay in the pending state here), tombstone delete with confirmation.
+ * Add/edit ledger entry dialog (spec §4.2): amount, date, notes, tombstone
+ * delete with confirmation. Attachments are DISPLAY + REMOVE only on web:
+ * bill files are uploaded to Google Drive by the Android app, and the web app
+ * has no Drive upload path — a picker here would silently discard the bytes
+ * (metadata-only rows stay "pending" forever), so instead a localized
+ * "attach from the mobile app" hint is shown (the inventory-photo precedent;
+ * see docs/decisions.md).
  */
 export default function EntryDialog({
   open,
@@ -65,14 +63,10 @@ export default function EntryDialog({
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
   const { supabase, businessId, userId } = useBusiness();
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayIsoDate());
   const [notes, setNotes] = useState('');
-  const [newFiles, setNewFiles] = useState<NewAttachmentInput[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState(false);
@@ -86,7 +80,6 @@ export default function EntryDialog({
     setAmount(entry ? String(entry.amount) : '');
     setDate(entry ? entry.expense_date : todayIsoDate());
     setNotes(entry?.notes ?? '');
-    setNewFiles([]);
     setRemovedAttachmentIds([]);
     setAmountError(null);
     setSaveError(false);
@@ -97,18 +90,6 @@ export default function EntryDialog({
   const existingAttachments = (entry?.expense_attachments ?? []).filter(
     (a) => !removedAttachmentIds.includes(a.id),
   );
-  const attachmentCount = existingAttachments.length + newFiles.length;
-
-  const handleFilesPicked = (files: FileList | null) => {
-    if (!files) {
-      return;
-    }
-    const room = MAX_ATTACHMENTS_PER_ENTRY - attachmentCount;
-    const picked = Array.from(files)
-      .slice(0, Math.max(0, room))
-      .map((file) => ({ fileName: file.name, mimeType: file.type || 'application/octet-stream' }));
-    setNewFiles((prev) => [...prev, ...picked]);
-  };
 
   const handleSave = async () => {
     const parsed = parseAmount(amount);
@@ -130,9 +111,9 @@ export default function EntryDialog({
         notes: notes.trim() || null,
       };
       if (entry) {
-        await updateExpense(supabase, businessId, entry.id, input, newFiles, removedAttachmentIds);
+        await updateExpense(supabase, entry.id, input, removedAttachmentIds);
       } else {
-        await createExpense(supabase, businessId, partyId, userId, input, newFiles);
+        await createExpense(supabase, businessId, partyId, userId, input);
       }
       onSaved();
     } catch {
@@ -225,87 +206,16 @@ export default function EntryDialog({
                 }
               />
             ))}
-            {newFiles.map((file, index) => (
-              <Chip
-                key={`${file.fileName}-${index}`}
-                icon={<AttachFileIcon />}
-                label={`${file.fileName} — ${t('entry.attachment_pending')}`}
-                color="warning"
-                variant="outlined"
-                onDelete={() => setNewFiles((prev) => prev.filter((_, i) => i !== index))}
-              />
-            ))}
           </Box>
           {/*
-           * Attachment source pills (Camera / Gallery / PDF). ChipRow keeps
-           * them on ONE horizontally-scrollable line — on 320px viewports
-           * (and in Hindi) they must never wrap into a ragged second row.
+           * No picker on web: the file bytes would have nowhere to go (Drive
+           * uploads are the Android app's pipeline), so we show the same
+           * "use the mobile app" hint the inventory photo section uses
+           * instead of a silently-lossy picker.
            */}
-          <ChipRow aria-label={t('entry.attach')} sx={{ mb: 0.5 }}>
-            <Chip
-              icon={<PhotoCameraIcon />}
-              variant="outlined"
-              clickable
-              label={t('entry.attach_camera')}
-              disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
-              onClick={() => cameraInputRef.current?.click()}
-            />
-            <Chip
-              icon={<CollectionsIcon />}
-              variant="outlined"
-              clickable
-              label={t('entry.attach_gallery')}
-              disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
-              onClick={() => galleryInputRef.current?.click()}
-            />
-            <Chip
-              icon={<PictureAsPdfIcon />}
-              variant="outlined"
-              clickable
-              label={t('entry.attach_pdf')}
-              disabled={attachmentCount >= MAX_ATTACHMENTS_PER_ENTRY}
-              onClick={() => pdfInputRef.current?.click()}
-            />
-          </ChipRow>
-          <Typography variant="caption" color="text.secondary" component="div">
-            {t('entry.attachment_limit_hint', { max: MAX_ATTACHMENTS_PER_ENTRY })}
+          <Typography variant="body2" color="text.secondary">
+            {t('entry.attachments_mobile_hint')}
           </Typography>
-          <input
-            ref={cameraInputRef}
-            type="file"
-            hidden
-            accept="image/*"
-            capture="environment"
-            aria-label={t('entry.attach_camera')}
-            onChange={(event) => {
-              handleFilesPicked(event.target.files);
-              event.target.value = '';
-            }}
-          />
-          <input
-            ref={galleryInputRef}
-            type="file"
-            hidden
-            multiple
-            accept="image/*"
-            aria-label={t('entry.attach_gallery')}
-            onChange={(event) => {
-              handleFilesPicked(event.target.files);
-              event.target.value = '';
-            }}
-          />
-          <input
-            ref={pdfInputRef}
-            type="file"
-            hidden
-            multiple
-            accept="application/pdf"
-            aria-label={t('entry.attach_pdf')}
-            onChange={(event) => {
-              handleFilesPicked(event.target.files);
-              event.target.value = '';
-            }}
-          />
           {saveError && (
             <Typography variant="body2" color="error" sx={{ mt: 1 }}>
               {t('error.save_failed')}

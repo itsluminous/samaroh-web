@@ -568,3 +568,14 @@ repo interprets it where the spec leaves web-specific latitude.)
   included. "Number cell" is detected by content — digits/₹/• and **no
   letters in any script** — so month labels, names, the TOTAL label and
   quantity-with-unit cells keep wrapping normally.
+
+- **Marker rows never show a status chip** (2026-09-08, cross-platform parity
+  rule). Marker-kind bookings must not show the 'Confirmed' status chip/text
+  in the day chooser dialog, the month agenda and the events view rows —
+  status is meaningless for a Lagan/Tilak day marker. The web's shared
+  `BookingRow` already satisfied this (markers render no right-side chip at
+  all since the no-payment-status change); this batch locks the rule in with
+  surface-level regression tests (`__tests__/marker-row-status.test.tsx`)
+  covering all three surfaces. Cancelled stays the one exception (chip +
+  strikethrough). Scope note: the detail drawer's status chip is untouched —
+  the rule targets row surfaces only, matching the Android item.

@@ -66,8 +66,10 @@ export default function BookingRow({
   const cancelled = booking.status === 'cancelled';
   const due = computeDue(booking.total_amount, payments);
   const paint = pillPaint(booking, presets);
-  // Marker-kind bookings (Lagan/Tilak day indicators) carry no payment
-  // status: no due / fully-paid chip (parity with Android).
+  // Marker-kind bookings (Lagan/Tilak day indicators) carry no payment or
+  // booking status: no due / fully-paid chip and never a 'Confirmed' status
+  // chip — status is meaningless for a day marker (parity with Android).
+  // Cancelled is the one exception: the chip + strikethrough stay.
   const marker = presetKindForType(presets, booking.event_type) === 'marker';
 
   return (

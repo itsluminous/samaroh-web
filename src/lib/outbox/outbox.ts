@@ -210,6 +210,21 @@ async function applyItem(db: SupabaseClient, item: OutboxItem): Promise<ApplyOut
   return 'applied';
 }
 
+/**
+ * Sign-out hygiene (web mirror of Android ADR-040): wipe the queued outbox
+ * and the last-sync marker so a later session — possibly a different account
+ * or business on the same browser — can never replay this session's writes
+ * (RLS would reject cross-business rows, but only after producing confusing
+ * error entries). Guest-mode data (the Dexie local client) intentionally
+ * survives sign-out — the guest contract keeps it on-device for re-entry.
+ */
+export async function clearOutbox(): Promise<void> {
+  cancelImmediateReplay();
+  await outboxDb.outbox.clear();
+  await outboxDb.meta.clear();
+  notifyOutboxChanged();
+}
+
 // --- change notification (lets React hooks refresh without polling) ---
 
 export const OUTBOX_CHANGED_EVENT = 'samaroh:outbox-changed';

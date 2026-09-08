@@ -10,6 +10,7 @@ import { getLastSyncAt, outboxDb } from '@/lib/outbox/db';
 import { insertWithOutbox } from '@/lib/outbox/mutate';
 import {
   cancelImmediateReplay,
+  clearOutbox,
   enqueue,
   listItems,
   pendingCount,
@@ -221,5 +222,22 @@ describe('insertWithOutbox (offline data layer)', () => {
     });
     expect(outcome).toBe('queued');
     expect(await pendingCount()).toBe(1);
+  });
+});
+
+describe('clearOutbox (sign-out hygiene, ADR-040 parity)', () => {
+  it('wipes queued items and the last-sync marker', async () => {
+    await queueCreate('a');
+    await queueCreate('b');
+    const { client } = fakeSupabase({ serverUpdatedAt: null });
+    await replayOutbox(client); // stamps last_sync_at
+    await queueCreate('c'); // a fresh queued write that must not survive
+    expect(await pendingCount()).toBe(1);
+
+    await clearOutbox();
+
+    expect(await pendingCount()).toBe(0);
+    expect(await listItems()).toEqual([]);
+    expect(await getLastSyncAt()).toBeNull();
   });
 });

@@ -21,10 +21,11 @@ import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import LocaleSwitcher from '@/components/LocaleSwitcher';
 import SyncIndicator from '@/components/SyncIndicator';
 import { Link, usePathname } from '@/i18n/navigation';
+import { clearOutbox } from '@/lib/outbox/outbox';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { canViewSection, type NavModule } from '@/lib/permissions/visibility';
 
@@ -66,8 +67,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </Typography>
           <SyncIndicator />
           <LocaleSwitcher />
-          {/* Sign-out posts to the non-localized auth route. */}
-          <Box component="form" action="/auth/sign-out" method="post" sx={{ display: 'flex' }}>
+          {/* Sign-out posts to the non-localized auth route. The outbox is
+              wiped first (ADR-040 parity — see clearOutbox) so a later
+              session on this browser can never replay this session's writes. */}
+          <Box
+            component="form"
+            action="/auth/sign-out"
+            method="post"
+            sx={{ display: 'flex' }}
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              const form = event.currentTarget;
+              event.preventDefault();
+              void clearOutbox().finally(() => form.submit());
+            }}
+          >
             <Tooltip title={t('auth.action.sign_out')}>
               <IconButton type="submit" aria-label={t('auth.action.sign_out')}>
                 <LogoutIcon />

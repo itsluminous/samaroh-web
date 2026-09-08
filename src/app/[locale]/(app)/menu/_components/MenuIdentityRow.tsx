@@ -9,8 +9,10 @@
  *
  * Signed in, the row carries a sign-out icon (ADR-040 parity with Android):
  * always confirm first, and warn with the pending-outbox count when unsynced
- * changes would be left behind. Confirming posts to the non-localized
- * /auth/sign-out route (ends the session and guest mode server-side).
+ * changes would be lost. Confirming wipes the queued outbox (clearOutbox —
+ * a later account on this browser must never replay this session's writes)
+ * and posts to the non-localized /auth/sign-out route (ends the session and
+ * guest mode server-side).
  */
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -28,6 +30,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isGuestMode } from '@/lib/guest/guest';
+import { clearOutbox } from '@/lib/outbox/outbox';
 import { useOutbox } from '@/lib/outbox/useOutbox';
 import { createClient, createRemoteClient } from '@/lib/supabase/client';
 
@@ -120,7 +123,16 @@ export default function MenuIdentityRow() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmOpen(false)}>{t('common.action.cancel')}</Button>
-          <Button color="error" variant="contained" onClick={() => formRef.current?.submit()}>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              // ADR-040 parity: wipe queued writes before the session ends so
+              // a later account on this browser can never replay them.
+              const form = formRef.current;
+              void clearOutbox().finally(() => form?.submit());
+            }}
+          >
             {t('menu.sign_out.confirm_action')}
           </Button>
         </DialogActions>

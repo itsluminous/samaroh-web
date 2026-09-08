@@ -342,8 +342,8 @@ repo interprets it where the spec leaves web-specific latitude.)
   `inventory-images` Storage bucket — Storage serving and upload are dead. Item
   photos live in the owner's Drive with anyone-with-link sharing (the Android
   repair pass is enabling the existing 33), and `master_items.drive_image_id`
-  is the **authoritative** cross-device photo reference; `image_path` now
-  carries Android device-local paths and is never read or written by web.
+  is the **authoritative** cross-device photo reference (`image_path` was
+  later dropped from the server schema entirely — see the 2026-09-08 entry).
   - **Rendering** (`src/lib/images/drive.ts` + the shared
     `ItemPhotoAvatar` used by the stock list, item detail and master list):
     thumbnails load from `https://drive.google.com/thumbnail?id={id}&sz=w320`.
@@ -368,8 +368,32 @@ repo interprets it where the spec leaves web-specific latitude.)
     (`inventory.master.photo_mobile_hint`, "Add photos from the mobile
     app") — honest UX instead of a broken picker. `createMasterItem` /
     `updateMasterItem` no longer take or touch photo columns (Android owns
-    `drive_image_id`/`image_path`; a web edit must never clobber them). The
+    `drive_image_id`; a web edit must never clobber it). The
     photo section stays mounted as the insertion point for a future
-    **server-side** upload flow (an API route holding Drive credentials);
-    `src/lib/images/compress.ts` and its tests are kept as that flow's
-    client half.
+    **server-side** upload flow (an API route holding Drive credentials).
+    (`src/lib/images/compress.ts` was initially kept as that flow's client
+    half, then deleted — see the 2026-09-08 entry.)
+
+- **Image-architecture convergence: `image_path` off the schema, dead
+  compress module deleted** (2026-09-08, counterpart of Android ADR-065;
+  shared cc89bb2). The Android track dropped `master_items.image_path` from
+  the server schema (it survives only as a device-local Room column) and
+  reduced Storage to a logos-only baseline (`inventory-images` and
+  `booking-invoices` buckets removed from `003_storage.sql`). Web never read
+  or wrote `image_path` or those buckets, so this pass only removed the last
+  dead artifact and refreshed comments:
+  - **`src/lib/images/compress.ts` + `__tests__/image-compress.test.ts`
+    deleted.** The module was unused by app code (its test was the sole
+    caller) and was "kept as the client half of a future server-side upload
+    flow" — but any such flow uploads through an API route that holds Drive
+    credentials, and a server can (and should) own compression/cropping to
+    enforce the ≤320px-square-WebP convention regardless of client; the
+    Android app already defines that convention. Dead code with a live test
+    suite costs maintenance for a hypothetical; git history keeps it if the
+    flow ever lands.
+  - **The one Storage exception stays: business logos.** Web is
+    display-only — `fetchLogoPng` (`src/lib/invoice/client.ts`) downloads
+    `logos/{businesses.logo_path}` (PNG only) to embed as the invoice PDF
+    header; there is no logo upload UI on web (upload is Android-only). The
+    guest local client stubs `storage.download` with an error so guest
+    invoices render without a logo.

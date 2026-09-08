@@ -5,8 +5,8 @@
  * FIFO computation from `@/lib/inventory/fifo` otherwise. Item photos are
  * referenced by `drive_image_id` (Google Drive, anyone-with-link — see
  * `@/lib/images/drive`); the former `inventory-images` Storage bucket is
- * gone and `image_path` now carries Android device-local paths, so web
- * never reads or writes it.
+ * gone and `master_items.image_path` was dropped from the server schema
+ * (Android keeps it device-local only — ADR-065).
  * Writes follow the app-wide contract: client UUIDs, soft deletes, RLS.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -326,8 +326,8 @@ export async function recordRemoveTransaction(
 
 /**
  * Creates a master item. Photos are not settable from web: they upload to
- * Google Drive from the Android app, which owns `drive_image_id` /
- * `image_path` (see docs/decisions.md — Drive-first item images).
+ * Google Drive from the Android app, which owns `drive_image_id`
+ * (see docs/decisions.md — Drive-first item images).
  */
 export async function createMasterItem(
   supabase: SupabaseClient,
@@ -349,8 +349,8 @@ export async function createMasterItem(
 }
 
 /**
- * Updates a master item's name/unit. Never touches `drive_image_id` /
- * `image_path` — the Android app owns the photo columns.
+ * Updates a master item's name/unit. Never touches `drive_image_id` —
+ * the Android app owns the photo column.
  */
 export async function updateMasterItem(
   supabase: SupabaseClient,

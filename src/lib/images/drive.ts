@@ -2,8 +2,8 @@
  * Google Drive public image endpoints for item photos.
  *
  * The Supabase `inventory-images` bucket is gone — `drive_image_id` on
- * `master_items` is the authoritative photo reference (Android ADR-063;
- * `image_path` now carries device-local paths and is meaningless on web).
+ * `master_items` is the authoritative photo reference (Android ADR-063/065;
+ * the old `image_path` column was dropped from the server schema).
  * Files are shared anyone-with-link by the Android mirror/repair pass, so
  * they render through Drive's public endpoints with no auth:
  *

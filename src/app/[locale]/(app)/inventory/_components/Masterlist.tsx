@@ -205,7 +205,7 @@ export default function Masterlist() {
                 }
               >
                 <ListItemAvatar>
-                  <ItemPhotoAvatar driveImageId={item.drive_image_id} alt={item.name} size={48} />
+                  <ItemPhotoAvatar driveImageId={item.drive_image_id} alt={item.name} size={48} expandable />
                 </ListItemAvatar>
                 <ListItemText primary={item.name} secondary={unitLabel(item.unit)} />
               </ListItem>

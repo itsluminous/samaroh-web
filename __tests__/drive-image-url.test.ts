@@ -5,6 +5,7 @@
  * (same pattern as expense bill attachments).
  */
 import {
+  DRIVE_LIGHTBOX_WIDTH,
   DRIVE_THUMBNAIL_WIDTH,
   driveThumbnailFallbackUrl,
   driveThumbnailUrl,
@@ -54,5 +55,17 @@ describe('driveThumbnailFallbackUrl', () => {
 describe('driveViewUrl', () => {
   it('builds the /file/d/{id}/view page (bill-attachment pattern)', () => {
     expect(driveViewUrl(ID)).toBe(`https://drive.google.com/file/d/${ID}/view`);
+  });
+});
+
+describe('lightbox large variant (DRIVE_LIGHTBOX_WIDTH)', () => {
+  it('builds both ladder hosts at w1600 for the in-app lightbox', () => {
+    expect(DRIVE_LIGHTBOX_WIDTH).toBe(1600);
+    expect(driveThumbnailUrl(ID, DRIVE_LIGHTBOX_WIDTH)).toBe(
+      `https://drive.google.com/thumbnail?id=${ID}&sz=w1600`,
+    );
+    expect(driveThumbnailFallbackUrl(ID, DRIVE_LIGHTBOX_WIDTH)).toBe(
+      `https://lh3.googleusercontent.com/d/${ID}=w1600`,
+    );
   });
 });

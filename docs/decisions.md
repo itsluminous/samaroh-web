@@ -355,11 +355,11 @@ repo interprets it where the spec leaves web-specific latitude.)
     direct host is known to rate-limit independently); a second error — or a
     row without `drive_image_id` — lands on the existing icon placeholder.
     This mirrors Android's own-token → public-link → placeholder ladder for
-    the anonymous-web case. Full view opens
-    `https://drive.google.com/file/d/{id}/view` in a new tab — the exact
-    pattern the expenses ledger already uses for bill attachments (the old
-    in-app expand dialog showed the ≤320px signed thumbnail anyway; Drive's
-    viewer serves the original). The frozen `get_current_inventory` RPC does
+    the anonymous-web case. Full view initially opened
+    `https://drive.google.com/file/d/{id}/view` in a new tab — superseded by
+    the in-app lightbox (owner feedback, see the 2026-09-08 lightbox entry
+    below); the Drive view page survives as the lightbox's full-res link and
+    error fallback. The frozen `get_current_inventory` RPC does
     not return `drive_image_id`, so the stock query merges it from
     `master_items` client-side rather than touching the shared schema.
   - **Upload disabled**: Storage upload is gone and web has no Drive OAuth,
@@ -397,3 +397,25 @@ repo interprets it where the spec leaves web-specific latitude.)
     header; there is no logo upload UI on web (upload is Android-only). The
     guest local client stubs `storage.download` with an error so guest
     invoices render without a logo.
+
+- **Item-photo tap opens an in-app lightbox, not a Drive tab** (2026-09-08,
+  owner feedback: tapping an inventory image must render in the app, not
+  bounce to drive.google.com). `ItemPhotoAvatar` (stock list, item detail,
+  master list — all `expandable`) now opens `ItemPhotoLightbox`: a dark-
+  backdrop dialog that loads the photo large via the **same public-endpoint
+  ladder** as the thumbnail, just bigger —
+  `drive.google.com/thumbnail?id={id}&sz=w1600` → lh3 `=w1600` on `<img>`
+  error (`DRIVE_LIGHTBOX_WIDTH` in `src/lib/images/drive.ts`). Spinner while
+  the large variant loads; both hosts failing (e.g. not link-shared yet)
+  shows a localized message (`inventory.image.load_failed`) with a small
+  "Open in Drive" link as the graceful fallback, and a subtle
+  `inventory.image.open_in_drive` link stays under the image for
+  full-res/download (Drive's viewer serves the original; web has no auth to
+  proxy it). Close = button, backdrop click, or Esc. The dialog stops click
+  propagation because the avatar sits inside row `ListItemButton`s that
+  navigate. **Expense bill chips are intentionally unchanged**: the party
+  ledger keeps opening `file/d/{id}/view` in a new tab (see the attachment-
+  viewing entry above) — bills are *documents* authorized by the viewer's own
+  Google session, not anyone-with-link images, so the public thumbnail
+  endpoints the lightbox depends on would 403 there; owner feedback was
+  scoped to inventory photos.

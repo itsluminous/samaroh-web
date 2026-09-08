@@ -24,6 +24,12 @@
 /** Default thumbnail width (px) — matches the ≤320px upload convention. */
 export const DRIVE_THUMBNAIL_WIDTH = 320;
 
+/**
+ * Large variant width (px) for the in-app lightbox — requested through the
+ * same two endpoints above with `sz=w1600` / `=w1600`.
+ */
+export const DRIVE_LIGHTBOX_WIDTH = 1600;
+
 /** Primary <img> src for an item photo stored in Drive. */
 export function driveThumbnailUrl(
   driveImageId: string,

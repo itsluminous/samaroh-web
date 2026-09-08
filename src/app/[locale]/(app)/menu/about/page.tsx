@@ -8,7 +8,8 @@ import { useTranslations } from 'next-intl';
 // About (§4.4): GitHub link, licenses note, made with ❤️.
 // No version line on web — the app deploys continuously, so there is no
 // meaningful user-facing version number (unlike the Android build).
-const GITHUB_URL = 'https://github.com/itsluminous/samaroh-web';
+// The source URL is DATA from the shared catalog (ADR-034 pattern —
+// menu.about.source_code_url_web; Android's row uses source_code_url).
 
 export default function AboutPage() {
   const t = useTranslations('menu.about');
@@ -20,7 +21,7 @@ export default function AboutPage() {
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack spacing={2}>
           <Link
-            href={GITHUB_URL}
+            href={t('source_code_url_web')}
             target="_blank"
             rel="noopener noreferrer"
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}

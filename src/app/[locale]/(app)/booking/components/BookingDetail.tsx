@@ -269,7 +269,8 @@ export default function BookingDetail({
             </Button>
           ) : null}
           {/* Cancelled bookings swap Cancel for Restore (edit gate) + permanent Delete (delete gate).
-              Restore is the positive path (success/moneyIn green), Delete the destructive one (error red) —
+              Restore is the positive path (filled success/moneyIn green), Delete the destructive one
+              (OUTLINED error red, per the ADR-054 addendum's Android spec) —
               Android-parity tone differentiation. */}
           {permissions.edit && cancelled ? (
             <Button variant="contained" color="success" startIcon={<RestoreIcon />} onClick={onRestoreBooking}>
@@ -277,7 +278,7 @@ export default function BookingDetail({
             </Button>
           ) : null}
           {permissions.delete && cancelled ? (
-            <Button variant="text" color="error" startIcon={<DeleteForeverIcon />} onClick={() => setConfirmDelete(true)}>
+            <Button variant="outlined" color="error" startIcon={<DeleteForeverIcon />} onClick={() => setConfirmDelete(true)}>
               {t('booking.card.action_delete_booking')}
             </Button>
           ) : null}

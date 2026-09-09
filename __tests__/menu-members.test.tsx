@@ -16,6 +16,8 @@ import { createClient } from '@/lib/supabase/client';
 
 jest.mock('@/lib/supabase/client', () => ({
   createClient: jest.fn(() => null),
+  // MenuHome's search index gates sign-out via useSignedIn (remote client).
+  createRemoteClient: jest.fn(() => null),
 }));
 
 jest.mock('@/i18n/navigation', () => ({

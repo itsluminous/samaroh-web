@@ -38,6 +38,7 @@ import type { ChangeEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from '@/i18n/navigation';
 import BusinessLogoAvatar from './BusinessLogoAvatar';
+import { highlightSx, useHighlightParam } from '@/lib/hooks/useHighlightParam';
 import {
   DEFAULT_FORM_FIELD_PREFS,
   readFormFieldPrefs,
@@ -57,6 +58,11 @@ export default function SettingsScreen() {
   const { mode, setMode } = useColorScheme();
 
   const canEditBusiness = isOwner || permissions.settings.manage_business;
+
+  // Menu-search scroll-to/highlight targets: rows on THIS page that have no
+  // page of their own (theme, google link, booking-form prefs, business
+  // profile) are reached via /menu/settings?hl=<anchor>.
+  const hl = useHighlightParam(['theme', 'google', 'booking_form', 'business']);
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 640 }}>
@@ -81,7 +87,7 @@ export default function SettingsScreen() {
           </ListItem>
 
           {/* Theme: system / light / dark. */}
-          <ListItem divider sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <ListItem id="hl-theme" divider sx={{ flexWrap: 'wrap', gap: 1, ...(hl === 'theme' ? highlightSx : undefined) }}>
             <ListItemIcon>
               <DarkModeIcon />
             </ListItemIcon>
@@ -139,7 +145,7 @@ export default function SettingsScreen() {
           {/* Google account link — stub row: OAuth client not configured.
               flexWrap: the long "not configured" chip drops below the label
               on narrow viewports instead of forcing the row off-screen. */}
-          <ListItem sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <ListItem id="hl-google" sx={{ flexWrap: 'wrap', gap: 1, ...(hl === 'google' ? highlightSx : undefined) }}>
             <ListItemIcon>
               <LinkOffIcon />
             </ListItemIcon>
@@ -150,13 +156,14 @@ export default function SettingsScreen() {
       </Paper>
 
       {/* Booking-form field visibility (ADR-020 #5 parity, device-local). */}
-      <BookingFormFieldsSection />
+      <BookingFormFieldsSection highlighted={hl === 'booking_form'} />
 
       {canEditBusiness && supabase && business ? (
         <BusinessProfileCard
           supabase={supabase}
           business={business}
           onSaved={refresh}
+          highlighted={hl === 'business'}
         />
       ) : null}
     </Stack>
@@ -168,7 +175,7 @@ export default function SettingsScreen() {
  * device-local localStorage booleans, read by the booking form. Deposit is
  * opt-in (hidden by default); source and times are opt-out.
  */
-function BookingFormFieldsSection() {
+function BookingFormFieldsSection({ highlighted = false }: { highlighted?: boolean }) {
   const t = useTranslations('settings.booking_form');
   const [prefs, setPrefs] = useState<BookingFormFieldPrefs>(DEFAULT_FORM_FIELD_PREFS);
   useEffect(() => {
@@ -187,7 +194,7 @@ function BookingFormFieldsSection() {
   ];
 
   return (
-    <Paper variant="outlined">
+    <Paper id="hl-booking_form" variant="outlined" sx={highlighted ? highlightSx : undefined}>
       <List
         disablePadding
         subheader={
@@ -226,10 +233,12 @@ export function BusinessProfileCard({
   supabase,
   business,
   onSaved,
+  highlighted = false,
 }: {
   supabase: NonNullable<ReturnType<typeof useMembership>['supabase']>;
   business: BusinessLike;
   onSaved: () => void;
+  highlighted?: boolean;
 }) {
   const t = useTranslations('settings.business');
   const tAction = useTranslations('common.action');
@@ -286,7 +295,7 @@ export function BusinessProfileCard({
     form.name.trim().length > 0 && form.owner_name.trim().length > 0 && form.invoice_prefix.trim().length > 0;
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
+    <Paper id="hl-business" variant="outlined" sx={{ p: 2, ...(highlighted ? highlightSx : undefined) }}>
       <Typography variant="h6" sx={{ mb: 2 }}>
         {t('title')}
       </Typography>

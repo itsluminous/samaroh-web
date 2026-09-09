@@ -30,6 +30,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isGuestMode } from '@/lib/guest/guest';
+import { highlightSx } from '@/lib/hooks/useHighlightParam';
 import { clearOutbox } from '@/lib/outbox/outbox';
 import { useOutbox } from '@/lib/outbox/useOutbox';
 import { createClient, createRemoteClient } from '@/lib/supabase/client';
@@ -39,7 +40,7 @@ type Identity =
   | { kind: 'anonymous' }
   | { kind: 'signed_in'; email: string };
 
-export default function MenuIdentityRow() {
+export default function MenuIdentityRow({ highlighted = false }: { highlighted?: boolean } = {}) {
   const t = useTranslations();
   const [identity, setIdentity] = useState<Identity>({ kind: 'loading' });
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -80,7 +81,8 @@ export default function MenuIdentityRow() {
   return (
     <ListItem
       divider
-      sx={{ minHeight: 64 }}
+      id="hl-identity"
+      sx={{ minHeight: 64, ...(highlighted ? highlightSx : undefined) }}
       secondaryAction={
         identity.kind === 'signed_in' ? (
           <Tooltip title={t('menu.identity.sign_out')}>

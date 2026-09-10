@@ -6,7 +6,8 @@
  *      About, and every destination row is indexed (no unreachable or
  *      missing entries).
  *   2. Permission gating parity — entries the member cannot reach (owner-only
- *      Members, manage_business rows, reports without view / money reports
+ *      Members, the manage_business event-types page, reports without view /
+ *      money reports
  *      without view_amounts, sign-out without a session) never appear.
  *   3. Live filtering — substring, fuzzy typo tolerance, empty query.
  *   4. Navigation — clicking a result links to the nested page (with the
@@ -203,7 +204,8 @@ describe('permission gating parity', () => {
 
     expect(labels).not.toContain(en.menu.section.members);
     expect(labels).not.toContain(en.settings.event_types.title);
-    expect(labels).not.toContain(en.settings.business.title);
+    // Business profile stays findable: non-editors get the read-only card.
+    expect(labels).toContain(en.settings.business.title);
     // reports.view is false → not a single report name leaks.
     for (const key of REPORT_KEYS) {
       expect(labels).not.toContain(en.reports.report[key]);

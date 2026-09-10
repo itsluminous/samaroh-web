@@ -4,7 +4,8 @@
  * Settings screen (§4.4, web scope):
  *   - Language → full-screen picker page (each language in its own script)
  *   - Theme: system / light / dark (MUI color-scheme CSS variables)
- *   - Business profile editor (owner or settings.manage_business)
+ *   - Business profile: editor for owner or settings.manage_business,
+ *     read-only display for everyone else
  *   - Sync status → pending-outbox page, with a live count badge
  *   - Google account: stub row in its "not configured" state (§4.4 — OAuth
  *     client wiring is a deployment concern, tracked in docs/decisions.md)
@@ -158,13 +159,21 @@ export default function SettingsScreen() {
       {/* Booking-form field visibility (ADR-020 #5 parity, device-local). */}
       <BookingFormFieldsSection highlighted={hl === 'booking_form'} />
 
-      {canEditBusiness && supabase && business ? (
-        <BusinessProfileCard
-          supabase={supabase}
-          business={business}
-          onSaved={refresh}
-          highlighted={hl === 'business'}
-        />
+      {/* Business profile: owner / settings.manage_business get the editor
+          (matches the businesses RLS update policy); everyone else gets the
+          read-only display — same info, no write affordances (§3 parity:
+          affordances are hidden, not disabled). */}
+      {supabase && business ? (
+        canEditBusiness ? (
+          <BusinessProfileCard
+            supabase={supabase}
+            business={business}
+            onSaved={refresh}
+            highlighted={hl === 'business'}
+          />
+        ) : (
+          <BusinessProfileReadOnlyCard supabase={supabase} business={business} highlighted={hl === 'business'} />
+        )
       ) : null}
     </Stack>
   );
@@ -227,6 +236,53 @@ interface BusinessLike {
   owner_name: string;
   logo_path: string | null;
   invoice_prefix: string;
+}
+
+/**
+ * Read-only business profile for members WITHOUT settings.manage_business:
+ * the same fields the editor shows, as plain text — no save button, no
+ * logo-edit hint (write affordances are hidden, not disabled). RLS blocks
+ * the write anyway; this keeps the info visible without offering the edit.
+ */
+export function BusinessProfileReadOnlyCard({
+  supabase,
+  business,
+  highlighted = false,
+}: {
+  supabase: NonNullable<ReturnType<typeof useMembership>['supabase']>;
+  business: BusinessLike;
+  highlighted?: boolean;
+}) {
+  const t = useTranslations('settings.business');
+
+  const rows: { key: string; label: string; value: string }[] = [
+    { key: 'name', label: t('name'), value: business.name },
+    { key: 'type', label: t('type'), value: business.business_type },
+    { key: 'address', label: t('address'), value: business.address ?? '' },
+    { key: 'owner_name', label: t('owner_name'), value: business.owner_name },
+    { key: 'invoice_prefix', label: t('invoice_prefix'), value: business.invoice_prefix },
+  ].filter((row) => row.value.trim().length > 0);
+
+  return (
+    <Paper id="hl-business" variant="outlined" sx={{ p: 2, ...(highlighted ? highlightSx : undefined) }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>
+        {t('title')}
+      </Typography>
+      <Stack spacing={2}>
+        <BusinessLogoAvatar supabase={supabase} business={business} size={64} />
+        {rows.map((row) => (
+          <Box key={row.key}>
+            <Typography variant="caption" color="text.secondary" component="div">
+              {row.label}
+            </Typography>
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+              {row.value}
+            </Typography>
+          </Box>
+        ))}
+      </Stack>
+    </Paper>
+  );
 }
 
 export function BusinessProfileCard({

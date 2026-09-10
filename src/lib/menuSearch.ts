@@ -6,7 +6,7 @@
  *
  * Permission parity is the hard rule: an entry's `visible` gate reuses the
  * EXACT same condition as the menu row it points at (owner-only Members,
- * `settings.manage_business` for event types / business profile,
+ * `settings.manage_business` for event types,
  * `reports.view` + `reports.view_amounts` for the report list), so search
  * can never surface a destination the current member cannot reach.
  */
@@ -50,7 +50,7 @@ interface EntryDef {
   visible?: (gates: MenuSearchGates) => boolean;
 }
 
-/** Gate shared by the event-types row and the business profile card. */
+/** Gate for the event-types row (business-profile EDITING shares it, but the read-only card shows for all). */
 const canEditBusiness = (g: MenuSearchGates) => g.isOwner || g.permissions.settings.manage_business;
 
 /** Gate of the reports hub (ReportsHome renders the denied state otherwise). */
@@ -113,7 +113,8 @@ const ENTRY_DEFS: readonly EntryDef[] = [
     labelKey: 'settings.business.title',
     sectionKey: 'menu.section.settings',
     href: '/menu/settings?hl=business',
-    visible: canEditBusiness, // card renders only for owner/manage_business.
+    // Always visible: editors get the profile editor, everyone else the
+    // read-only display card — both render on the settings page.
   },
   // About items (all on the About page).
   { id: 'about_source', labelKey: 'menu.about.source_code', sectionKey: 'menu.section.about', href: '/menu/about' },

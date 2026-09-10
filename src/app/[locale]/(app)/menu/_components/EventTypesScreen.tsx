@@ -16,6 +16,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -90,7 +91,20 @@ export default function EventTypesScreen() {
     );
   }
 
-  if (!canManage || !supabase || !business) {
+  // Direct-URL access without the manage gate (the settings row is hidden):
+  // the same localized no-access state SectionGuard renders — never a blank
+  // page. RLS on event_types remains the real enforcement.
+  if (!canManage) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 8 }}>
+        <LockOutlinedIcon color="disabled" sx={{ fontSize: 48, mb: 1 }} />
+        <Typography variant="h6">{t('common.permission.no_access_title')}</Typography>
+        <Typography color="text.secondary">{t('common.permission.no_access_message')}</Typography>
+      </Box>
+    );
+  }
+
+  if (!supabase || !business) {
     return null;
   }
 

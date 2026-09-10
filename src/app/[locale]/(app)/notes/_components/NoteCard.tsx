@@ -44,7 +44,6 @@ export default function NoteCard({
       variant="outlined"
       sx={{
         mb: 1.5,
-        breakInside: 'avoid',
         bgcolor: color?.hex,
         color: color?.on_hex,
         borderColor: color ? 'transparent' : 'divider',

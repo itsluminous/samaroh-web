@@ -6,6 +6,7 @@
 import {
   addChecklistItem,
   compareNotes,
+  distributeToColumns,
   isNoteContentEmpty,
   isPurgeDue,
   noteMatchesSearch,
@@ -246,5 +247,49 @@ describe('isNoteContentEmpty', () => {
     expect(
       isNoteContentEmpty({ title: null, content: null, checklist: [{ id: 'i1', text: 'x', done: false }] }),
     ).toBe(false);
+  });
+});
+
+describe('distributeToColumns — row-major masonry order', () => {
+  const items = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+
+  it('1 column keeps the flat order', () => {
+    expect(distributeToColumns(items, 1)).toEqual([['a', 'b', 'c', 'd', 'e', 'f', 'g']]);
+  });
+
+  it('2 columns zig-zag: newest top-left, next top-right', () => {
+    expect(distributeToColumns(items, 2)).toEqual([
+      ['a', 'c', 'e', 'g'],
+      ['b', 'd', 'f'],
+    ]);
+  });
+
+  it('3 columns fill each row across before the next', () => {
+    expect(distributeToColumns(items, 3)).toEqual([
+      ['a', 'd', 'g'],
+      ['b', 'e'],
+      ['c', 'f'],
+    ]);
+  });
+
+  it('4 columns (lg breakpoint) leave trailing columns shorter', () => {
+    expect(distributeToColumns(items, 4)).toEqual([
+      ['a', 'e'],
+      ['b', 'f'],
+      ['c', 'g'],
+      ['d'],
+    ]);
+  });
+
+  it('keeps the pinned-first prefix in the top row', () => {
+    // Sorted pinned-first input: pinned notes occupy the first row cells.
+    const pinnedFirst = ['pin1', 'pin2', 'new1', 'new2', 'new3'];
+    const cols = distributeToColumns(pinnedFirst, 3);
+    expect(cols.map((c) => c[0])).toEqual(['pin1', 'pin2', 'new1']);
+  });
+
+  it('returns only empty buckets for no items and tolerates count < 1', () => {
+    expect(distributeToColumns([], 3)).toEqual([[], [], []]);
+    expect(distributeToColumns(items, 0)).toEqual([items]);
   });
 });

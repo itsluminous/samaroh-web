@@ -89,6 +89,27 @@ describe('NotesScreen — grid and search', () => {
     expect(pinned.compareDocumentPosition(unpinned) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('distributes cards row-major across flex columns (pinned top-left)', async () => {
+    await seedNote('Older note');
+    await seedNote('Newer note');
+    await seedNote('Pinned note', { pinned: true });
+    renderScreen();
+
+    const pinnedCard = (await screen.findByText('Pinned note')).closest('.MuiCard-root');
+    expect(pinnedCard).not.toBeNull();
+    const firstColumn = pinnedCard!.parentElement!;
+    const flexRow = firstColumn.parentElement!;
+    // jsdom matches no media query → the xs layout: 2 columns.
+    expect(flexRow.children).toHaveLength(2);
+    const secondColumn = flexRow.children[1]!;
+    // Row-major: pinned (sorted first) heads column 0; the next note heads
+    // column 1; the third wraps back under the pinned card. Under the old
+    // column-major CSS `columns` all three stacked in a single container.
+    expect(firstColumn.firstElementChild).toBe(pinnedCard);
+    expect(firstColumn.children).toHaveLength(2);
+    expect(secondColumn.children).toHaveLength(1);
+  });
+
   it('search filters by title/content and by tag name', async () => {
     const tagged = await seedNote('Caterer call');
     await seedNote('Decor ideas');

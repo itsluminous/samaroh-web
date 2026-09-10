@@ -93,6 +93,25 @@ export function visibleNotes(
     .sort(compareNotes);
 }
 
+/**
+ * Row-major masonry distribution: item i goes into column i % columnCount,
+ * so the first (newest / pinned-first) item lands top-left, the next
+ * top-right, zig-zagging across each row before starting the next — the
+ * reading order users expect. CSS `columns` masonry instead fills
+ * column-major (down-then-across), which buries the newest notes at the
+ * bottom of the first column; rendering these arrays as side-by-side flex
+ * columns preserves the masonry look with the correct order.
+ */
+export function distributeToColumns<T>(items: T[], columnCount: number): T[][] {
+  const count = Math.max(1, Math.floor(columnCount));
+  const columns: T[][] = Array.from({ length: count }, () => []);
+  items.forEach((item, i) => {
+    // i % count is always a valid index into the freshly built array.
+    columns[i % count]!.push(item);
+  });
+  return columns;
+}
+
 /** True when a trashed note has outlived the retention window. */
 export function isPurgeDue(trashedAt: string | null, now: Date): boolean {
   if (trashedAt === null) {

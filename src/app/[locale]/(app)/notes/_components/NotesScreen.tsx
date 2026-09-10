@@ -31,6 +31,8 @@ import TextField from '@mui/material/TextField';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ResponsiveGlassFab from '@/components/ResponsiveGlassFab';
@@ -49,7 +51,7 @@ import {
   updateNote,
   type NoteInput,
 } from '../_lib/queries';
-import { liveTagIdsOf, tagsOf, toggleChecklistItem, visibleNotes, type NotesFilter } from '../_lib/notesView';
+import { distributeToColumns, liveTagIdsOf, tagsOf, toggleChecklistItem, visibleNotes, type NotesFilter } from '../_lib/notesView';
 import type { NoteKind, NoteRecord, NoteTagLinkRecord, NoteTagRecord } from '../_lib/types';
 import ManageTagsDialog from './ManageTagsDialog';
 import NoteCard from './NoteCard';
@@ -135,6 +137,17 @@ export default function NotesScreen() {
   const gridNotes = useMemo(
     () => visibleNotes(notes, tags, links, filter, search),
     [notes, tags, links, filter, search],
+  );
+
+  // Same responsive column count the CSS-columns layout used (xs 2 / sm 3 /
+  // lg 4), resolved in JS so we can distribute row-major ourselves.
+  const theme = useTheme();
+  const smUp = useMediaQuery(theme.breakpoints.up('sm'));
+  const lgUp = useMediaQuery(theme.breakpoints.up('lg'));
+  const columnCount = lgUp ? 4 : smUp ? 3 : 2;
+  const noteColumns = useMemo(
+    () => distributeToColumns(gridNotes, columnCount),
+    [gridNotes, columnCount],
   );
 
   const dialogNote = dialog ? (notes.find((n) => n.id === dialog.noteId) ?? null) : null;
@@ -325,17 +338,29 @@ export default function NotesScreen() {
             </Box>
           )
         ) : (
-          // Keep-like masonry: CSS columns keep cards their natural height.
-          <Box sx={{ columnCount: { xs: 2, sm: 3, lg: 4 }, columnGap: 1.5 }}>
-            {gridNotes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                tags={tagsOf(note, tags, links)}
-                canEdit={canEdit && note.status !== 'trashed'}
-                onOpen={() => setDialog({ noteId: note.id, startInEdit: false })}
-                onToggleItem={(itemId) => void handleToggleItem(note, itemId)}
-              />
+          // Keep-like masonry with ROW-MAJOR order: notes are distributed
+          // round-robin (i % N) into side-by-side flex columns, so the
+          // newest/pinned-first note sits top-left and order zig-zags across
+          // the row. (CSS `columns` filled column-major — down-then-across —
+          // which put the newest notes at the bottom of the first column.)
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+            {noteColumns.map((column, columnIndex) => (
+              <Box
+                // Columns are positional buckets; index identity is correct here.
+                key={columnIndex}
+                sx={{ flex: 1, minWidth: 0 }}
+              >
+                {column.map((note) => (
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    tags={tagsOf(note, tags, links)}
+                    canEdit={canEdit && note.status !== 'trashed'}
+                    onOpen={() => setDialog({ noteId: note.id, startInEdit: false })}
+                    onToggleItem={(itemId) => void handleToggleItem(note, itemId)}
+                  />
+                ))}
+              </Box>
             ))}
           </Box>
         )}

@@ -4,9 +4,13 @@
 // Pin/Unpin, Edit, Share (Web Share API with clipboard fallback),
 // Complete/un-complete, Delete→Trash, Restore, Delete forever (Trash only) —
 // and EDIT mode edits title, body or checklist (add/toggle/remove),
-// color (ColorSwatchPicker reuse) and tags (type-ahead with create-on-the-fly).
+// color (compact ColorSwatchPicker row) and tags (debounced type-ahead:
+// suggestions only while typing, with a create-on-the-fly option; selected
+// tags are removable chips). Closing a brand-new note without content
+// discards it (onDiscard) so empty cards never linger in the grid.
 // Members without notes.edit get a view-only popup (Share stays available).
 
+import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -32,17 +36,23 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ColorSwatchPicker from '@/components/ColorSwatchPicker';
 import { findBookingColor } from '@/lib/booking/bookingColors';
 import type { NoteInput } from '../_lib/queries';
 import {
   addChecklistItem,
+  isNoteContentEmpty,
   noteShareText,
   removeChecklistItem,
   toggleChecklistItem,
 } from '../_lib/notesView';
 import type { ChecklistItem, NoteRecord, NoteTagRecord } from '../_lib/types';
+
+/** Debounce before the tag type-ahead surfaces suggestions. */
+export const TAG_SUGGEST_DEBOUNCE_MS = 200;
+/** Sentinel id of the type-ahead's create-on-the-fly option. */
+const CREATE_TAG_OPTION_ID = '__create-tag__';
 
 export default function NoteDialog({
   note,
@@ -59,6 +69,7 @@ export default function NoteDialog({
   onPurge,
   onShared,
   onClose,
+  onDiscard,
 }: {
   note: NoteRecord;
   /** All live tags of the business (type-ahead options). */
@@ -80,6 +91,12 @@ export default function NoteDialog({
   /** Clipboard-fallback notice hook (Web Share API unavailable). */
   onShared: (viaClipboard: boolean) => void;
   onClose: () => void;
+  /**
+   * Create flow only: called instead of onClose when the brand-new note is
+   * closed without content, so the caller can drop the empty row. Falls
+   * back to onClose when absent.
+   */
+  onDiscard?: () => Promise<void>;
 }) {
   const t = useTranslations('notes');
   const tCommon = useTranslations('common');
@@ -95,8 +112,52 @@ export default function NoteDialog({
   );
   const [saving, setSaving] = useState(false);
 
+  // Tag type-ahead: suggestions appear only while typing, after a debounce.
+  const [tagInput, setTagInput] = useState('');
+  const [tagQuery, setTagQuery] = useState('');
+  const [tagFocused, setTagFocused] = useState(false);
+  useEffect(() => {
+    const handle = setTimeout(() => setTagQuery(tagInput.trim()), TAG_SUGGEST_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [tagInput]);
+
+  // Matching live tags + a create-on-the-fly option when the typed name is
+  // not an exact (case-insensitive) existing tag.
+  const tagOptions = useMemo<NoteTagRecord[]>(() => {
+    const q = tagQuery.toLowerCase();
+    if (q === '') {
+      return [];
+    }
+    const matches = tags.filter((tag) => tag.name.toLowerCase().includes(q));
+    if (tags.some((tag) => tag.name.toLowerCase() === q)) {
+      return matches;
+    }
+    return [
+      ...matches,
+      {
+        id: CREATE_TAG_OPTION_ID,
+        business_id: note.business_id,
+        name: tagQuery,
+        created_at: '',
+        updated_at: '',
+        deleted_at: null,
+      },
+    ];
+  }, [tags, tagQuery, note.business_id]);
+
+  const tagsOpen = tagFocused && tagInput.trim() !== '' && tagQuery !== '';
+
   const surface = findBookingColor(editing ? color : note.color);
   const inTrash = note.status === 'trashed';
+
+  /** Create flow: drop the (still empty) row instead of leaving a phantom card. */
+  async function handleDiscard() {
+    if (onDiscard) {
+      await onDiscard();
+      return;
+    }
+    onClose();
+  }
 
   async function handleShare() {
     const text = noteShareText(note);
@@ -123,14 +184,20 @@ export default function NoteDialog({
     try {
       const pendingItem = newItem.trim();
       const items = pendingItem === '' ? checklist : addChecklistItem(checklist, pendingItem);
-      await onSaveContent({
+      const input: NoteInput = {
         kind: note.kind,
         title: title.trim() === '' ? null : title.trim(),
         content: note.kind === 'note' ? (content.trim() === '' ? null : content) : null,
         checklist: note.kind === 'checklist' ? items : [],
         color,
         pinned: note.pinned,
-      });
+      };
+      // Saving a brand-new note with no content at all = discard (Keep-style).
+      if (startInEdit && selectedTags.length === 0 && isNoteContentEmpty(input)) {
+        await handleDiscard();
+        return;
+      }
+      await onSaveContent(input);
       await onSaveTags(selectedTags.map((tag) => tag.id));
       onClose();
     } finally {
@@ -139,15 +206,16 @@ export default function NoteDialog({
   }
 
   async function pickTags(next: (NoteTagRecord | string)[]) {
-    // freeSolo values are strings — create the tag on the fly (case-insensitive
+    // freeSolo Enter yields strings; the create-option sentinel yields a
+    // placeholder record — both create the tag on the fly (case-insensitive
     // reuse of an existing tag instead of a duplicate insert).
     const resolved: NoteTagRecord[] = [];
     for (const entry of next) {
-      if (typeof entry !== 'string') {
+      if (typeof entry !== 'string' && entry.id !== CREATE_TAG_OPTION_ID) {
         resolved.push(entry);
         continue;
       }
-      const name = entry.trim();
+      const name = (typeof entry === 'string' ? entry : entry.name).trim();
       if (name === '') {
         continue;
       }
@@ -193,10 +261,20 @@ export default function NoteDialog({
     </Box>
   );
 
+  // Backdrop/Escape on a create closes through the discard path — the row
+  // in the store is still empty, so leaving it would show a phantom card.
+  const handleDialogClose = () => {
+    if (startInEdit && editing) {
+      void handleDiscard();
+      return;
+    }
+    onClose();
+  };
+
   return (
     <Dialog
       open
-      onClose={onClose}
+      onClose={handleDialogClose}
       fullWidth
       maxWidth="sm"
       PaperProps={{ sx: { bgcolor: surface?.hex, color: surface?.on_hex } }}
@@ -230,7 +308,7 @@ export default function NoteDialog({
             </Tooltip>
           ) : null}
           <Tooltip title={tCommon('action.close')}>
-            <IconButton aria-label={tCommon('action.close')} sx={{ color: 'inherit' }} onClick={onClose}>
+            <IconButton aria-label={tCommon('action.close')} sx={{ color: 'inherit' }} onClick={handleDialogClose}>
               <CloseIcon />
             </IconButton>
           </Tooltip>
@@ -242,7 +320,7 @@ export default function NoteDialog({
               <TextField
                 fullWidth
                 multiline
-                minRows={3}
+                minRows={6}
                 variant="standard"
                 label={t('editor.content_placeholder')}
                 value={content}
@@ -298,21 +376,43 @@ export default function NoteDialog({
                 <Typography variant="caption" component="div" sx={{ mb: 0.5, opacity: 0.8 }}>
                   {t('picker.color_title')}
                 </Typography>
-                <ColorSwatchPicker label={t('picker.color_title')} value={color} onChange={setColor} />
+                <ColorSwatchPicker label={t('picker.color_title')} value={color} onChange={setColor} compact />
               </Box>
               <Autocomplete
                 multiple
                 freeSolo
-                options={tags}
+                open={tagsOpen}
+                options={tagOptions}
+                filterOptions={(x) => x}
                 value={selectedTags}
+                inputValue={tagInput}
+                onInputChange={(_e, next) => setTagInput(next)}
                 getOptionLabel={(option) => (typeof option === 'string' ? option : option.name)}
                 isOptionEqualToValue={(option, val) => option.id === val.id}
                 onChange={(_e, next) => void pickTags(next)}
+                renderOption={(props, option) => {
+                  const { key, ...optionProps } = props;
+                  return (
+                    <li key={key} {...optionProps}>
+                      {option.id === CREATE_TAG_OPTION_ID
+                        ? t('picker.tags_create', { name: option.name })
+                        : option.name}
+                    </li>
+                  );
+                }}
                 renderTags={(value, getTagProps) =>
                   value.map((option, index) => {
                     const { key, ...chipProps } = getTagProps({ index });
                     const label = typeof option === 'string' ? option : option.name;
-                    return <Chip key={key} size="small" label={label} {...chipProps} />;
+                    return (
+                      <Chip
+                        key={key}
+                        size="small"
+                        label={label}
+                        {...chipProps}
+                        deleteIcon={<CancelIcon aria-label={t('picker.tags_remove', { name: label })} />}
+                      />
+                    );
                   })
                 }
                 renderInput={(params) => (
@@ -321,6 +421,8 @@ export default function NoteDialog({
                     variant="standard"
                     label={t('picker.tags_title')}
                     placeholder={t('picker.tags_name_placeholder')}
+                    onFocus={() => setTagFocused(true)}
+                    onBlur={() => setTagFocused(false)}
                   />
                 )}
               />
@@ -342,7 +444,7 @@ export default function NoteDialog({
       <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
         {editing ? (
           <>
-            <Button sx={{ color: 'inherit' }} onClick={() => (startInEdit ? onClose() : setEditing(false))}>
+            <Button sx={{ color: 'inherit' }} onClick={() => (startInEdit ? void handleDiscard() : setEditing(false))}>
               {tCommon('action.cancel')}
             </Button>
             <Button variant="contained" disabled={saving} onClick={() => void handleSave()}>

@@ -469,6 +469,7 @@ export default function BookingForm({
               value={color}
               onChange={setColor}
               defaultHex={typeDefaultColor?.hex}
+              compact
             />
           </Box>
 

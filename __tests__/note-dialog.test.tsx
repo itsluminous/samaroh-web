@@ -57,6 +57,8 @@ function renderDialog({
   onPurge = jest.fn(async () => {}),
   onCreateTag = jest.fn(async (name: string) => ({ ...vendorsTag, id: `new-${name}`, name })),
   onShared = jest.fn(),
+  onDiscard = jest.fn(async () => {}),
+  onClose = jest.fn(),
 } = {}) {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
@@ -74,11 +76,12 @@ function renderDialog({
         onSetStatus={onSetStatus}
         onPurge={onPurge}
         onShared={onShared}
-        onClose={jest.fn()}
+        onClose={onClose}
+        onDiscard={onDiscard}
       />
     </NextIntlClientProvider>,
   );
-  return { onSaveContent, onSetStatus, onPurge, onCreateTag, onShared };
+  return { onSaveContent, onSetStatus, onPurge, onCreateTag, onShared, onDiscard, onClose };
 }
 
 const action = (name: string) => screen.queryByRole('button', { name });
@@ -197,6 +200,130 @@ describe('NoteDialog — edit mode', () => {
     fireEvent.keyDown(tagsInput, { key: 'Enter' });
     await waitFor(() => expect(screen.getAllByText('Vendors').length).toBeGreaterThanOrEqual(1));
     expect(onCreateTag).not.toHaveBeenCalled();
+  });
+});
+
+describe('NoteDialog — tag type-ahead', () => {
+  const otherTag: NoteTagRecord = { ...vendorsTag, id: 't2', name: 'Decor' };
+
+  it('shows NO suggestion list before typing (the all-tags list is gone)', () => {
+    renderDialog({ startInEdit: true, tags: [vendorsTag, otherTag] });
+    const tagsInput = screen.getByLabelText(en.notes.picker.tags_title);
+    fireEvent.focus(tagsInput);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('suggests matching tags while typing (debounced)', async () => {
+    renderDialog({ startInEdit: true, tags: [vendorsTag, otherTag] });
+    const tagsInput = screen.getByLabelText(en.notes.picker.tags_title);
+    fireEvent.focus(tagsInput);
+    fireEvent.change(tagsInput, { target: { value: 'ven' } });
+    // The listbox appears only after the debounce elapses.
+    const option = await screen.findByRole('option', { name: 'Vendors' });
+    expect(option).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Decor' })).not.toBeInTheDocument();
+  });
+
+  it('offers a create-on-the-fly option for an unknown name and creates on click', async () => {
+    const { onCreateTag } = renderDialog({ startInEdit: true, tags: [vendorsTag] });
+    const tagsInput = screen.getByLabelText(en.notes.picker.tags_title);
+    fireEvent.focus(tagsInput);
+    fireEvent.change(tagsInput, { target: { value: 'Lighting' } });
+    const createOption = await screen.findByRole('option', {
+      name: en.notes.picker.tags_create.replace('{name}', 'Lighting'),
+    });
+    fireEvent.click(createOption);
+    await waitFor(() => expect(onCreateTag).toHaveBeenCalledWith('Lighting'));
+    // The created tag lands as a selected chip.
+    expect(await screen.findByText('Lighting')).toBeInTheDocument();
+  });
+
+  it('does NOT offer the create option when the typed name matches an existing tag exactly', async () => {
+    renderDialog({ startInEdit: true, tags: [vendorsTag] });
+    const tagsInput = screen.getByLabelText(en.notes.picker.tags_title);
+    fireEvent.focus(tagsInput);
+    fireEvent.change(tagsInput, { target: { value: 'vendors' } });
+    await screen.findByRole('option', { name: 'Vendors' });
+    expect(
+      screen.queryByRole('option', {
+        name: en.notes.picker.tags_create.replace('{name}', 'vendors'),
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('selected tags render as removable chips', async () => {
+    renderDialog({ startInEdit: true, tags: [vendorsTag], noteTagIds: [vendorsTag.id] });
+    const chip = screen.getByText('Vendors');
+    expect(chip).toBeInTheDocument();
+    const remove = screen.getByTestId('CancelIcon');
+    expect(remove).toHaveAttribute(
+      'aria-label',
+      en.notes.picker.tags_remove.replace('{name}', 'Vendors'),
+    );
+    fireEvent.click(remove);
+    await waitFor(() => expect(screen.queryByText('Vendors')).not.toBeInTheDocument());
+  });
+});
+
+describe('NoteDialog — compact color picker', () => {
+  it('the editor renders the compact single-row dot variant', () => {
+    renderDialog({ startInEdit: true });
+    const group = screen.getByRole('group', { name: en.notes.picker.color_title });
+    expect(group).toHaveStyle({ flexWrap: 'nowrap', overflowX: 'auto' });
+    expect(screen.getByRole('button', { name: en.booking.color.default })).toHaveStyle({
+      width: '22px',
+      height: '22px',
+    });
+  });
+});
+
+describe('NoteDialog — empty-create discard', () => {
+  it('Cancel on a brand-new note discards it instead of leaving an empty row', async () => {
+    const emptyNote = makeNote({ title: null, content: null });
+    const { onDiscard, onSaveContent } = renderDialog({ note: emptyNote, startInEdit: true });
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.cancel }));
+    await waitFor(() => expect(onDiscard).toHaveBeenCalled());
+    expect(onSaveContent).not.toHaveBeenCalled();
+  });
+
+  it('Save on a brand-new note without any content discards it', async () => {
+    const emptyNote = makeNote({ title: null, content: null });
+    const { onDiscard, onSaveContent } = renderDialog({ note: emptyNote, startInEdit: true });
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onDiscard).toHaveBeenCalled());
+    expect(onSaveContent).not.toHaveBeenCalled();
+  });
+
+  it('a checklist of only blank items still counts as empty on save', async () => {
+    const emptyChecklist = makeNote({
+      kind: 'checklist',
+      title: null,
+      content: null,
+      checklist: [{ id: 'i1', text: '   ', done: false }],
+    });
+    const { onDiscard, onSaveContent } = renderDialog({ note: emptyChecklist, startInEdit: true });
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onDiscard).toHaveBeenCalled());
+    expect(onSaveContent).not.toHaveBeenCalled();
+  });
+
+  it('Save with content saves normally (no discard)', async () => {
+    const emptyNote = makeNote({ title: null, content: null });
+    const { onDiscard, onSaveContent } = renderDialog({ note: emptyNote, startInEdit: true });
+    fireEvent.change(screen.getByLabelText(en.notes.editor.title_placeholder), { target: { value: 'Kept' } });
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
+    expect(onDiscard).not.toHaveBeenCalled();
+  });
+
+  it('Cancel while editing an EXISTING note only leaves edit mode', () => {
+    const { onDiscard, onClose } = renderDialog();
+    fireEvent.click(screen.getByRole('button', { name: en.notes.action.edit }));
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.cancel }));
+    expect(onDiscard).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // Back in view mode: the Edit action is offered again.
+    expect(screen.getByRole('button', { name: en.notes.action.edit })).toBeInTheDocument();
   });
 });
 

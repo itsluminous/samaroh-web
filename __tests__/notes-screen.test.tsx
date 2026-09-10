@@ -221,3 +221,79 @@ describe('NotesScreen — purge sweep on load', () => {
     expect(row?.deleted_at).toBeNull();
   });
 });
+
+describe('NotesScreen — mobile drawer app-bar offset', () => {
+  it('the temporary drawer starts with a Toolbar spacer so entries clear the fixed app bar', async () => {
+    await seedNote('Any note');
+    renderScreen();
+    await screen.findByText('Any note');
+
+    // Open the mobile drawer via the hamburger.
+    fireEvent.click(screen.getByRole('button', { name: en.notes.drawer.open }));
+    const paper = document.querySelector('.MuiDrawer-paper');
+    expect(paper).not.toBeNull();
+    // First child is the Toolbar spacer (the AppShell app bar is fixed at
+    // zIndex drawer+1 and would otherwise paint over the first entries).
+    expect(paper!.firstElementChild).toHaveClass('MuiToolbar-root');
+    // The nav list therefore sits BELOW the spacer — no overlap with the header.
+    const list = paper!.querySelector('nav');
+    expect(list).not.toBeNull();
+    expect(
+      paper!.firstElementChild!.compareDocumentPosition(list!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // MUI's toolbar mixin gives the spacer the app bar's min-height.
+    expect(paper!.firstElementChild).toHaveStyle({ minHeight: '56px' });
+  });
+});
+
+describe('NotesScreen — phantom empty rows/cards', () => {
+  it('blank checklist items synced from elsewhere never render as empty rows', async () => {
+    // Seed a raw row bypassing the sanitized create path (bad mobile data).
+    await guestDb.notes.put({
+      id: 'raw-1',
+      business_id: BIZ,
+      kind: 'checklist',
+      title: 'Red list',
+      content: null,
+      checklist: [
+        { id: 'i1', text: 'Garlands', done: false },
+        { id: 'i2', text: '', done: false },
+        { id: 'i3', text: '   ', done: false },
+      ],
+      color: 'tomato',
+      pinned: false,
+      status: 'active',
+      completed_at: null,
+      trashed_at: null,
+      created_by: USER,
+      updated_by: null,
+      created_at: '2026-09-01T10:00:00Z',
+      updated_at: '2026-09-01T10:00:00Z',
+      deleted_at: null,
+    } as never);
+
+    renderScreen();
+    await screen.findByText('Red list');
+    // Only the non-blank item renders — one checkbox, no empty rows.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox', { name: 'Garlands' })).toBeInTheDocument();
+  });
+
+  it('cancelling a brand-new note removes the empty row (no phantom card)', async () => {
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: en.notes.home.create_note }));
+    await screen.findByLabelText(en.notes.editor.title_placeholder);
+    expect(await guestDb.notes.count()).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.cancel }));
+    // The dialog closes and the empty row is tombstoned.
+    await waitFor(() =>
+      expect(screen.queryByLabelText(en.notes.editor.title_placeholder)).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText(en.notes.home.empty_title)).toBeInTheDocument();
+    await waitFor(async () => {
+      const row = (await guestDb.notes.toArray())[0];
+      expect(row?.deleted_at).not.toBeNull();
+    });
+  });
+});

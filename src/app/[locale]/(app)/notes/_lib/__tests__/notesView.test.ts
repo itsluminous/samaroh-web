@@ -6,11 +6,13 @@
 import {
   addChecklistItem,
   compareNotes,
+  isNoteContentEmpty,
   isPurgeDue,
   noteMatchesSearch,
   noteShareText,
   purgeDueNotes,
   removeChecklistItem,
+  sanitizeChecklist,
   tagsOf,
   toggleChecklistItem,
   visibleNotes,
@@ -208,5 +210,41 @@ describe('noteShareText', () => {
       ],
     });
     expect(noteShareText(note)).toBe('Shopping\n[x] Garlands\n[ ] Diyas');
+  });
+});
+
+describe('sanitizeChecklist', () => {
+  it('drops blank and malformed items, keeps real ones in order', () => {
+    const items = [
+      { id: 'i1', text: 'Garlands', done: false },
+      { id: 'i2', text: '', done: false },
+      { id: 'i3', text: '   ', done: true },
+      { id: 'i4', text: 42, done: false } as unknown as { id: string; text: string; done: boolean },
+      { id: 'i5', text: 'Diyas', done: true },
+    ];
+    expect(sanitizeChecklist(items).map((i) => i.id)).toEqual(['i1', 'i5']);
+  });
+
+  it('leaves a clean list untouched', () => {
+    const items = [{ id: 'i1', text: 'Garlands', done: false }];
+    expect(sanitizeChecklist(items)).toEqual(items);
+  });
+});
+
+describe('isNoteContentEmpty', () => {
+  it('true for no title/content and only blank checklist items', () => {
+    expect(isNoteContentEmpty({ title: null, content: null, checklist: [] })).toBe(true);
+    expect(isNoteContentEmpty({ title: '  ', content: '', checklist: [] })).toBe(true);
+    expect(
+      isNoteContentEmpty({ title: null, content: null, checklist: [{ id: 'i1', text: ' ', done: false }] }),
+    ).toBe(true);
+  });
+
+  it('false as soon as any field carries content', () => {
+    expect(isNoteContentEmpty({ title: 'T', content: null, checklist: [] })).toBe(false);
+    expect(isNoteContentEmpty({ title: null, content: 'body', checklist: [] })).toBe(false);
+    expect(
+      isNoteContentEmpty({ title: null, content: null, checklist: [{ id: 'i1', text: 'x', done: false }] }),
+    ).toBe(false);
   });
 });

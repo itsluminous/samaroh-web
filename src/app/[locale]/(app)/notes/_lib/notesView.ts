@@ -111,6 +111,33 @@ export function purgeDueNotes(notes: NoteRecord[], now: Date): NoteRecord[] {
 
 // --- checklist edits (immutable helpers) ---
 
+/**
+ * Drops blank checklist items (empty/whitespace text, or malformed rows
+ * missing a string text). Blank items — typically saved by the mobile
+ * editor's empty rows — otherwise render as phantom empty rows/cards on the
+ * grid. Used on BOTH the read path (normalizeNote) and the save path.
+ */
+export function sanitizeChecklist(items: ChecklistItem[]): ChecklistItem[] {
+  return items.filter((item) => typeof item.text === 'string' && item.text.trim() !== '');
+}
+
+/**
+ * True when a note has no meaningful content: no title, no body and no
+ * non-blank checklist item. The create flow discards such notes on close so
+ * they never linger as empty cards in the grid.
+ */
+export function isNoteContentEmpty(input: {
+  title: string | null;
+  content: string | null;
+  checklist: ChecklistItem[];
+}): boolean {
+  return (
+    (input.title ?? '').trim() === '' &&
+    (input.content ?? '').trim() === '' &&
+    sanitizeChecklist(input.checklist).length === 0
+  );
+}
+
 export function toggleChecklistItem(items: ChecklistItem[], itemId: string): ChecklistItem[] {
   return items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item));
 }

@@ -13,7 +13,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
-import { purgeDueNotes } from './notesView';
+import { purgeDueNotes, sanitizeChecklist } from './notesView';
 import type {
   ChecklistItem,
   NoteKind,
@@ -44,7 +44,9 @@ export function normalizeNote(row: Record<string, unknown>): NoteRecord {
     kind: n.kind === 'checklist' ? 'checklist' : 'note',
     title: n.title ?? null,
     content: n.content ?? null,
-    checklist: Array.isArray(n.checklist) ? (n.checklist as ChecklistItem[]) : [],
+    // Blank items (e.g. empty editor rows synced from mobile) are dropped on
+    // read so they never render as phantom empty rows/cards.
+    checklist: Array.isArray(n.checklist) ? sanitizeChecklist(n.checklist as ChecklistItem[]) : [],
     color: n.color ?? null,
     pinned: n.pinned === true,
     status: n.status === 'completed' || n.status === 'trashed' ? n.status : 'active',
@@ -81,7 +83,8 @@ export async function fetchNotesData(db: SupabaseClient, businessId: string): Pr
   }
   return {
     notes: ((notesRes.data ?? []) as Record<string, unknown>[]).map(normalizeNote),
-    tags: (tagsRes.data ?? []) as NoteTagRecord[],
+    // Blank-named tags (bad synced data) would render as empty chips — drop them.
+    tags: ((tagsRes.data ?? []) as NoteTagRecord[]).filter((tag) => tag.name?.trim() !== ''),
     links: (linksRes.data ?? []) as NoteTagLinkRecord[],
   };
 }
@@ -109,7 +112,8 @@ export async function createNote(
     kind: input.kind,
     title: input.title,
     content: input.content,
-    checklist: input.checklist,
+    // Save path never persists blank items (phantom-row source).
+    checklist: sanitizeChecklist(input.checklist),
     color: input.color,
     pinned: input.pinned,
     status: 'active' as NoteStatus,
@@ -129,7 +133,8 @@ export async function updateNote(
   const patch = {
     title: input.title,
     content: input.content,
-    checklist: input.checklist,
+    // Save path never persists blank items (phantom-row source).
+    checklist: sanitizeChecklist(input.checklist),
     color: input.color,
     pinned: input.pinned,
     updated_by: userId,
@@ -238,6 +243,66 @@ export async function createTag(
   const row = { id: crypto.randomUUID(), business_id: businessId, name: name.trim() };
   await insertWithOutbox(db, { module: 'notes', table: 'note_tags', row, label: row.name });
   return { ...row, created_at: now, updated_at: now, deleted_at: null };
+}
+
+/**
+ * Renames a tag (manage-tags UI). Duplicate validation happens in the UI —
+ * the write itself is a plain LWW patch. Returns the optimistic row.
+ */
+export async function renameTag(
+  db: SupabaseClient,
+  tag: NoteTagRecord,
+  name: string,
+): Promise<NoteTagRecord> {
+  const patch = { name: name.trim(), updated_at: new Date().toISOString() };
+  await updateWithOutbox(db, {
+    module: 'notes',
+    table: 'note_tags',
+    entityId: tag.id,
+    patch,
+    baseUpdatedAt: tag.updated_at,
+    label: patch.name,
+  });
+  return { ...tag, ...patch };
+}
+
+/**
+ * Deletes a tag (manage-tags UI): tombstones the tag row AND every live
+ * link carrying it, so the tag disappears from all notes at once. Returns
+ * the updated full link list for the caller's state.
+ */
+export async function deleteTag(
+  db: SupabaseClient,
+  tag: NoteTagRecord,
+  allLinks: NoteTagLinkRecord[],
+): Promise<NoteTagLinkRecord[]> {
+  const now = new Date().toISOString();
+  await updateWithOutbox(db, {
+    module: 'notes',
+    table: 'note_tags',
+    entityId: tag.id,
+    patch: { deleted_at: now, updated_at: now },
+    baseUpdatedAt: tag.updated_at,
+    label: tag.name,
+  });
+  const next: NoteTagLinkRecord[] = [];
+  for (const link of allLinks) {
+    if (link.tag_id !== tag.id || link.deleted_at !== null) {
+      next.push(link);
+      continue;
+    }
+    await updateWithOutbox(db, {
+      module: 'notes',
+      table: 'note_tag_links',
+      entityId: `${link.note_id}:${link.tag_id}`,
+      match: { note_id: link.note_id, tag_id: link.tag_id },
+      patch: { deleted_at: now, updated_at: now },
+      baseUpdatedAt: link.updated_at,
+      label: tag.name,
+    });
+    next.push({ ...link, deleted_at: now, updated_at: now });
+  }
+  return next;
 }
 
 /**

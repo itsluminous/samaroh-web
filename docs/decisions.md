@@ -613,3 +613,35 @@ repo interprets it where the spec leaves web-specific latitude.)
   covering all three surfaces. Cancelled stays the one exception (chip +
   strikethrough). Scope note: the detail drawer's status chip is untouched —
   the rule targets row surfaces only, matching the Android item.
+
+- **Notes feedback batch** (2026-09-10). Four interpretations:
+  1. *Compact color picker.* `ColorSwatchPicker` gains a `compact` variant
+     (22px dots, selected ring, one horizontally scrollable row) used by the
+     note editor and the booking form; the event-type preset dialog keeps
+     the standard wrapping grid. The vertical space freed in the note editor
+     goes to the body field (minRows 3 → 6).
+  2. *Tag type-ahead.* The note editor's tag field no longer lists all tags
+     on focus: suggestions appear only while typing (200 ms debounce), with
+     a "Create "{name}"" option whenever the typed name isn't an exact
+     case-insensitive match; chosen tags are removable chips
+     (`notes.picker.tags_create` / `tags_remove`, cross-platform keys).
+  3. *Blank checklist items + empty notes (phantom "pills" bug).* Root cause
+     of the owner-reported empty outlined pills on the mobile grid: blank
+     checklist items in the jsonb render as empty rows, and the create flow
+     inserts the row BEFORE the editor opens, so an abandoned create lingers
+     as an empty outlined card. Fix: `sanitizeChecklist` drops blank items
+     on the read path (`normalizeNote`) and the save path
+     (`createNote`/`updateNote`); blank-NAMED tags are dropped on fetch; and
+     closing/cancelling/saving a brand-new note with no content discards it
+     (tombstone purge — Keep parity). Server-side cleanup of existing bad
+     rows is owned by the Android track.
+  4. *Tag management.* Manage-tags dialog behind an edit affordance next to
+     the drawer's Tags header (gated on `notes.edit`, per the permission
+     description "manage tags"): rename with case-insensitive duplicate
+     validation; delete behind a confirmation stating the linked-note count.
+     Delete = tombstone the tag AND its live links (`deleteTag`); notes stay
+     unchanged; a grid scoped to the deleted tag falls back to the main list.
+  Also fixed: the mobile notes drawer ignored the fixed app bar (zIndex
+  drawer+1 paints over the drawer paper), hiding the top entries — the
+  temporary drawer now opens with a `<Toolbar />` spacer, the same
+  convention as the shell's permanent rail.

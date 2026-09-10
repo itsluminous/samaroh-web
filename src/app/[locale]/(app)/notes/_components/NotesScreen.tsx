@@ -10,6 +10,7 @@
 import AddIcon from '@mui/icons-material/Add';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
@@ -27,6 +28,7 @@ import ListSubheader from '@mui/material/ListSubheader';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
@@ -36,8 +38,10 @@ import { useMembership } from '@/lib/permissions/useMembership';
 import {
   createNote,
   createTag,
+  deleteTag,
   fetchNotesData,
   purgeNote,
+  renameTag,
   setNotePinned,
   setNoteStatus,
   setNoteTags,
@@ -47,6 +51,7 @@ import {
 } from '../_lib/queries';
 import { liveTagIdsOf, tagsOf, toggleChecklistItem, visibleNotes, type NotesFilter } from '../_lib/notesView';
 import type { NoteKind, NoteRecord, NoteTagLinkRecord, NoteTagRecord } from '../_lib/types';
+import ManageTagsDialog from './ManageTagsDialog';
 import NoteCard from './NoteCard';
 import NoteDialog from './NoteDialog';
 
@@ -81,6 +86,7 @@ export default function NotesScreen() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<NotesFilter>({ view: 'notes' });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [manageTagsOpen, setManageTagsOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [snack, setSnack] = useState<string | null>(null);
 
@@ -216,7 +222,23 @@ export default function NotesScreen() {
       ))}
       {tags.length > 0 ? (
         <ListSubheader disableSticky sx={{ bgcolor: 'transparent' }}>
-          {t('drawer.tags_header')}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {t('drawer.tags_header')}
+            {canEdit ? (
+              <Tooltip title={t('tags.manage_open')}>
+                <IconButton
+                  size="small"
+                  aria-label={t('tags.manage_open')}
+                  onClick={() => {
+                    setManageTagsOpen(true);
+                    setDrawerOpen(false);
+                  }}
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </Box>
         </ListSubheader>
       ) : null}
       {tags.map((tag) => (
@@ -254,16 +276,20 @@ export default function NotesScreen() {
       {/* Desktop: persistent in-page drawer column. */}
       <Box sx={{ display: { xs: 'none', md: 'block' }, flexShrink: 0 }}>{drawerList}</Box>
 
-      {/* Mobile: temporary drawer. */}
+      {/* Mobile: temporary drawer. The fixed AppShell app bar sits at
+          zIndex drawer+1, so it paints OVER the drawer paper — the Toolbar
+          spacer (same convention as the shell's permanent rail) keeps the
+          first entries below the header instead of hidden under it. */}
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ display: { md: 'none' } }}>
+        <Toolbar />
         {drawerList}
       </Drawer>
 
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2 }}>
-          <Tooltip title={t('drawer.notes')}>
+          <Tooltip title={t('drawer.open')}>
             <IconButton
-              aria-label={t('drawer.notes')}
+              aria-label={t('drawer.open')}
               sx={{ display: { md: 'none' } }}
               onClick={() => setDrawerOpen(true)}
             >
@@ -334,6 +360,34 @@ export default function NotesScreen() {
         </Stack>
       ) : null}
 
+      {manageTagsOpen && tags.length > 0 ? (
+        <ManageTagsDialog
+          tags={tags}
+          linkedNoteCount={(tagId) => {
+            const noteIds = new Set(notes.map((n) => n.id));
+            return links.filter(
+              (l) => l.tag_id === tagId && l.deleted_at === null && noteIds.has(l.note_id),
+            ).length;
+          }}
+          onRename={async (tag, name) => {
+            const next = await renameTag(supabase, tag, name);
+            setTags((prev) =>
+              prev
+                .map((existing) => (existing.id === tag.id ? next : existing))
+                .sort((a, b) => a.name.localeCompare(b.name)),
+            );
+          }}
+          onDelete={async (tag) => {
+            const nextLinks = await deleteTag(supabase, tag, links);
+            setLinks(nextLinks);
+            setTags((prev) => prev.filter((existing) => existing.id !== tag.id));
+            // A grid scoped to the deleted tag falls back to the main list.
+            setFilter((prev) => (prev.view === 'tag' && prev.tagId === tag.id ? { view: 'notes' } : prev));
+          }}
+          onClose={() => setManageTagsOpen(false)}
+        />
+      ) : null}
+
       {dialogNote && userId ? (
         <NoteDialog
           key={`${dialogNote.id}:${dialog?.startInEdit}`}
@@ -374,6 +428,17 @@ export default function NotesScreen() {
             }
           }}
           onClose={() => setDialog(null)}
+          onDiscard={async () => {
+            // Create flow abandoned/empty: drop the empty row so it never
+            // lingers as a phantom empty card in the grid.
+            setDialog(null);
+            setNotes((prev) => prev.filter((n) => n.id !== dialogNote.id));
+            try {
+              await purgeNote(supabase, dialogNote, userId);
+            } catch {
+              // Best effort — the row is already gone from the visible state.
+            }
+          }}
         />
       ) : null}
 

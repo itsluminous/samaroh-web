@@ -3,13 +3,19 @@
 /**
  * Sync status screen (§4.4 / §8): pending-outbox count, the queued-changes
  * list with per-item status (queued / error / LWW conflict), last sync time
- * and a "Sync now" button. Failed and conflicting items can be discarded.
+ * and a "Sync now" button. Failed and conflicting items can be discarded
+ * (behind a confirmation — the queued change is local-only and unrecoverable).
  */
 import SyncIcon from '@mui/icons-material/Sync';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
@@ -17,7 +23,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { OutboxItem } from '@/lib/outbox/db';
 import { useOutbox } from '@/lib/outbox/useOutbox';
 import { useMembership } from '@/lib/permissions/useMembership';
@@ -27,6 +33,9 @@ export default function SyncStatusScreen() {
   const locale = useLocale();
   const { supabase } = useMembership();
   const { items, pendingCount, lastSyncAt, online, syncing, loaded, syncNow, discard } = useOutbox(supabase);
+  // Failed / conflicting items are discarded only via this confirmation —
+  // the queued change is local-only, so discarding is irreversible.
+  const [confirmDiscard, setConfirmDiscard] = useState<OutboxItem | null>(null);
 
   const timeFormat = useMemo(
     () => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }),
@@ -99,7 +108,7 @@ export default function SyncStatusScreen() {
                 divider
                 secondaryAction={
                   item.status !== 'queued' ? (
-                    <Button size="small" color="error" onClick={() => void discard(item.seq)}>
+                    <Button size="small" color="error" onClick={() => setConfirmDiscard(item)}>
                       {t('settings.sync.discard')}
                     </Button>
                   ) : null
@@ -129,6 +138,32 @@ export default function SyncStatusScreen() {
           </List>
         </Paper>
       ) : null}
+
+      {/* Discard confirmation: an RLS-rejected (error) or LWW-lost (conflict)
+          queued change exists only on this device — confirm before dropping. */}
+      <Dialog open={confirmDiscard !== null} onClose={() => setConfirmDiscard(null)}>
+        <DialogTitle>{t('settings.sync.discard_confirm_title')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t('settings.sync.discard_confirm_message', { entity: confirmDiscard?.label ?? '' })}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscard(null)}>{t('common.action.cancel')}</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              if (confirmDiscard) {
+                void discard(confirmDiscard.seq);
+              }
+              setConfirmDiscard(null);
+            }}
+          >
+            {t('settings.sync.discard')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

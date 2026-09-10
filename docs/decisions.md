@@ -4,6 +4,25 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-09-11 — Settings permission parity: read-only business profile, discard confirm
+
+- **Business profile is visible to every member, editable only with the
+  gate.** Owner / `settings.manage_business` keep the editor form; everyone
+  else now gets a READ-ONLY display card (same fields as plain text, no save
+  button, no logo-edit hint — write affordances hidden, not disabled,
+  matching the Android read-only variant). Previously the card was hidden
+  outright for non-editors. The menu-search `business` entry is therefore
+  ungated again; the `event_types` entry keeps the manage gate.
+- **Event-types direct URL shows the no-access state.** Without the manage
+  gate the screen used to render a blank page (`null`); it now renders the
+  same localized `common.permission.no_access_*` state as `SectionGuard`.
+  The settings row stays hidden; RLS remains the enforcement.
+- **Outbox discard requires confirmation.** An RLS-rejected (`error`) or
+  LWW-lost (`conflict`) queued change exists only on this device, so the
+  sync-status Discard button now opens a localized confirmation dialog
+  (new `settings.sync.discard_confirm_{title,message}` keys in the shared
+  `web-menu` fragment) before dropping the item.
+
 ## 2026-09-10 — NOTES section (Keep-style parity) + marker conflict fix
 
 - **Conflict warning counts booking-kind only** (cross-platform parity).

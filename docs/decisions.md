@@ -4,6 +4,40 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-09-10 — NOTES section (Keep-style parity) + marker conflict fix
+
+- **Conflict warning counts booking-kind only** (cross-platform parity).
+  `findConflicts` takes an optional `isMarkerType(eventType)` predicate;
+  the booking screen passes `presetKindForType(presets, …) === 'marker'` on
+  the create/edit overlap check AND the restore-path recheck, so marker-kind
+  bookings (Lagan/Tilak day indicators — calendar highlights, not hall
+  occupancy) never inflate the non-blocking warning count. Without the
+  predicate the function keeps its legacy count-everything behavior.
+- **Notes module (shared migration 005).** 5th nav entry (`/notes`, label
+  from `notes.nav.tab`), gated on the new `notes` permission module
+  (view/create/edit/delete — no amounts, so no `view_amounts` key; presets:
+  Viewer=view, Staff=+create, Manager=all). Route guarded by
+  `SectionGuard module="notes"`; the permission editor renders the notes
+  group's labels from the notes fragment (`notes.permission.*`) because its
+  `action_delete` means "Delete forever" (Trash purge), not tombstone-delete.
+- **Purge = tombstone.** "Delete forever" and the load-time 30-day trash
+  sweep set `deleted_at` (sync tombstone, per the 005 header) rather than
+  hard-DELETE; both are client-gated on `notes.delete` (RLS-wise they are
+  UPDATEs under `notes.edit` — same convention as bookings). The sweep runs
+  best-effort on Notes load only for members holding `notes.delete`.
+- **Composite-PK outbox support.** `note_tag_links` has no `id` column
+  (PK note_id+tag_id, matching the server): the outbox layer gained an
+  optional `match` locator (per-column `.eq` filters) for updates and an
+  `entityId` override for inserts; replay idempotency rides on the natural
+  key's 23505. The guest Dexie store (v3 schema bump adds notes/note_tags/
+  note_tag_links) keys that one table by the compound `[note_id+tag_id]`,
+  and the local client resolves duplicates/deletes through the same map.
+  Untag tombstones the link row; retag clears `deleted_at` on the SAME row.
+- **Checklists are one jsonb blob per note** ({id,text,done} array, LWW as a
+  unit — 005's documented model); inline card toggles and the popup editor
+  both write through `updateNote`. Share uses the Web Share API with a
+  clipboard fallback (`notes.action.share_copied` snackbar).
+
 ## 2026-08-28 — Amounts visibility (`view_amounts`) masking
 
 - **Schema exception (shared contract).** The per-module `view_amounts` keys

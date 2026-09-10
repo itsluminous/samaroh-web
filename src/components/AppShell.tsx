@@ -5,6 +5,7 @@ import Inventory2Icon from '@mui/icons-material/Inventory2';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
 import AppBar from '@mui/material/AppBar';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -31,12 +32,15 @@ import { canViewSection, type NavModule } from '@/lib/permissions/visibility';
 
 const RAIL_WIDTH = 220;
 
-// The 4 sections (§1.2): left rail on desktop, bottom nav on mobile.
+// The 5 sections (§1.2 + Notes): left rail on desktop, bottom nav on mobile.
+// Labels resolve per entry — the Notes tab label lives in the notes fragment
+// (notes.nav.tab) rather than common.nav.
 const SECTIONS = [
-  { key: 'booking', href: '/booking', icon: <CalendarMonthIcon /> },
-  { key: 'expenses', href: '/expenses', icon: <ReceiptLongIcon /> },
-  { key: 'inventory', href: '/inventory', icon: <Inventory2Icon /> },
-  { key: 'menu', href: '/menu', icon: <MenuIcon /> },
+  { key: 'booking', href: '/booking', icon: <CalendarMonthIcon />, labelKey: 'common.nav.booking' },
+  { key: 'expenses', href: '/expenses', icon: <ReceiptLongIcon />, labelKey: 'common.nav.expenses' },
+  { key: 'inventory', href: '/inventory', icon: <Inventory2Icon />, labelKey: 'common.nav.inventory' },
+  { key: 'notes', href: '/notes', icon: <StickyNote2OutlinedIcon />, labelKey: 'notes.nav.tab' },
+  { key: 'menu', href: '/menu', icon: <MenuIcon />, labelKey: 'common.nav.menu' },
 ] as const;
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -111,7 +115,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 sx={{ borderRadius: 100, mx: 1, my: 0.25 }}
               >
                 <ListItemIcon>{section.icon}</ListItemIcon>
-                <ListItemText primary={t(`common.nav.${section.key}`)} />
+                <ListItemText primary={t(section.labelKey)} />
               </ListItemButton>
             </ListItem>
           ))}
@@ -153,7 +157,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               key={section.key}
               component={Link}
               href={section.href}
-              label={t(`common.nav.${section.key}`)}
+              label={t(section.labelKey)}
               icon={section.icon}
             />
           ))}

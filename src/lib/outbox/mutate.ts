@@ -25,22 +25,29 @@ export interface InsertSpec {
   module: OutboxModule;
   /** Postgres table name. */
   table: string;
-  /** Full column map — MUST include a client-generated `id` uuid. */
+  /**
+   * Full column map — MUST include a client-generated `id` uuid, EXCEPT for
+   * composite-PK tables (note_tag_links): there the natural key's duplicate
+   * rejection (23505) keeps replays idempotent, and `entityId` names the row.
+   */
   row: Record<string, unknown>;
+  /** Row identifier for outbox bookkeeping when `row` has no `id` column. */
+  entityId?: string;
   /** Human label for the sync-status list. */
   label: string;
 }
 
 /**
  * Inserts a row, falling back to the outbox when offline. The row must carry
- * a client UUID so the eventual replay (and any retry) is idempotent.
+ * a client UUID (or a natural composite key) so the eventual replay (and any
+ * retry) is idempotent.
  */
 export async function insertWithOutbox(db: SupabaseClient, spec: InsertSpec): Promise<WriteOutcome> {
   const queue = async () => {
     await enqueue({
       module: spec.module,
       table: spec.table,
-      entityId: String(spec.row.id),
+      entityId: spec.entityId ?? String(spec.row.id),
       operation: 'create',
       payload: spec.row,
       label: spec.label,
@@ -72,6 +79,11 @@ export interface UpdateSpec {
   /** Column patch to apply. */
   patch: Record<string, unknown>;
   /**
+   * Row locator for composite-PK tables (note_tag_links): each entry becomes
+   * an `.eq(column, value)` filter. Absent → `.eq('id', entityId)`.
+   */
+  match?: Record<string, unknown>;
+  /**
    * The row's `updated_at` as last seen locally — drives the last-write-wins
    * guard at replay time. Pass null when unknown (replay applies blindly).
    */
@@ -89,6 +101,7 @@ export async function updateWithOutbox(db: SupabaseClient, spec: UpdateSpec): Pr
       entityId: spec.entityId,
       operation: isDelete ? 'delete' : 'update',
       payload: spec.patch,
+      match: spec.match,
       baseUpdatedAt: spec.baseUpdatedAt,
       label: spec.label,
     });
@@ -99,7 +112,11 @@ export async function updateWithOutbox(db: SupabaseClient, spec: UpdateSpec): Pr
     await queue();
     return 'queued';
   }
-  const { error } = await db.from(spec.table).update(spec.patch).eq('id', spec.entityId);
+  let query = db.from(spec.table).update(spec.patch);
+  for (const [column, value] of spec.match ? Object.entries(spec.match) : [['id', spec.entityId] as [string, unknown]]) {
+    query = query.eq(column, value);
+  }
+  const { error } = await query;
   if (error) {
     if (isNetworkError(error.message)) {
       await queue();

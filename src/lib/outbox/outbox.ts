@@ -21,6 +21,8 @@ export interface EnqueueInput {
   entityId: string;
   operation: OutboxOperation;
   payload: Record<string, unknown>;
+  /** Composite-key row locator (see OutboxItem.match); omit for `id` PKs. */
+  match?: Record<string, unknown>;
   baseUpdatedAt?: string | null;
   label: string;
 }
@@ -33,6 +35,7 @@ export async function enqueue(input: EnqueueInput): Promise<void> {
     entity_id: input.entityId,
     operation: input.operation,
     payload: input.payload,
+    match: input.match,
     base_updated_at: input.baseUpdatedAt ?? null,
     label: input.label,
     attempt_count: 0,
@@ -188,13 +191,17 @@ async function applyItem(db: SupabaseClient, item: OutboxItem): Promise<ApplyOut
     return 'applied';
   }
 
-  // update / delete: LWW guard on updated_at.
+  // update / delete: LWW guard on updated_at. Composite-key rows (match set)
+  // locate via their filter map instead of `.eq('id', …)`.
+  const filters: [string, unknown][] = item.match
+    ? Object.entries(item.match)
+    : [['id', item.entity_id]];
   if (item.base_updated_at) {
-    const { data, error } = await db
-      .from(item.table)
-      .select('updated_at')
-      .eq('id', item.entity_id)
-      .maybeSingle();
+    let lwwQuery = db.from(item.table).select('updated_at');
+    for (const [column, value] of filters) {
+      lwwQuery = lwwQuery.eq(column, value);
+    }
+    const { data, error } = await lwwQuery.maybeSingle();
     if (error) {
       throw new Error(error.message);
     }
@@ -203,7 +210,11 @@ async function applyItem(db: SupabaseClient, item: OutboxItem): Promise<ApplyOut
       return 'conflict';
     }
   }
-  const { error } = await db.from(item.table).update(item.payload).eq('id', item.entity_id);
+  let updateQuery = db.from(item.table).update(item.payload);
+  for (const [column, value] of filters) {
+    updateQuery = updateQuery.eq(column, value);
+  }
+  const { error } = await updateQuery;
   if (error) {
     throw new Error(error.message);
   }

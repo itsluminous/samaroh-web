@@ -10,8 +10,8 @@
  */
 import type { MemberPermissions } from './permissions';
 
-/** The three permission-gated nav sections; Menu is always visible. */
-export const NAV_MODULES = ['booking', 'expenses', 'inventory'] as const;
+/** The four permission-gated nav sections; Menu is always visible. */
+export const NAV_MODULES = ['booking', 'expenses', 'inventory', 'notes'] as const;
 export type NavModule = (typeof NAV_MODULES)[number];
 
 /** The membership facts visibility depends on (subset of `Membership`). */
@@ -36,7 +36,7 @@ export function canViewSection(m: VisibilityInput, module: NavModule): boolean {
 /**
  * Landing target for the locale root: the first visible section in nav
  * order (§4.1 makes Booking the home tab), falling back to Menu when the
- * member can view none of the three.
+ * member can view none of the four.
  */
 export function firstVisibleSection(permissions: MemberPermissions, isOwner: boolean): string {
   for (const mod of NAV_MODULES) {

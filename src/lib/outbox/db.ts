@@ -9,7 +9,7 @@ import Dexie, { type EntityTable } from 'dexie';
 export type OutboxOperation = 'create' | 'update' | 'delete';
 
 /** Sections whose mutations flow through the outbox (drives grouping in UI). */
-export type OutboxModule = 'booking' | 'expenses' | 'inventory';
+export type OutboxModule = 'booking' | 'expenses' | 'inventory' | 'notes';
 
 export type OutboxStatus = 'queued' | 'error' | 'conflict';
 
@@ -24,6 +24,13 @@ export interface OutboxItem {
   operation: OutboxOperation;
   /** Column map sent to Supabase (insert values or update patch). */
   payload: Record<string, unknown>;
+  /**
+   * Optional row locator for tables WITHOUT a single `id` PK (e.g.
+   * note_tag_links' composite (note_id, tag_id)): every entry becomes an
+   * `.eq(column, value)` filter at replay time. Absent → `.eq('id', entity_id)`.
+   * Non-indexed Dexie field — older outbox rows simply lack it.
+   */
+  match?: Record<string, unknown>;
   /**
    * For updates/deletes: the row's `updated_at` as last seen locally. If the
    * server row is newer at replay time, this op lost the LWW race and is

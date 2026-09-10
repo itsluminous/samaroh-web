@@ -1,0 +1,383 @@
+'use client';
+
+// Notes tab home (Keep-style parity): left drawer (Notes / Completed / Trash
+// + tags — persistent on desktop, temporary on mobile), top search across
+// title/content/checklist/tags, pinned-first responsive card grid, two
+// bottom create actions (note / checklist) and the note popup. Writes are
+// permission-gated (notes.create / edit / delete); the load-time purge sweep
+// tombstones trash older than 30 days for members holding notes.delete.
+
+import AddIcon from '@mui/icons-material/Add';
+import ChecklistIcon from '@mui/icons-material/Checklist';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined';
+import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Drawer from '@mui/material/Drawer';
+import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import ListSubheader from '@mui/material/ListSubheader';
+import Snackbar from '@mui/material/Snackbar';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import { useTranslations } from 'next-intl';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import ResponsiveGlassFab from '@/components/ResponsiveGlassFab';
+import { useMembership } from '@/lib/permissions/useMembership';
+import {
+  createNote,
+  createTag,
+  fetchNotesData,
+  purgeNote,
+  setNotePinned,
+  setNoteStatus,
+  setNoteTags,
+  sweepExpiredTrash,
+  updateNote,
+  type NoteInput,
+} from '../_lib/queries';
+import { liveTagIdsOf, tagsOf, toggleChecklistItem, visibleNotes, type NotesFilter } from '../_lib/notesView';
+import type { NoteKind, NoteRecord, NoteTagLinkRecord, NoteTagRecord } from '../_lib/types';
+import NoteCard from './NoteCard';
+import NoteDialog from './NoteDialog';
+
+interface DialogState {
+  noteId: string;
+  startInEdit: boolean;
+}
+
+export default function NotesScreen() {
+  const t = useTranslations('notes');
+  const tCommon = useTranslations('common');
+  const tExpensesError = useTranslations('expenses.error');
+  const {
+    supabase,
+    business,
+    userId,
+    isOwner,
+    permissions,
+    loading: businessLoading,
+    error: businessError,
+  } = useMembership();
+  const businessId = business?.id ?? null;
+  const canCreate = isOwner || permissions.notes.create;
+  const canEdit = isOwner || permissions.notes.edit;
+  const canDelete = isOwner || permissions.notes.delete;
+
+  const [notes, setNotes] = useState<NoteRecord[]>([]);
+  const [tags, setTags] = useState<NoteTagRecord[]>([]);
+  const [links, setLinks] = useState<NoteTagLinkRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<NotesFilter>({ view: 'notes' });
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [snack, setSnack] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!supabase || !businessId || !userId) {
+      return;
+    }
+    setLoadError(false);
+    try {
+      const data = await fetchNotesData(supabase, businessId);
+      let nextNotes = data.notes;
+      // 30-day trash purge, client-side on load (spec): only members allowed
+      // to "delete forever" run it. Best effort — a failure never blocks the list.
+      if (isOwner || canDelete) {
+        try {
+          const purged = await sweepExpiredTrash(supabase, nextNotes, userId);
+          if (purged.length > 0) {
+            const gone = new Set(purged.map((n) => n.id));
+            nextNotes = nextNotes.filter((n) => !gone.has(n.id));
+          }
+        } catch {
+          // Sweep is best-effort.
+        }
+      }
+      setNotes(nextNotes);
+      setTags(data.tags);
+      setLinks(data.links);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase, businessId, userId, isOwner, canDelete]);
+
+  useEffect(() => {
+    if (businessLoading) {
+      return;
+    }
+    if (!supabase || !businessId) {
+      setLoading(false);
+      return;
+    }
+    void reload();
+  }, [businessLoading, supabase, businessId, reload]);
+
+  const gridNotes = useMemo(
+    () => visibleNotes(notes, tags, links, filter, search),
+    [notes, tags, links, filter, search],
+  );
+
+  const dialogNote = dialog ? (notes.find((n) => n.id === dialog.noteId) ?? null) : null;
+
+  function patchNoteState(next: NoteRecord) {
+    setNotes((prev) => prev.map((n) => (n.id === next.id ? next : n)));
+  }
+
+  async function handleCreate(kind: NoteKind) {
+    if (!supabase || !businessId || !userId) {
+      return;
+    }
+    const created = await createNote(supabase, businessId, userId, {
+      kind,
+      title: null,
+      content: null,
+      checklist: [],
+      color: null,
+      pinned: false,
+    });
+    setNotes((prev) => [created, ...prev]);
+    setFilter((prev) => (prev.view === 'notes' ? prev : { view: 'notes' }));
+    setDialog({ noteId: created.id, startInEdit: true });
+  }
+
+  async function handleToggleItem(note: NoteRecord, itemId: string) {
+    if (!supabase || !userId || !canEdit) {
+      return;
+    }
+    const next = await updateNote(supabase, note, userId, {
+      kind: note.kind,
+      title: note.title,
+      content: note.content,
+      checklist: toggleChecklistItem(note.checklist, itemId),
+      color: note.color,
+      pinned: note.pinned,
+    });
+    patchNoteState(next);
+  }
+
+  if (businessLoading || loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
+        <CircularProgress aria-label={tCommon('state.loading')} />
+      </Box>
+    );
+  }
+
+  if (businessError || !supabase || !businessId) {
+    // Same degraded handling as the sibling sections: their own empty state.
+    return (
+      <Box sx={{ textAlign: 'center', py: 8 }}>
+        <Typography variant="h6">{t('home.empty_title')}</Typography>
+        <Typography color="text.secondary">{t('home.empty_message')}</Typography>
+      </Box>
+    );
+  }
+
+  if (loadError) {
+    // Generic wording, shared with the expenses screen ("Could not load data…").
+    return <Alert severity="error">{tExpensesError('load_failed')}</Alert>;
+  }
+
+  const drawerList = (
+    <List component="nav" sx={{ width: 220 }} dense>
+      {(
+        [
+          { view: 'notes', label: t('drawer.notes'), icon: <StickyNote2OutlinedIcon /> },
+          { view: 'completed', label: t('drawer.completed'), icon: <TaskAltIcon /> },
+          { view: 'trash', label: t('drawer.trash'), icon: <DeleteOutlineIcon /> },
+        ] as const
+      ).map((entry) => (
+        <ListItemButton
+          key={entry.view}
+          selected={filter.view === entry.view}
+          sx={{ borderRadius: 100, mx: 1, my: 0.25 }}
+          onClick={() => {
+            setFilter({ view: entry.view });
+            setDrawerOpen(false);
+          }}
+        >
+          <ListItemIcon>{entry.icon}</ListItemIcon>
+          <ListItemText primary={entry.label} />
+        </ListItemButton>
+      ))}
+      {tags.length > 0 ? (
+        <ListSubheader disableSticky sx={{ bgcolor: 'transparent' }}>
+          {t('drawer.tags_header')}
+        </ListSubheader>
+      ) : null}
+      {tags.map((tag) => (
+        <ListItemButton
+          key={tag.id}
+          selected={filter.view === 'tag' && filter.tagId === tag.id}
+          sx={{ borderRadius: 100, mx: 1, my: 0.25 }}
+          onClick={() => {
+            setFilter({ view: 'tag', tagId: tag.id });
+            setDrawerOpen(false);
+          }}
+        >
+          <ListItemIcon>
+            <LabelOutlinedIcon />
+          </ListItemIcon>
+          <ListItemText primary={tag.name} primaryTypographyProps={{ noWrap: true }} />
+        </ListItemButton>
+      ))}
+    </List>
+  );
+
+  const emptyMessage =
+    search.trim() !== ''
+      ? t('search.empty')
+      : filter.view === 'completed'
+        ? t('completed.empty')
+        : filter.view === 'trash'
+          ? t('trash.empty')
+          : filter.view === 'tag'
+            ? t('search.empty')
+            : null;
+
+  return (
+    <Box sx={{ display: 'flex', gap: 2, pb: 10 }}>
+      {/* Desktop: persistent in-page drawer column. */}
+      <Box sx={{ display: { xs: 'none', md: 'block' }, flexShrink: 0 }}>{drawerList}</Box>
+
+      {/* Mobile: temporary drawer. */}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} sx={{ display: { md: 'none' } }}>
+        {drawerList}
+      </Drawer>
+
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2 }}>
+          <Tooltip title={t('drawer.notes')}>
+            <IconButton
+              aria-label={t('drawer.notes')}
+              sx={{ display: { md: 'none' } }}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <MenuOpenIcon />
+            </IconButton>
+          </Tooltip>
+          <TextField
+            fullWidth
+            size="small"
+            type="search"
+            placeholder={t('home.search_placeholder')}
+            inputProps={{ 'aria-label': t('home.search_placeholder') }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Box>
+
+        {filter.view === 'trash' && gridNotes.length > 0 ? (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {t('trash.notice')}
+          </Alert>
+        ) : null}
+
+        {gridNotes.length === 0 ? (
+          emptyMessage ? (
+            <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
+              {emptyMessage}
+            </Typography>
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Typography variant="h6">{t('home.empty_title')}</Typography>
+              <Typography color="text.secondary">{t('home.empty_message')}</Typography>
+            </Box>
+          )
+        ) : (
+          // Keep-like masonry: CSS columns keep cards their natural height.
+          <Box sx={{ columnCount: { xs: 2, sm: 3, lg: 4 }, columnGap: 1.5 }}>
+            {gridNotes.map((note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                tags={tagsOf(note, tags, links)}
+                canEdit={canEdit && note.status !== 'trashed'}
+                onOpen={() => setDialog({ noteId: note.id, startInEdit: false })}
+                onToggleItem={(itemId) => void handleToggleItem(note, itemId)}
+              />
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      {canCreate ? (
+        <Stack
+          direction="row"
+          spacing={1.5}
+          sx={{ position: 'fixed', right: 24, bottom: { xs: 80, md: 24 }, zIndex: (theme) => theme.zIndex.appBar }}
+        >
+          <ResponsiveGlassFab
+            icon={<AddIcon />}
+            label={t('home.create_note')}
+            onClick={() => void handleCreate('note')}
+          />
+          <ResponsiveGlassFab
+            icon={<ChecklistIcon />}
+            label={t('home.create_checklist')}
+            onClick={() => void handleCreate('checklist')}
+          />
+        </Stack>
+      ) : null}
+
+      {dialogNote && userId ? (
+        <NoteDialog
+          key={`${dialogNote.id}:${dialog?.startInEdit}`}
+          note={dialogNote}
+          tags={tags}
+          noteTagIds={liveTagIdsOf(dialogNote.id, links)}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          startInEdit={dialog?.startInEdit === true}
+          onSaveContent={async (input: NoteInput) => {
+            const next = await updateNote(supabase, dialogNote, userId, input);
+            patchNoteState(next);
+          }}
+          onSaveTags={async (tagIds) => {
+            const nextLinks = await setNoteTags(supabase, dialogNote, tagIds, links);
+            setLinks(nextLinks);
+          }}
+          onCreateTag={async (name) => {
+            const tag = await createTag(supabase, businessId, name);
+            setTags((prev) => [...prev, tag].sort((a, b) => a.name.localeCompare(b.name)));
+            return tag;
+          }}
+          onTogglePin={async () => {
+            patchNoteState(await setNotePinned(supabase, dialogNote, userId, !dialogNote.pinned));
+          }}
+          onSetStatus={async (status) => {
+            patchNoteState(await setNoteStatus(supabase, dialogNote, userId, status));
+            setDialog(null);
+          }}
+          onPurge={async () => {
+            await purgeNote(supabase, dialogNote, userId);
+            setNotes((prev) => prev.filter((n) => n.id !== dialogNote.id));
+            setDialog(null);
+          }}
+          onShared={(viaClipboard) => {
+            if (viaClipboard) {
+              setSnack(t('action.share_copied'));
+            }
+          }}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      <Snackbar open={snack !== null} autoHideDuration={4000} onClose={() => setSnack(null)} message={snack} />
+    </Box>
+  );
+}

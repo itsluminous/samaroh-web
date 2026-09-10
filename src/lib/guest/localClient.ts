@@ -16,10 +16,16 @@
  */
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { GUEST_USER_ID } from './guest';
-import { localTable, type LocalRow } from './localDb';
+import { COMPOSITE_PK, localTable, type LocalRow, type LocalTableName } from './localDb';
 
 /** Marker so shared code (outbox mutate) can detect the local client. */
 export const LOCAL_CLIENT_MARKER = 'samaroh_local_client';
+
+/** Dexie primary key of a row: `id`, or the compound array for composite-PK tables. */
+function rowKey(tableName: string, row: LocalRow): string | unknown[] {
+  const composite = COMPOSITE_PK[tableName as LocalTableName];
+  return composite ? composite.map((col) => row[col]) : String(row.id);
+}
 
 export function isLocalClient(client: SupabaseClient | null): boolean {
   return client !== null && (client as unknown as Record<string, unknown>)[LOCAL_CLIENT_MARKER] === true;
@@ -71,7 +77,8 @@ async function projectRow(row: LocalRow, select: string | null): Promise<LocalRo
   if (!select || select.trim() === '*') {
     return { ...row };
   }
-  const out: LocalRow = { id: row.id };
+  // Composite-PK rows (note_tag_links) have no `id` column — seed only when present.
+  const out: LocalRow = ('id' in row ? { id: row.id } : {}) as LocalRow;
   for (const part of splitColumns(select)) {
     const nested = /^([a-z_]+)\((.*)\)$/s.exec(part);
     if (nested) {
@@ -212,7 +219,7 @@ class LocalQueryBuilder implements PromiseLike<Result> {
     if (this.mode === 'insert') {
       const now = new Date().toISOString();
       for (const row of this.insertRows) {
-        if (await table.get(String(row.id))) {
+        if (await table.get(rowKey(this.tableName, row) as string)) {
           return { data: null, error: { message: 'duplicate key value', code: '23505' } };
         }
         await table.add({
@@ -249,7 +256,7 @@ class LocalQueryBuilder implements PromiseLike<Result> {
 
     if (this.mode === 'delete') {
       for (const row of matched) {
-        await table.delete(String(row.id));
+        await table.delete(rowKey(this.tableName, row) as string);
       }
       return { data: null, error: null };
     }

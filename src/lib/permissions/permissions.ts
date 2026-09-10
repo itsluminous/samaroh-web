@@ -8,7 +8,7 @@
  * this object entirely (implicit full access, enforced by RLS).
  */
 
-export type PermissionModule = 'booking' | 'expenses' | 'inventory' | 'reports' | 'settings';
+export type PermissionModule = 'booking' | 'expenses' | 'inventory' | 'notes' | 'reports' | 'settings';
 
 export interface MemberPermissions {
   booking: {
@@ -36,6 +36,13 @@ export interface MemberPermissions {
     manage_master_items: boolean;
     view_amounts: boolean;
   };
+  /** Notes has no amounts, so no view_amounts key (schema contract). */
+  notes: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+  };
   reports: {
     view: boolean;
     view_amounts: boolean;
@@ -58,6 +65,7 @@ export const PERMISSION_MATRIX: ReadonlyArray<{
   { module: 'booking', actions: ['view', 'create', 'edit', 'delete', 'record_payment', 'generate_invoice', 'view_amounts'] },
   { module: 'expenses', actions: ['view', 'create', 'edit', 'delete', 'manage_parties', 'view_amounts'] },
   { module: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'manage_master_items', 'view_amounts'] },
+  { module: 'notes', actions: ['view', 'create', 'edit', 'delete'] },
   { module: 'reports', actions: ['view', 'view_amounts'] },
   { module: 'settings', actions: ['manage_business', 'manage_members', 'gcal_sync'] },
 ];
@@ -67,6 +75,7 @@ export function emptyPermissions(): MemberPermissions {
     booking: { view: false, create: false, edit: false, delete: false, record_payment: false, generate_invoice: false, view_amounts: true },
     expenses: { view: false, create: false, edit: false, delete: false, manage_parties: false, view_amounts: true },
     inventory: { view: false, create: false, edit: false, delete: false, manage_master_items: false, view_amounts: true },
+    notes: { view: false, create: false, edit: false, delete: false },
     reports: { view: false, view_amounts: true },
     settings: { manage_business: false, manage_members: false, gcal_sync: false },
   };
@@ -118,12 +127,14 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   p.booking.view = true;
   p.expenses.view = true;
   p.inventory.view = true;
+  p.notes.view = true;
   if (preset === 'viewer') {
     return p;
   }
   p.booking.create = true;
   p.expenses.create = true;
   p.inventory.create = true;
+  p.notes.create = true;
   if (preset === 'staff') {
     return p;
   }
@@ -138,6 +149,8 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   p.inventory.edit = true;
   p.inventory.delete = true;
   p.inventory.manage_master_items = true;
+  p.notes.edit = true;
+  p.notes.delete = true;
   p.reports.view = true;
   return p;
 }

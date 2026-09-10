@@ -26,7 +26,15 @@ export default function PermissionMatrixEditor({
   onChange: (next: MemberPermissions) => void;
 }) {
   const t = useTranslations('auth.permissions');
+  // The notes module ships its labels in the notes fragment (notes.permission.*)
+  // — its action_delete reads "Delete forever" (Trash purge), not plain "Delete".
+  const tNotes = useTranslations('notes.permission');
   const activePreset = matchingPreset(value);
+
+  const groupLabel = (module: PermissionModule) =>
+    module === 'notes' ? tNotes('group') : t(`group_${module}`);
+  const actionLabel = (module: PermissionModule, action: string) =>
+    module === 'notes' ? tNotes(`action_${action}`) : t(`action_${action}`);
 
   const toggle = (module: PermissionModule, action: string, checked: boolean) => {
     const next = structuredClone(value) as MemberPermissions;
@@ -55,7 +63,7 @@ export default function PermissionMatrixEditor({
 
       {PERMISSION_MATRIX.map(({ module, actions }) => (
         <Box key={module}>
-          <Typography variant="subtitle2">{t(`group_${module}`)}</Typography>
+          <Typography variant="subtitle2">{groupLabel(module)}</Typography>
           <Stack sx={{ pl: 1 }}>
             {actions.map((action) => (
               <FormControlLabel
@@ -67,7 +75,7 @@ export default function PermissionMatrixEditor({
                     onChange={(_e, checked) => toggle(module, action, checked)}
                   />
                 }
-                label={t(`action_${action}`)}
+                label={actionLabel(module, action)}
               />
             ))}
           </Stack>

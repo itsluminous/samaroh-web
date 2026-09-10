@@ -261,11 +261,19 @@ export default function BookingScreen() {
       }
       const { bookings, blocks } = await fetchOverlaps(db, ctx.business.id, start, end);
       return {
-        conflictCount: findConflicts(bookings, start, end, excludeId).length,
+        // Marker-kind bookings (day indicators) never count as conflicts —
+        // they don't occupy the hall (parity with Android).
+        conflictCount: findConflicts(
+          bookings,
+          start,
+          end,
+          excludeId,
+          (eventType) => presetKindForType(presets, eventType) === 'marker',
+        ).length,
         blocked: findBlockingBlocks(blocks, start, end).length > 0,
       };
     },
-    [db, ctx],
+    [db, ctx, presets],
   );
 
   // Per-business uniqueness for MANUAL invoice numbers (ADR-020 #4 parity).
@@ -330,7 +338,13 @@ export default function BookingScreen() {
     let conflictCount = 0;
     try {
       const { bookings } = await fetchOverlaps(db, ctx.business.id, booking.start_date, booking.end_date);
-      conflictCount = findConflicts(bookings, booking.start_date, booking.end_date, booking.id).length;
+      conflictCount = findConflicts(
+        bookings,
+        booking.start_date,
+        booking.end_date,
+        booking.id,
+        (eventType) => presetKindForType(presets, eventType) === 'marker',
+      ).length;
     } catch {
       conflictCount = 0;
     }

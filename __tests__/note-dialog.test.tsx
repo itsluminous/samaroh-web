@@ -2,10 +2,11 @@
  * Note popup flows: permission-gated action set (view-only without
  * notes.edit; Delete forever only in Trash with notes.delete), status
  * actions per state, edit-mode save payload (trimmed title, pending
- * checklist item flushed), tag create-on-the-fly, and Share's clipboard
- * fallback when the Web Share API is unavailable.
+ * checklist item flushed), the pointer-events checklist drag (mouse
+ * press-and-move + touch long-press pickup), tag create-on-the-fly, and
+ * Share's clipboard fallback when the Web Share API is unavailable.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import en from '../messages/en.json';
 import NoteDialog from '@/app/[locale]/(app)/notes/_components/NoteDialog';
@@ -254,12 +255,47 @@ describe('NoteDialog — pin in create/edit (buffered)', () => {
   });
 });
 
-describe('NoteDialog — checklist drag reorder', () => {
-  const draggableRow = (text: string) =>
-    screen.getByText(text).closest('[draggable="true"]') as HTMLElement;
+describe('NoteDialog — checklist pointer drag reorder', () => {
+  // jsdom has no PointerEvent: a MouseEvent subclass carrying pointerId /
+  // pointerType lets Testing Library construct real pointer* events.
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    constructor(type: string, init: MouseEventInit & { pointerId?: number; pointerType?: string } = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? 'mouse';
+    }
+  }
+  let rectSpy: jest.SpyInstance;
 
-  it('dropping a dragged row onto another reorders the checklist in the save payload', async () => {
-    const note = makeNote({
+  beforeAll(() => {
+    (window as unknown as { PointerEvent: typeof PointerEventPolyfill }).PointerEvent =
+      PointerEventPolyfill;
+  });
+
+  beforeEach(() => {
+    // Uniform 40px rows so the midpoint-crossing math has real heights.
+    rectSpy = jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 300,
+      bottom: 40,
+      width: 300,
+      height: 40,
+      toJSON: () => ({}),
+    } as DOMRect);
+  });
+
+  afterEach(() => {
+    rectSpy.mockRestore();
+    jest.useRealTimers();
+  });
+
+  const checklistNote = () =>
+    makeNote({
       kind: 'checklist',
       content: null,
       checklist: [
@@ -268,39 +304,110 @@ describe('NoteDialog — checklist drag reorder', () => {
         { id: 'i3', text: 'Lights', done: false },
       ],
     });
-    const { onSaveContent } = renderDialog({ note, startInEdit: true });
 
-    // Drag the last row and drop it on the first.
-    fireEvent.dragStart(draggableRow('Lights'));
-    fireEvent.dragOver(draggableRow('Garlands'));
-    fireEvent.drop(draggableRow('Garlands'));
+  const row = (text: string) => screen.getByText(text).closest('[data-checklist-row]') as HTMLElement;
 
+  async function savedOrder(onSaveContent: jest.Mock) {
     fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
     await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
-    expect(onSaveContent.mock.calls[0]![0]!.checklist.map((i) => i.text)).toEqual([
-      'Lights',
-      'Garlands',
-      'Diyas',
-    ]);
+    const input = onSaveContent.mock.calls[0]![0]! as NoteInput;
+    return input.checklist.map((i) => i.text);
+  }
+
+  it('mouse: press-and-move picks up without delay and drops at the midpoint-crossed slot', async () => {
+    const { onSaveContent } = renderDialog({ note: checklistNote(), startInEdit: true });
+    const garlands = row('Garlands');
+
+    fireEvent.pointerDown(garlands, { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 20, buttons: 1 });
+    // First movement past the jitter threshold picks the row up — no long-press.
+    fireEvent.pointerMove(window, { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 26 });
+    expect(row('Garlands')).toHaveAttribute('data-dragging', 'true');
+    // dy=+60 crosses Diyas (20) and Lights (60) midpoints.
+    fireEvent.pointerMove(window, { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 80 });
+    fireEvent.pointerUp(window, { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 80 });
+
+    expect(await savedOrder(onSaveContent)).toEqual(['Diyas', 'Lights', 'Garlands']);
   });
 
-  it('a drop with no tracked drag leaves the order unchanged', async () => {
-    const note = makeNote({
-      kind: 'checklist',
-      content: null,
-      checklist: [
-        { id: 'i1', text: 'Garlands', done: false },
-        { id: 'i2', text: 'Diyas', done: false },
-      ],
+  it('mouse: a plain click (no movement) does not reorder', async () => {
+    const { onSaveContent } = renderDialog({ note: checklistNote(), startInEdit: true });
+    fireEvent.pointerDown(row('Diyas'), { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 60 });
+    fireEvent.pointerUp(window, { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 60 });
+    expect(await savedOrder(onSaveContent)).toEqual(['Garlands', 'Diyas', 'Lights']);
+  });
+
+  it('touch: holding still through the 400ms long-press picks up, then the drag reorders', async () => {
+    jest.useFakeTimers();
+    const { onSaveContent } = renderDialog({ note: checklistNote(), startInEdit: true });
+    const lights = row('Lights');
+
+    fireEvent.pointerDown(lights, { pointerId: 2, pointerType: 'touch', clientX: 50, clientY: 100 });
+    // Wander within the slop while waiting — must not cancel.
+    fireEvent.pointerMove(window, { pointerId: 2, pointerType: 'touch', clientX: 53, clientY: 103 });
+    expect(row('Lights')).not.toHaveAttribute('data-dragging');
+    act(() => {
+      jest.advanceTimersByTime(400);
     });
-    const { onSaveContent } = renderDialog({ note, startInEdit: true });
-    fireEvent.drop(draggableRow('Garlands'));
-    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
-    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
-    expect(onSaveContent.mock.calls[0]![0]!.checklist.map((i) => i.text)).toEqual([
-      'Garlands',
-      'Diyas',
-    ]);
+    expect(row('Lights')).toHaveAttribute('data-dragging', 'true');
+    // dy=-80 crosses both midpoints upward → lands first.
+    fireEvent.pointerMove(window, { pointerId: 2, pointerType: 'touch', clientX: 50, clientY: 20 });
+    fireEvent.pointerUp(window, { pointerId: 2, pointerType: 'touch', clientX: 50, clientY: 20 });
+    jest.useRealTimers();
+
+    expect(await savedOrder(onSaveContent)).toEqual(['Lights', 'Garlands', 'Diyas']);
+  });
+
+  it('touch: moving past the slop before the timer cancels the press (scroll wins, no reorder)', async () => {
+    jest.useFakeTimers();
+    const { onSaveContent } = renderDialog({ note: checklistNote(), startInEdit: true });
+
+    fireEvent.pointerDown(row('Garlands'), { pointerId: 3, pointerType: 'touch', clientX: 50, clientY: 20 });
+    fireEvent.pointerMove(window, { pointerId: 3, pointerType: 'touch', clientX: 50, clientY: 40 }); // > 8px slop
+    act(() => {
+      jest.advanceTimersByTime(400); // a late timer must not resurrect the press
+    });
+    expect(row('Garlands')).not.toHaveAttribute('data-dragging');
+    fireEvent.pointerMove(window, { pointerId: 3, pointerType: 'touch', clientX: 50, clientY: 100 });
+    fireEvent.pointerUp(window, { pointerId: 3, pointerType: 'touch', clientX: 50, clientY: 100 });
+    jest.useRealTimers();
+
+    expect(await savedOrder(onSaveContent)).toEqual(['Garlands', 'Diyas', 'Lights']);
+  });
+
+  it('pointercancel mid-drag aborts without reordering', async () => {
+    const { onSaveContent } = renderDialog({ note: checklistNote(), startInEdit: true });
+    fireEvent.pointerDown(row('Garlands'), { pointerId: 4, pointerType: 'mouse', clientX: 50, clientY: 20 });
+    fireEvent.pointerMove(window, { pointerId: 4, pointerType: 'mouse', clientX: 50, clientY: 80 });
+    expect(row('Garlands')).toHaveAttribute('data-dragging', 'true');
+    fireEvent.pointerCancel(window, { pointerId: 4, pointerType: 'mouse' });
+    expect(row('Garlands')).not.toHaveAttribute('data-dragging');
+    expect(await savedOrder(onSaveContent)).toEqual(['Garlands', 'Diyas', 'Lights']);
+  });
+
+  it('a press starting on the checkbox or remove button stays a click (no drag)', () => {
+    renderDialog({ note: checklistNote(), startInEdit: true });
+    const checkbox = screen.getByRole('checkbox', { name: 'Garlands' });
+    fireEvent.pointerDown(checkbox, { pointerId: 5, pointerType: 'mouse', clientX: 10, clientY: 20 });
+    fireEvent.pointerMove(window, { pointerId: 5, pointerType: 'mouse', clientX: 10, clientY: 80 });
+    expect(row('Garlands')).not.toHaveAttribute('data-dragging');
+    fireEvent.pointerUp(window, { pointerId: 5, pointerType: 'mouse' });
+  });
+
+  it('rows carry no HTML5 draggable attribute or drag handle anymore', () => {
+    renderDialog({ note: checklistNote(), startInEdit: true });
+    expect(document.querySelector('[draggable="true"]')).toBeNull();
+    expect(document.querySelector('[data-testid="DragIndicatorIcon"]')).toBeNull();
+  });
+
+  it('Enter in the Add-item field appends and keeps focus for the next item', () => {
+    renderDialog({ note: checklistNote(), startInEdit: true });
+    const addField = screen.getByLabelText(en.notes.editor.checklist_add);
+    addField.focus();
+    fireEvent.change(addField, { target: { value: 'Rangoli' } });
+    fireEvent.keyDown(addField, { key: 'Enter' });
+    expect(screen.getByText('Rangoli')).toBeInTheDocument();
+    expect(addField).toHaveFocus();
+    expect(addField).toHaveValue('');
   });
 });
 

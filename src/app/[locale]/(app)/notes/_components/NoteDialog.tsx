@@ -3,10 +3,14 @@
 // Note popup (Keep-style): VIEW mode shows the note with its actions —
 // Pin/Unpin, Edit, Share (Web Share API with clipboard fallback),
 // Complete/un-complete, Delete→Trash, Restore, Delete forever (Trash only) —
-// and EDIT mode edits title, body or checklist (add/toggle/remove and drag
-// reorder), color (compact ColorSwatchPicker row) and tags (debounced
-// type-ahead: suggestions only while typing, with a create-on-the-fly
-// option; selected tags are removable chips). The pin toggle is available
+// and EDIT mode edits title, body or checklist, color (compact
+// ColorSwatchPicker row) and tags (debounced type-ahead: suggestions only
+// while typing, with a create-on-the-fly option; selected tags are removable
+// chips). Checklist items are NON-editable once added: rows are checkbox +
+// plain text + remove cross with a single Add-item field at the bottom, and
+// reordering is the pointer-events whole-row drag in ChecklistEditor
+// (long-press on touch, press-and-move with mouse — HTML5 dnd was removed
+// because it never fires on touch browsers). The pin toggle is available
 // in BOTH modes (ADR-077 parity): immediate in view mode, buffered into the
 // save payload while editing — so a note can be pinned during create.
 // Closing a brand-new note without content
@@ -17,7 +21,6 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
@@ -47,12 +50,11 @@ import type { NoteInput } from '../_lib/queries';
 import {
   addChecklistItem,
   isNoteContentEmpty,
-  moveChecklistItem,
   noteShareText,
-  removeChecklistItem,
   toggleChecklistItem,
 } from '../_lib/notesView';
 import type { ChecklistItem, NoteRecord, NoteTagRecord } from '../_lib/types';
+import ChecklistEditor from './ChecklistEditor';
 
 /** Debounce before the tag type-ahead surfaces suggestions. */
 export const TAG_SUGGEST_DEBOUNCE_MS = 200;
@@ -115,8 +117,6 @@ export default function NoteDialog({
   // Buffered pin (ADR-077 parity): edit/create toggles this local flag and it
   // lands in the save payload; view mode bypasses it via onTogglePin.
   const [pinned, setPinned] = useState(note.pinned);
-  // Index of the checklist row a drag started on (HTML5 drag reorder).
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [selectedTags, setSelectedTags] = useState<NoteTagRecord[]>(
     tags.filter((tag) => noteTagIds.includes(tag.id)),
   );
@@ -354,70 +354,13 @@ export default function NoteDialog({
               <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{note.content}</Typography>
             ) : null
           ) : editing ? (
-            <Box>
-              {checklist.map((item, index) => (
-                <Box
-                  key={item.id}
-                  // HTML5 drag reorder: the dragged row's index is kept in
-                  // state (jsdom/Safari-safe); dataTransfer is only fed so
-                  // Firefox actually starts the drag.
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer?.setData('text/plain', String(index));
-                    if (e.dataTransfer) {
-                      e.dataTransfer.effectAllowed = 'move';
-                    }
-                    setDragIndex(index);
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragIndex !== null) {
-                      setChecklist(moveChecklistItem(checklist, dragIndex, index));
-                    }
-                    setDragIndex(null);
-                  }}
-                  onDragEnd={() => setDragIndex(null)}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                >
-                  <DragIndicatorIcon
-                    aria-hidden
-                    fontSize="small"
-                    sx={{ cursor: 'grab', opacity: 0.5 }}
-                  />
-                  <Checkbox
-                    size="small"
-                    checked={item.done}
-                    inputProps={{ 'aria-label': item.text }}
-                    sx={{ p: 0.25 }}
-                    onChange={() => setChecklist(toggleChecklistItem(checklist, item.id))}
-                  />
-                  <Typography sx={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{item.text}</Typography>
-                  <IconButton
-                    size="small"
-                    aria-label={t('editor.checklist_remove')}
-                    sx={{ color: 'inherit' }}
-                    onClick={() => setChecklist(removeChecklistItem(checklist, item.id))}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              ))}
-              <TextField
-                fullWidth
-                variant="standard"
-                label={t('editor.checklist_add')}
-                value={newItem}
-                onChange={(e) => setNewItem(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    setChecklist(addChecklistItem(checklist, newItem));
-                    setNewItem('');
-                  }
-                }}
-              />
-            </Box>
+            <ChecklistEditor
+              items={checklist}
+              onItemsChange={setChecklist}
+              pendingText={newItem}
+              onPendingTextChange={setNewItem}
+              surfaceColor={surface?.hex}
+            />
           ) : (
             viewChecklist
           )}

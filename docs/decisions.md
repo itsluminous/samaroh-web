@@ -4,6 +4,37 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-09-11 — Checklist rows: pointer-events drag replaces HTML5 dnd; items non-editable
+
+- **HTML5 drag-and-drop replaced with a pointer-events drag on the whole
+  row.** The previous editor's HTML5 `draggable` reorder never fires on
+  touch browsers (mobile Chrome/Safari generate no `dragstart` from touch
+  gestures), so the primary audience couldn't reorder at all. The editor now
+  drives `pointerdown/move/up` itself (`ChecklistEditor` +
+  `_lib/rowDrag.ts` pure state machine):
+  - *touch*: ~400 ms long-press picks the row up; moving beyond an 8 px
+    slop before the timer cancels the press, and rows keep
+    `touch-action: pan-y`, so normal scrolling works until pickup. After
+    pickup a non-passive `touchmove` listener `preventDefault()`s so the
+    browser never starts a scroll pan (which would `pointercancel` the
+    drag). The long-press context menu is suppressed while a press is live.
+  - *mouse/pen*: press-and-move picks up without delay (≥3 px, no hold).
+  - *visuals*: the lifted row gets shadow + `scale(1.02)` and follows the
+    pointer via `translateY`; neighbors slide out of the way with 150 ms
+    transform transitions; the target slot comes from midpoint crossing
+    (`targetIndexFor`) and commits on release via `moveChecklistItem`.
+  The drag-handle icon and `draggable` attributes are gone — the whole row
+  is the handle. Verified for real in Playwright with BOTH input modes:
+  mouse press-and-move, and CDP `Input.dispatchTouchEvent` long-press drag
+  at a mobile viewport (`e2e/notes-checklist-drag.spec.ts`) — the exact
+  case HTML5 dnd failed — plus a quick-swipe negative (no reorder).
+- **Checklist items are non-editable once added (owner simplification).**
+  Rows are checkbox + plain text + a small remove cross; the single
+  "Add item" field at the bottom appends on Enter and keeps focus for the
+  next item. To change an item's text: remove and re-add. No new strings —
+  the existing `notes.editor.checklist_add` / `checklist_remove` keys cover
+  the editor.
+
 ## 2026-09-11 — Top bar drops the language switcher; note popup pin-in-create + drag reorder
 
 - **Language switcher removed from the app-bar (Android parity).** The

@@ -6,7 +6,7 @@
  * notes.delete).
  */
 import 'fake-indexeddb/auto';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { NextIntlClientProvider } from 'next-intl';
 import theme from '@/theme/theme';
@@ -42,7 +42,17 @@ function membership(overrides: Record<string, unknown> = {}) {
 
 function viewerPerms(extra: Partial<MemberPermissions['notes']> = {}): MemberPermissions {
   const p = emptyPermissions();
-  p.notes = { view: true, create: false, edit: false, delete: false, ...extra };
+  // view_checklists mirrors the inherited default (← view); tests pin the
+  // split combos explicitly via `extra`.
+  p.notes = {
+    view: true,
+    view_checklists: true,
+    create: false,
+    edit: false,
+    toggle_checklist: false,
+    delete: false,
+    ...extra,
+  };
   return p;
 }
 
@@ -208,6 +218,134 @@ describe('NotesScreen — permission gating', () => {
     expect(screen.queryByRole('button', { name: en.notes.action.pin })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: en.notes.action.delete })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: en.notes.action.share })).toBeInTheDocument();
+  });
+});
+
+describe('NotesScreen — checklist split (shared migration 007)', () => {
+  async function seedChecklist(title = 'Puja list') {
+    return createNote(client, BIZ, USER, {
+      kind: 'checklist',
+      title,
+      content: null,
+      checklist: [{ id: 'i1', text: 'Garlands', done: false }],
+      color: null,
+      pinned: false,
+    });
+  }
+
+  it('hides checklists from the grid and search without view_checklists', async () => {
+    await seedNote('Plain note');
+    await seedChecklist();
+    mockUseMembership.mockReturnValue(
+      membership({ permissions: viewerPerms({ view_checklists: false }) }),
+    );
+    renderScreen();
+    await screen.findByText('Plain note');
+    expect(screen.queryByText('Puja list')).not.toBeInTheDocument();
+
+    // Search cannot resurface them either — item text yields the empty state.
+    const searchField = screen.getByLabelText(en.notes.home.search_placeholder);
+    fireEvent.change(searchField, { target: { value: 'Garlands' } });
+    expect(await screen.findByText(en.notes.search.empty)).toBeInTheDocument();
+  });
+
+  it('a checklists-only member (view=false, view_checklists=true) sees only checklists', async () => {
+    await seedNote('Plain note');
+    await seedChecklist();
+    mockUseMembership.mockReturnValue(
+      membership({ permissions: viewerPerms({ view: false, view_checklists: true }) }),
+    );
+    renderScreen();
+    await screen.findByText('Puja list');
+    // The plain note still arrives from the (guest) store — RLS handles the
+    // live DB — but the split only scopes checklist visibility client-side,
+    // so this asserts the checklist path specifically.
+    expect(screen.getByRole('checkbox', { name: 'Garlands' })).toBeInTheDocument();
+  });
+
+  it('excludes hidden checklists from the manage-tags linked-note counts', async () => {
+    const list = await seedChecklist();
+    const tag = await createTag(client, BIZ, 'Festival');
+    await setNoteTags(client, list, [tag.id], []);
+    // An editor whose checklists are explicitly hidden.
+    mockUseMembership.mockReturnValue(
+      membership({ permissions: viewerPerms({ edit: true, view_checklists: false }) }),
+    );
+    renderScreen();
+    await screen.findByText(en.notes.home.empty_title);
+    fireEvent.click(screen.getByRole('button', { name: en.notes.tags.manage_open }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: en.notes.tags.delete }));
+    // The only linked note is an invisible checklist → the confirmation says 0.
+    expect(
+      await screen.findByText(en.notes.tags.delete_message.replace('{count}', '0')),
+    ).toBeInTheDocument();
+  });
+
+  it('toggle_checklist alone enables the inline card toggle (no notes.edit)', async () => {
+    const list = await seedChecklist();
+    mockUseMembership.mockReturnValue(
+      membership({ permissions: viewerPerms({ toggle_checklist: true }) }),
+    );
+    renderScreen();
+    const checkbox = await screen.findByRole('checkbox', { name: 'Garlands' });
+    expect(checkbox).toBeEnabled();
+    fireEvent.click(checkbox);
+    // The toggle-only write flips done in the store…
+    await waitFor(async () => {
+      const row = (await guestDb.notes.get(list.id)) as unknown as { checklist: { done: boolean }[] };
+      expect(row.checklist[0]!.done).toBe(true);
+    });
+    // …and everything else stays untouched (007 guard contract).
+    const row = (await guestDb.notes.get(list.id)) as unknown as {
+      title: string;
+      updated_by: string;
+      checklist: { id: string; text: string }[];
+    };
+    expect(row.title).toBe('Puja list');
+    expect(row.updated_by).toBe(USER);
+    expect(row.checklist.map((i) => [i.id, i.text])).toEqual([['i1', 'Garlands']]);
+    // The card reflects the flip without a reload (strike parity).
+    await waitFor(() =>
+      expect(screen.getByText('Garlands')).toHaveStyle({ textDecoration: 'line-through' }),
+    );
+  });
+
+  it('without edit or toggle_checklist the card checkbox stays disabled', async () => {
+    await seedChecklist();
+    mockUseMembership.mockReturnValue(membership({ permissions: viewerPerms() }));
+    renderScreen();
+    expect(await screen.findByRole('checkbox', { name: 'Garlands' })).toBeDisabled();
+  });
+
+  it('the create-checklist button needs create AND view_checklists', async () => {
+    mockUseMembership.mockReturnValue(
+      membership({ permissions: viewerPerms({ create: true, view_checklists: false }) }),
+    );
+    const { unmount } = renderScreen();
+    expect(await screen.findByRole('button', { name: en.notes.home.create_note })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: en.notes.home.create_checklist })).not.toBeInTheDocument();
+    unmount();
+
+    mockUseMembership.mockReturnValue(membership({ permissions: viewerPerms({ create: true }) }));
+    renderScreen();
+    expect(await screen.findByRole('button', { name: en.notes.home.create_checklist })).toBeInTheDocument();
+  });
+
+  it('the dialog checklist reflects a toggle immediately (no stale checkbox)', async () => {
+    await seedChecklist();
+    mockUseMembership.mockReturnValue(
+      membership({ permissions: viewerPerms({ toggle_checklist: true }) }),
+    );
+    renderScreen();
+    fireEvent.click(await screen.findByText('Puja list'));
+    const dialog = await screen.findByRole('dialog');
+    const checkbox = screen.getAllByRole('checkbox', { name: 'Garlands' }).find((c) => dialog.contains(c))!;
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(checkbox).toBeChecked());
+    // Strike parity inside the dialog too.
+    expect(within(dialog).getByText('Garlands')).toHaveStyle({ textDecoration: 'line-through' });
   });
 });
 

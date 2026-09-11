@@ -51,7 +51,6 @@ import {
   addChecklistItem,
   isNoteContentEmpty,
   noteShareText,
-  toggleChecklistItem,
 } from '../_lib/notesView';
 import type { ChecklistItem, NoteRecord, NoteTagRecord } from '../_lib/types';
 import ChecklistEditor from './ChecklistEditor';
@@ -67,11 +66,13 @@ export default function NoteDialog({
   noteTagIds,
   canEdit,
   canDelete,
+  canToggle,
   startInEdit,
   onSaveContent,
   onSaveTags,
   onCreateTag,
   onTogglePin,
+  onToggleItem,
   onSetStatus,
   onPurge,
   onShared,
@@ -86,6 +87,11 @@ export default function NoteDialog({
   canEdit: boolean;
   /** notes.delete — shows "Delete forever" in Trash. */
   canDelete: boolean;
+  /**
+   * notes.edit OR notes.toggle_checklist (shared migration 007) — enables
+   * the view-mode checklist done-toggles for members without full edit.
+   */
+  canToggle: boolean;
   /** Open straight into edit mode (create flow). */
   startInEdit: boolean;
   onSaveContent: (input: NoteInput) => Promise<void>;
@@ -93,6 +99,12 @@ export default function NoteDialog({
   /** Create-on-the-fly from the type-ahead; resolves the created tag. */
   onCreateTag: (name: string) => Promise<NoteTagRecord>;
   onTogglePin: () => Promise<void>;
+  /**
+   * View-mode done-flag toggle. Must push a toggle-only patch (checklist +
+   * updated_by) — the migration-007 guard rejects anything wider from
+   * members holding only toggle_checklist.
+   */
+  onToggleItem: (itemId: string) => Promise<void>;
   onSetStatus: (status: 'active' | 'completed' | 'trashed') => Promise<void>;
   onPurge: () => Promise<void>;
   /** Clipboard-fallback notice hook (Web Share API unavailable). */
@@ -243,19 +255,10 @@ export default function NoteDialog({
           <Checkbox
             size="small"
             checked={item.done}
-            disabled={!canEdit || inTrash}
+            disabled={!canToggle || inTrash}
             inputProps={{ 'aria-label': item.text }}
             sx={{ p: 0.25 }}
-            onChange={() =>
-              void onSaveContent({
-                kind: note.kind,
-                title: note.title,
-                content: note.content,
-                checklist: toggleChecklistItem(note.checklist, item.id),
-                color: note.color,
-                pinned: note.pinned,
-              })
-            }
+            onChange={() => void onToggleItem(item.id)}
           />
           <Typography
             sx={{

@@ -151,6 +151,39 @@ export async function updateNote(
   return { ...note, ...patch };
 }
 
+/**
+ * Toggle-only checklist write: flips ONE item's `done` flag and pushes a
+ * patch of `checklist` + `updated_by` only (plus the client `updated_at`
+ * the server trigger overwrites). Contract with shared migration 007's
+ * guard trigger: members holding only notes.toggle_checklist may change
+ * nothing but done flags, so the patch must NOT carry title/content/color/
+ * pinned — and the checklist is sent as-is (NOT sanitized): dropping blank
+ * items here would change array length/items and trip the guard.
+ */
+export async function toggleNoteItemDone(
+  db: SupabaseClient,
+  note: NoteRecord,
+  userId: string,
+  itemId: string,
+): Promise<NoteRecord> {
+  const patch = {
+    checklist: note.checklist.map((item) =>
+      item.id === itemId ? { ...item, done: !item.done } : item,
+    ),
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  };
+  await updateWithOutbox(db, {
+    module: 'notes',
+    table: 'notes',
+    entityId: note.id,
+    patch,
+    baseUpdatedAt: note.updated_at,
+    label: noteLabel(note),
+  });
+  return { ...note, ...patch };
+}
+
 export async function setNotePinned(
   db: SupabaseClient,
   note: NoteRecord,

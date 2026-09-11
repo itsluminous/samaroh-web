@@ -36,11 +36,19 @@ export interface MemberPermissions {
     manage_master_items: boolean;
     view_amounts: boolean;
   };
-  /** Notes has no amounts, so no view_amounts key (schema contract). */
+  /**
+   * Notes has no amounts, so no view_amounts key — but it carries the two
+   * checklist split keys (shared migration 007): `view_checklists` inherits
+   * `view` when absent and `toggle_checklist` inherits `edit` when absent
+   * (coalesce semantics, mirroring the DB's has_notes_perm — an explicit
+   * false never falls through to the parent key).
+   */
   notes: {
     view: boolean;
+    view_checklists: boolean;
     create: boolean;
     edit: boolean;
+    toggle_checklist: boolean;
     delete: boolean;
   };
   reports: {
@@ -57,6 +65,17 @@ export interface MemberPermissions {
 /** The one absent-defaults-to-TRUE action (see the schema's top description). */
 export const DEFAULT_TRUE_ACTION = 'view_amounts';
 
+/**
+ * Notes checklist split (shared migration 007): actions that inherit another
+ * action of the SAME module when absent. Clients must normalize exactly like
+ * the DB's has_notes_perm: coalesce(child, parent, false) — an explicit
+ * boolean (true OR false) wins; only a missing/non-boolean value inherits.
+ */
+export const NOTES_INHERITED_ACTIONS: Readonly<Record<string, string>> = {
+  view_checklists: 'view',
+  toggle_checklist: 'edit',
+};
+
 /** Matrix rows in display order — drives the permission editor UI. */
 export const PERMISSION_MATRIX: ReadonlyArray<{
   module: PermissionModule;
@@ -65,7 +84,7 @@ export const PERMISSION_MATRIX: ReadonlyArray<{
   { module: 'booking', actions: ['view', 'create', 'edit', 'delete', 'record_payment', 'generate_invoice', 'view_amounts'] },
   { module: 'expenses', actions: ['view', 'create', 'edit', 'delete', 'manage_parties', 'view_amounts'] },
   { module: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'manage_master_items', 'view_amounts'] },
-  { module: 'notes', actions: ['view', 'create', 'edit', 'delete'] },
+  { module: 'notes', actions: ['view', 'view_checklists', 'create', 'edit', 'toggle_checklist', 'delete'] },
   { module: 'reports', actions: ['view', 'view_amounts'] },
   { module: 'settings', actions: ['manage_business', 'manage_members', 'gcal_sync'] },
 ];
@@ -75,7 +94,7 @@ export function emptyPermissions(): MemberPermissions {
     booking: { view: false, create: false, edit: false, delete: false, record_payment: false, generate_invoice: false, view_amounts: true },
     expenses: { view: false, create: false, edit: false, delete: false, manage_parties: false, view_amounts: true },
     inventory: { view: false, create: false, edit: false, delete: false, manage_master_items: false, view_amounts: true },
-    notes: { view: false, create: false, edit: false, delete: false },
+    notes: { view: false, view_checklists: false, create: false, edit: false, toggle_checklist: false, delete: false },
     reports: { view: false, view_amounts: true },
     settings: { manage_business: false, manage_members: false, gcal_sync: false },
   };
@@ -84,7 +103,9 @@ export function emptyPermissions(): MemberPermissions {
 /**
  * Normalises a permissions jsonb blob from the DB into the full shape.
  * Actions default to false unless explicitly true — except `view_amounts`,
- * which defaults to true unless explicitly false (schema contract).
+ * which defaults to true unless explicitly false (schema contract), and the
+ * notes checklist split keys, which inherit their parent action when absent
+ * (coalesce(child, parent, false) — DB parity, shared migration 007).
  */
 export function normalizePermissions(raw: unknown): MemberPermissions {
   const base = emptyPermissions();
@@ -101,6 +122,12 @@ export function normalizePermissions(raw: unknown): MemberPermissions {
     for (const action of actions) {
       if (action === DEFAULT_TRUE_ACTION) {
         target[action] = mod[action] !== false;
+      } else if (module === 'notes' && action in NOTES_INHERITED_ACTIONS) {
+        // coalesce semantics: an explicit boolean (true OR false) wins;
+        // absent/junk falls through to the RAW parent value, then false.
+        const explicit = mod[action];
+        target[action] =
+          typeof explicit === 'boolean' ? explicit : mod[NOTES_INHERITED_ACTIONS[action]!] === true;
       } else if (mod[action] === true) {
         target[action] = true;
       }
@@ -128,6 +155,9 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   p.expenses.view = true;
   p.inventory.view = true;
   p.notes.view = true;
+  // Presets materialize the inherited value (view_checklists ← view), so a
+  // preset round-trips through normalizePermissions unchanged.
+  p.notes.view_checklists = true;
   if (preset === 'viewer') {
     return p;
   }
@@ -150,6 +180,8 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   p.inventory.delete = true;
   p.inventory.manage_master_items = true;
   p.notes.edit = true;
+  // Materialized inheritance: toggle_checklist ← edit (see above).
+  p.notes.toggle_checklist = true;
   p.notes.delete = true;
   p.reports.view = true;
   return p;

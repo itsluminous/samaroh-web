@@ -48,10 +48,11 @@ import {
   setNoteStatus,
   setNoteTags,
   sweepExpiredTrash,
+  toggleNoteItemDone,
   updateNote,
   type NoteInput,
 } from '../_lib/queries';
-import { distributeToColumns, liveTagIdsOf, tagsOf, toggleChecklistItem, visibleNotes, type NotesFilter } from '../_lib/notesView';
+import { distributeToColumns, liveTagIdsOf, tagsOf, visibleNotes, type NotesFilter } from '../_lib/notesView';
 import type { NoteKind, NoteRecord, NoteTagLinkRecord, NoteTagRecord } from '../_lib/types';
 import ManageTagsDialog from './ManageTagsDialog';
 import NoteCard from './NoteCard';
@@ -79,6 +80,11 @@ export default function NotesScreen() {
   const canCreate = isOwner || permissions.notes.create;
   const canEdit = isOwner || permissions.notes.edit;
   const canDelete = isOwner || permissions.notes.delete;
+  // Checklist split (shared migration 007): visibility and the done-flag
+  // toggle have their own keys. Editors keep toggling (edit implies the
+  // toggle server-side even when toggle_checklist is explicitly false).
+  const canViewChecklists = isOwner || permissions.notes.view_checklists;
+  const canToggleChecklist = isOwner || permissions.notes.edit || permissions.notes.toggle_checklist;
 
   const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [tags, setTags] = useState<NoteTagRecord[]>([]);
@@ -134,9 +140,17 @@ export default function NotesScreen() {
     void reload();
   }, [businessLoading, supabase, businessId, reload]);
 
+  // Defense-in-depth mirror of the notes_select split (RLS already withholds
+  // checklists server-side): without view_checklists, kind='checklist' rows
+  // vanish from the grid, search, tag scopes and the manage-tags counts.
+  const scopedNotes = useMemo(
+    () => (canViewChecklists ? notes : notes.filter((n) => n.kind !== 'checklist')),
+    [notes, canViewChecklists],
+  );
+
   const gridNotes = useMemo(
-    () => visibleNotes(notes, tags, links, filter, search),
-    [notes, tags, links, filter, search],
+    () => visibleNotes(scopedNotes, tags, links, filter, search),
+    [scopedNotes, tags, links, filter, search],
   );
 
   // Same responsive column count the CSS-columns layout used (xs 2 / sm 3 /
@@ -150,7 +164,7 @@ export default function NotesScreen() {
     [gridNotes, columnCount],
   );
 
-  const dialogNote = dialog ? (notes.find((n) => n.id === dialog.noteId) ?? null) : null;
+  const dialogNote = dialog ? (scopedNotes.find((n) => n.id === dialog.noteId) ?? null) : null;
 
   function patchNoteState(next: NoteRecord) {
     setNotes((prev) => prev.map((n) => (n.id === next.id ? next : n)));
@@ -174,17 +188,12 @@ export default function NotesScreen() {
   }
 
   async function handleToggleItem(note: NoteRecord, itemId: string) {
-    if (!supabase || !userId || !canEdit) {
+    if (!supabase || !userId || !canToggleChecklist) {
       return;
     }
-    const next = await updateNote(supabase, note, userId, {
-      kind: note.kind,
-      title: note.title,
-      content: note.content,
-      checklist: toggleChecklistItem(note.checklist, itemId),
-      color: note.color,
-      pinned: note.pinned,
-    });
+    // Toggle-only patch (checklist + updated_by): the migration-007 guard
+    // rejects anything else from members holding only toggle_checklist.
+    const next = await toggleNoteItemDone(supabase, note, userId, itemId);
     patchNoteState(next);
   }
 
@@ -355,7 +364,7 @@ export default function NotesScreen() {
                     key={note.id}
                     note={note}
                     tags={tagsOf(note, tags, links)}
-                    canEdit={canEdit && note.status !== 'trashed'}
+                    canToggle={canToggleChecklist && note.status !== 'trashed'}
                     onOpen={() => setDialog({ noteId: note.id, startInEdit: false })}
                     onToggleItem={(itemId) => void handleToggleItem(note, itemId)}
                   />
@@ -377,11 +386,15 @@ export default function NotesScreen() {
             label={t('home.create_note')}
             onClick={() => void handleCreate('note')}
           />
-          <ResponsiveGlassFab
-            icon={<ChecklistIcon />}
-            label={t('home.create_checklist')}
-            onClick={() => void handleCreate('checklist')}
-          />
+          {canViewChecklists ? (
+            // Creating a checklist you cannot see would strand the row —
+            // the button needs create AND view_checklists.
+            <ResponsiveGlassFab
+              icon={<ChecklistIcon />}
+              label={t('home.create_checklist')}
+              onClick={() => void handleCreate('checklist')}
+            />
+          ) : null}
         </Stack>
       ) : null}
 
@@ -389,7 +402,8 @@ export default function NotesScreen() {
         <ManageTagsDialog
           tags={tags}
           linkedNoteCount={(tagId) => {
-            const noteIds = new Set(notes.map((n) => n.id));
+            // Scoped list: checklists invisible to this member don't count.
+            const noteIds = new Set(scopedNotes.map((n) => n.id));
             return links.filter(
               (l) => l.tag_id === tagId && l.deleted_at === null && noteIds.has(l.note_id),
             ).length;
@@ -421,7 +435,9 @@ export default function NotesScreen() {
           noteTagIds={liveTagIdsOf(dialogNote.id, links)}
           canEdit={canEdit}
           canDelete={canDelete}
+          canToggle={canToggleChecklist}
           startInEdit={dialog?.startInEdit === true}
+          onToggleItem={(itemId) => handleToggleItem(dialogNote, itemId)}
           onSaveContent={async (input: NoteInput) => {
             const next = await updateNote(supabase, dialogNote, userId, input);
             patchNoteState(next);

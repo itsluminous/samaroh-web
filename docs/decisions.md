@@ -4,6 +4,44 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-09-11 — Notes checklist permission split (shared migration 007) + strike parity
+
+- **Two new notes permission keys** (shared `permissions-schema.json` +
+  migration `007_notes_fine_perms.sql`, submodule bumped to `84adc7d`):
+  `notes.view_checklists` (see checklists) and `notes.toggle_checklist`
+  (tick items without full edit). Both INHERIT when absent — the client
+  normalizes exactly like the DB's `has_notes_perm`:
+  `coalesce(view_checklists, view, false)` and
+  `coalesce(toggle_checklist, edit, false)`; an explicit `false` never
+  falls through to the parent key (`NOTES_INHERITED_ACTIONS` in
+  `lib/permissions/permissions.ts`). Presets materialize the inherited
+  value (Viewer/Staff get `view_checklists`, Manager also
+  `toggle_checklist`) so pre-007 preset blobs still round-trip through
+  `matchingPreset`.
+- **Enforcement (defense-in-depth mirror of the RLS split):** without
+  `view_checklists`, `kind='checklist'` rows are filtered out client-side
+  (`scopedNotes`) — gone from the grid, search, tag scopes and the
+  manage-tags linked-note counts; the create-checklist FAB needs `create`
+  AND `view_checklists` (creating a row you can't see would strand it).
+  Checkbox toggles (card inline + dialog view mode) are gated on
+  `edit OR toggle_checklist` — edit implies the toggle server-side even
+  when `toggle_checklist` is explicitly false.
+- **Toggle-only write path.** Ticking an item now pushes a patch of
+  `checklist` + `updated_by` only (`toggleNoteItemDone`), never the full
+  note payload: the 007 guard trigger rejects anything wider from members
+  holding only `toggle_checklist` (item ids/texts/order are pinned; only
+  `done` flags may change). The checklist is deliberately NOT re-sanitized
+  on this path — dropping blank items would change the array and trip the
+  guard's same-length/same-items check. The permission matrix editor gains
+  the two rows automatically from `PERMISSION_MATRIX` with the shared
+  labels (`notes.permission.action_view_checklists` /
+  `action_toggle_checklist`).
+- **Strike parity.** Checked items already struck (line-through + dimmed)
+  on card previews and the dialog's view mode; the dialog's EDIT mode
+  (`ChecklistEditor`) now strikes them too. Verified the dialog reflects a
+  toggle instantly (the popup derives its note from screen state, so
+  `patchNoteState` re-renders it — no stale-checkbox issue like Android's).
+
 ## 2026-09-11 — Checklist rows: pointer-events drag replaces HTML5 dnd; items non-editable
 
 - **HTML5 drag-and-drop replaced with a pointer-events drag on the whole

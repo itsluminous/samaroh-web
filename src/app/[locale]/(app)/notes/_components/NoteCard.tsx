@@ -21,15 +21,18 @@ const PREVIEW_ITEMS = 6;
 export default function NoteCard({
   note,
   tags,
-  canEdit,
+  canToggle,
   onOpen,
   onToggleItem,
 }: {
   note: NoteRecord;
   /** The note's live tags (resolved by the parent). */
   tags: NoteTagRecord[];
-  /** notes.edit — enables the inline checklist toggles. */
-  canEdit: boolean;
+  /**
+   * notes.edit OR notes.toggle_checklist (shared migration 007) — enables
+   * the inline checklist done-toggles.
+   */
+  canToggle: boolean;
   onOpen: () => void;
   onToggleItem: (itemId: string) => void;
 }) {
@@ -86,7 +89,7 @@ export default function NoteCard({
                 <Checkbox
                   size="small"
                   checked={item.done}
-                  disabled={!canEdit}
+                  disabled={!canToggle}
                   inputProps={{ 'aria-label': item.text }}
                   sx={{ p: 0.25, color: 'inherit', '&.Mui-checked': { color: 'inherit' } }}
                   onClick={(e) => e.stopPropagation()}

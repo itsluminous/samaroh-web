@@ -270,7 +270,17 @@ export default function ChecklistEditor({
               sx={{ p: 0.25 }}
               onChange={() => onItemsChange(toggleChecklistItem(items, item.id))}
             />
-            <Typography sx={{ flexGrow: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+            <Typography
+              sx={{
+                flexGrow: 1,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+                // Strike parity with the card preview and the view-mode
+                // checklist: done items render struck in edit mode too.
+                textDecoration: item.done ? 'line-through' : 'none',
+                opacity: item.done ? 0.6 : 1,
+              }}
+            >
               {item.text}
             </Typography>
             <IconButton

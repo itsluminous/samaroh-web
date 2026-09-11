@@ -78,7 +78,7 @@ describe('manage tags — affordance', () => {
   it('is hidden without notes.edit', async () => {
     await seed();
     const viewer = emptyPermissions() as MemberPermissions;
-    viewer.notes = { view: true, create: false, edit: false, delete: false };
+    viewer.notes = { view: true, view_checklists: true, create: false, edit: false, toggle_checklist: false, delete: false };
     mockUseMembership.mockReturnValue(membership({ isOwner: false, permissions: viewer }));
     renderScreen();
     await screen.findByText('Note A');

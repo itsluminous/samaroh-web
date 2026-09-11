@@ -48,11 +48,17 @@ function renderDialog({
   note = makeNote(),
   canEdit = true,
   canDelete = true,
+  // Mirrors the screen's derivation (edit implies the toggle) unless a test
+  // pins the checklist-split combo explicitly.
+  canToggle = undefined as boolean | undefined,
   startInEdit = false,
   tags = [vendorsTag],
   noteTagIds = [] as string[],
   onSaveContent = jest.fn(async (_input: NoteInput) => {
     void _input;
+  }),
+  onToggleItem = jest.fn(async (_itemId: string) => {
+    void _itemId;
   }),
   onSetStatus = jest.fn(async () => {}),
   onPurge = jest.fn(async () => {}),
@@ -69,11 +75,13 @@ function renderDialog({
         noteTagIds={noteTagIds}
         canEdit={canEdit}
         canDelete={canDelete}
+        canToggle={canToggle ?? canEdit}
         startInEdit={startInEdit}
         onSaveContent={onSaveContent}
         onSaveTags={jest.fn(async () => {})}
         onCreateTag={onCreateTag}
         onTogglePin={jest.fn(async () => {})}
+        onToggleItem={onToggleItem}
         onSetStatus={onSetStatus}
         onPurge={onPurge}
         onShared={onShared}
@@ -82,7 +90,7 @@ function renderDialog({
       />
     </NextIntlClientProvider>,
   );
-  return { onSaveContent, onSetStatus, onPurge, onCreateTag, onShared, onDiscard, onClose };
+  return { onSaveContent, onToggleItem, onSetStatus, onPurge, onCreateTag, onShared, onDiscard, onClose };
 }
 
 const action = (name: string) => screen.queryByRole('button', { name });
@@ -139,6 +147,62 @@ describe('NoteDialog — permission-gated actions', () => {
     await waitFor(() => expect(onSetStatus).toHaveBeenCalledWith('trashed'));
     fireEvent.click(action(en.notes.action.complete)!);
     await waitFor(() => expect(onSetStatus).toHaveBeenCalledWith('completed'));
+  });
+});
+
+describe('NoteDialog — checklist done-toggle split (shared migration 007)', () => {
+  const splitNote = (done = false) =>
+    makeNote({
+      kind: 'checklist',
+      title: 'Puja list',
+      content: null,
+      checklist: [
+        { id: 'i1', text: 'Garlands', done },
+        { id: 'i2', text: 'Diyas', done: false },
+      ],
+    });
+
+  it('a toggle-only member (canToggle without canEdit) can tick items in view mode', async () => {
+    const { onToggleItem, onSaveContent } = renderDialog({
+      note: splitNote(),
+      canEdit: false,
+      canDelete: false,
+      canToggle: true,
+    });
+    // View-only action set: no edit/pin/delete affordances…
+    expect(action(en.notes.action.edit)).not.toBeInTheDocument();
+    // …but the checkboxes stay live and dispatch the toggle-only path.
+    const checkbox = screen.getByRole('checkbox', { name: 'Garlands' });
+    expect(checkbox).toBeEnabled();
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(onToggleItem).toHaveBeenCalledWith('i1'));
+    // Never the full-content save — the 007 guard would reject wider patches.
+    expect(onSaveContent).not.toHaveBeenCalled();
+  });
+
+  it('without canToggle the view-mode checkboxes are disabled', () => {
+    renderDialog({ note: splitNote(), canEdit: false, canDelete: false, canToggle: false });
+    expect(screen.getByRole('checkbox', { name: 'Garlands' })).toBeDisabled();
+  });
+
+  it('in Trash the checkboxes are disabled even with canToggle', () => {
+    renderDialog({
+      note: { ...splitNote(), status: 'trashed', trashed_at: '2026-09-02T10:00:00Z' },
+      canToggle: true,
+    });
+    expect(screen.getByRole('checkbox', { name: 'Garlands' })).toBeDisabled();
+  });
+
+  it('view mode strikes checked items (line-through) and leaves unchecked ones alone', () => {
+    renderDialog({ note: splitNote(true), canEdit: false, canToggle: true });
+    expect(screen.getByText('Garlands')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(screen.getByText('Diyas')).toHaveStyle({ textDecoration: 'none' });
+  });
+
+  it('edit mode strikes checked items too (strike parity with the card preview)', () => {
+    renderDialog({ note: splitNote(true), startInEdit: true });
+    expect(screen.getByText('Garlands')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(screen.getByText('Diyas')).toHaveStyle({ textDecoration: 'none' });
   });
 });
 
@@ -218,11 +282,13 @@ describe('NoteDialog — pin in create/edit (buffered)', () => {
           noteTagIds={[]}
           canEdit
           canDelete
+          canToggle
           startInEdit
           onSaveContent={onSaveContent}
           onSaveTags={jest.fn(async () => {})}
           onCreateTag={jest.fn(async (name: string) => ({ ...vendorsTag, id: `new-${name}`, name }))}
           onTogglePin={onTogglePin}
+          onToggleItem={jest.fn(async () => {})}
           onSetStatus={jest.fn(async () => {})}
           onPurge={jest.fn(async () => {})}
           onShared={jest.fn()}

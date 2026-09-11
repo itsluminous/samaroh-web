@@ -13,6 +13,7 @@ import SectionGuard from '@/components/SectionGuard';
 import PermissionMatrixEditor from '@/app/[locale]/(app)/menu/_components/PermissionMatrixEditor';
 import {
   emptyPermissions,
+  matchingPreset,
   normalizePermissions,
   PERMISSION_MATRIX,
   presetPermissions,
@@ -56,21 +57,102 @@ function membership(overrides: Record<string, unknown> = {}) {
 describe('notes permission model', () => {
   it('absent notes keys normalize to false (no view_amounts exception)', () => {
     const perms = normalizePermissions({ booking: { view: true } });
-    expect(perms.notes).toEqual({ view: false, create: false, edit: false, delete: false });
+    expect(perms.notes).toEqual({
+      view: false,
+      view_checklists: false,
+      create: false,
+      edit: false,
+      toggle_checklist: false,
+      delete: false,
+    });
   });
 
-  it('explicit grants survive normalization', () => {
+  it('explicit grants survive normalization (and the split keys inherit them)', () => {
     const perms = normalizePermissions({ notes: { view: true, edit: true } });
     expect(perms.notes.view).toBe(true);
     expect(perms.notes.edit).toBe(true);
     expect(perms.notes.create).toBe(false);
     expect(perms.notes.delete).toBe(false);
+    // Inherited: view_checklists ← view, toggle_checklist ← edit.
+    expect(perms.notes.view_checklists).toBe(true);
+    expect(perms.notes.toggle_checklist).toBe(true);
+  });
+
+  it('view_checklists inherits view when absent — coalesce(view_checklists, view, false)', () => {
+    // Legacy blob written before migration 007: checklists stay visible.
+    expect(normalizePermissions({ notes: { view: true } }).notes.view_checklists).toBe(true);
+    // No view either → false.
+    expect(normalizePermissions({ notes: { create: true } }).notes.view_checklists).toBe(false);
+    // Module absent entirely → false.
+    expect(normalizePermissions({}).notes.view_checklists).toBe(false);
+  });
+
+  it('toggle_checklist inherits edit when absent — coalesce(toggle_checklist, edit, false)', () => {
+    expect(normalizePermissions({ notes: { view: true, edit: true } }).notes.toggle_checklist).toBe(true);
+    expect(normalizePermissions({ notes: { view: true } }).notes.toggle_checklist).toBe(false);
+  });
+
+  it('an explicit false never falls through to the parent key (DB json-null vs false parity)', () => {
+    const hidden = normalizePermissions({ notes: { view: true, view_checklists: false } });
+    expect(hidden.notes.view).toBe(true);
+    expect(hidden.notes.view_checklists).toBe(false);
+
+    const noToggle = normalizePermissions({ notes: { edit: true, toggle_checklist: false } });
+    expect(noToggle.notes.edit).toBe(true);
+    expect(noToggle.notes.toggle_checklist).toBe(false);
+  });
+
+  it('explicit true on a split key works without the parent (checklists-only member)', () => {
+    const p = normalizePermissions({ notes: { view_checklists: true, toggle_checklist: true } });
+    expect(p.notes.view).toBe(false);
+    expect(p.notes.view_checklists).toBe(true);
+    expect(p.notes.edit).toBe(false);
+    expect(p.notes.toggle_checklist).toBe(true);
+  });
+
+  it('non-boolean junk on a split key inherits like absent (schema forbids it anyway)', () => {
+    const p = normalizePermissions({ notes: { view: true, view_checklists: 'yes' } });
+    expect(p.notes.view_checklists).toBe(true); // inherited from view
+    const q = normalizePermissions({ notes: { view_checklists: 1 } });
+    expect(q.notes.view_checklists).toBe(false); // no parent to inherit
   });
 
   it('presets follow the schema guidance: Viewer=view, Staff=+create, Manager=all', () => {
-    expect(presetPermissions('viewer').notes).toEqual({ view: true, create: false, edit: false, delete: false });
-    expect(presetPermissions('staff').notes).toEqual({ view: true, create: true, edit: false, delete: false });
-    expect(presetPermissions('manager').notes).toEqual({ view: true, create: true, edit: true, delete: true });
+    expect(presetPermissions('viewer').notes).toEqual({
+      view: true,
+      view_checklists: true,
+      create: false,
+      edit: false,
+      toggle_checklist: false,
+      delete: false,
+    });
+    expect(presetPermissions('staff').notes).toEqual({
+      view: true,
+      view_checklists: true,
+      create: true,
+      edit: false,
+      toggle_checklist: false,
+      delete: false,
+    });
+    expect(presetPermissions('manager').notes).toEqual({
+      view: true,
+      view_checklists: true,
+      create: true,
+      edit: true,
+      toggle_checklist: true,
+      delete: true,
+    });
+  });
+
+  it('a pre-007 preset blob still round-trips to its preset (inherited keys materialize)', () => {
+    // What the matrix editor saved BEFORE the split existed.
+    const legacyStaff = normalizePermissions({
+      booking: { view: true, create: true },
+      expenses: { view: true, create: true },
+      inventory: { view: true, create: true },
+      notes: { view: true, create: true },
+    });
+    expect(matchingPreset(legacyStaff)).toBe('staff');
   });
 
   it('PERMISSION_MATRIX gains the notes row between inventory and reports', () => {
@@ -78,7 +160,7 @@ describe('notes permission model', () => {
     expect(modules.indexOf('notes')).toBe(modules.indexOf('inventory') + 1);
     expect(modules.indexOf('reports')).toBe(modules.indexOf('notes') + 1);
     const row = PERMISSION_MATRIX.find((r) => r.module === 'notes');
-    expect(row?.actions).toEqual(['view', 'create', 'edit', 'delete']);
+    expect(row?.actions).toEqual(['view', 'view_checklists', 'create', 'edit', 'toggle_checklist', 'delete']);
   });
 
   it('notes participates in nav visibility and landing order (after inventory)', () => {
@@ -167,5 +249,8 @@ describe('PermissionMatrixEditor — notes group', () => {
     expect(screen.getByText(en.notes.permission.group)).toBeInTheDocument();
     // "Delete forever" is unique to the notes group's action labels.
     expect(screen.getByLabelText(en.notes.permission.action_delete)).toBeInTheDocument();
+    // Checklist split rows (shared migration 007) with the shared labels.
+    expect(screen.getByLabelText(en.notes.permission.action_view_checklists)).toBeInTheDocument();
+    expect(screen.getByLabelText(en.notes.permission.action_toggle_checklist)).toBeInTheDocument();
   });
 });

@@ -98,6 +98,30 @@ describe('notes queries (guest local client)', () => {
     expect(notes[0]?.status).toBe('active');
   });
 
+  it('trashing a pinned note clears the pin, and restore does NOT re-pin', async () => {
+    const note = await createNote(client, BIZ, USER, { kind: 'note', title: 'Pinned', content: null, checklist: [], color: null, pinned: true });
+    expect(note.pinned).toBe(true);
+
+    const trashed = await setNoteStatus(client, note, USER, 'trashed');
+    expect(trashed.pinned).toBe(false);
+    let { notes } = await fetchNotesData(client, BIZ);
+    expect(notes[0]?.pinned).toBe(false);
+
+    const restored = await setNoteStatus(client, trashed, USER, 'active');
+    expect(restored.pinned).toBe(false);
+    ({ notes } = await fetchNotesData(client, BIZ));
+    expect(notes[0]?.status).toBe('active');
+    expect(notes[0]?.pinned).toBe(false);
+  });
+
+  it('completing a pinned note keeps the pin (only trash clears it)', async () => {
+    const note = await createNote(client, BIZ, USER, { kind: 'note', title: 'P', content: null, checklist: [], color: null, pinned: true });
+    const completed = await setNoteStatus(client, note, USER, 'completed');
+    expect(completed.pinned).toBe(true);
+    const { notes } = await fetchNotesData(client, BIZ);
+    expect(notes[0]?.pinned).toBe(true);
+  });
+
   it('sweepExpiredTrash tombstones only trash older than 30 days', async () => {
     const oldNote = await createNote(client, BIZ, USER, { kind: 'note', title: 'Old', content: null, checklist: [], color: null, pinned: false });
     const freshNote = await createNote(client, BIZ, USER, { kind: 'note', title: 'Fresh', content: null, checklist: [], color: null, pinned: false });

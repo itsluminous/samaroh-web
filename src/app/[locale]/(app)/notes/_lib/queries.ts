@@ -206,6 +206,9 @@ export async function setNotePinned(
  * Status transition (complete / un-complete / trash / restore). Sets or
  * clears the matching timestamp anchors: completed_at on 'completed',
  * trashed_at on 'trashed' (the 30-day purge anchor), both null on 'active'.
+ * Trashing also clears `pinned` (Keep/android parity): a trashed note never
+ * sits in the Pinned band, and a later restore deliberately does NOT re-pin
+ * — the pin is gone for good unless the user pins again.
  */
 export async function setNoteStatus(
   db: SupabaseClient,
@@ -218,6 +221,9 @@ export async function setNoteStatus(
     status,
     completed_at: status === 'completed' ? now : null,
     trashed_at: status === 'trashed' ? now : null,
+    // Single choke point for the trash→unpin rule: every trash path (dialog
+    // action, card menu) funnels through here.
+    ...(status === 'trashed' ? { pinned: false } : {}),
     updated_by: userId,
     updated_at: now,
   };

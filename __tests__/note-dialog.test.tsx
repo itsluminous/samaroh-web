@@ -622,3 +622,14 @@ describe('NoteDialog — share', () => {
     delete (navigator as { share?: unknown }).share;
   });
 });
+
+describe('NoteDialog — view-mode tags', () => {
+  it('renders tag chips WITHOUT a "Tags" label (chips self-evident; android parity)', () => {
+    renderDialog({ noteTagIds: [vendorsTag.id] });
+    expect(screen.getByText('Vendors')).toBeInTheDocument();
+    // The bare label text must not appear in view mode — only edit mode
+    // carries it (as the tag type-ahead field's label).
+    expect(screen.queryByText(en.notes.picker.tags_title)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(en.notes.picker.tags_title)).not.toBeInTheDocument();
+  });
+});

@@ -97,6 +97,14 @@ describe('AppShell', () => {
     renderShell('en', en);
     expect(screen.getByRole('main')).toHaveStyle({ minWidth: 0 });
   });
+
+  it('has no language switcher in the top bar (Settings owns language)', () => {
+    // The full picker lives at Menu → Settings → Language (menu-searchable);
+    // the freed toolbar width goes to the business-name title.
+    renderShell('en', en);
+    expect(screen.queryByLabelText(en.common.language.switcher_label)).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
 });
 
 describe('AppShell nav visibility (§3)', () => {

@@ -86,7 +86,7 @@ degrade gracefully, middleware skips protection). Never remove that guard.
   (light/dark/system via CSS variables).
 - `src/components/` — `AppShell` (left rail / bottom nav + toolbar with
   `SyncIndicator`), `AppTheme`, `ChipRow` (scrollable single-line filter pills),
-  `ColorSwatchPicker`, `GuestBanner`, `GlassFab`, `LocaleSwitcher`,
+  `ColorSwatchPicker`, `GuestBanner`, `GlassFab`,
   `MaskedAmount` (view_amounts masking), `SectionGuard` (route permission
   guard), `SignInForm`, `ServiceWorkerRegistrar`.
 - `src/app/[locale]/(app)/{booking,expenses,inventory,menu}/` — the 4 sections

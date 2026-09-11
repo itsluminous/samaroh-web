@@ -23,7 +23,6 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import type { FormEvent, ReactNode } from 'react';
-import LocaleSwitcher from '@/components/LocaleSwitcher';
 import SyncIndicator from '@/components/SyncIndicator';
 import { Link, usePathname } from '@/i18n/navigation';
 import { useFitText } from '@/lib/hooks/useFitText';
@@ -91,7 +90,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {title}
           </Typography>
           <SyncIndicator />
-          <LocaleSwitcher />
+          {/* No language switcher here (Android parity): the full picker
+              lives at Menu → Settings → Language (menu-searchable) — the
+              freed toolbar width goes to the business-name title. */}
           {/* Sign-out posts to the non-localized auth route. The outbox is
               wiped first (ADR-040 parity — see clearOutbox) so a later
               session on this browser can never replay this session's writes. */}

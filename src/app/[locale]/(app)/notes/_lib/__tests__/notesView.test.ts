@@ -9,6 +9,7 @@ import {
   distributeToColumns,
   isNoteContentEmpty,
   isPurgeDue,
+  moveChecklistItem,
   noteMatchesSearch,
   noteShareText,
   purgeDueNotes,
@@ -192,6 +193,27 @@ describe('checklist helpers', () => {
 
   it('removeChecklistItem drops the addressed item', () => {
     expect(removeChecklistItem(items, 'i2').map((i) => i.id)).toEqual(['i1']);
+  });
+
+  describe('moveChecklistItem (drag reorder)', () => {
+    const three = [
+      { id: 'a', text: 'A', done: false },
+      { id: 'b', text: 'B', done: false },
+      { id: 'c', text: 'C', done: true },
+    ];
+
+    it('moves an item down and up, immutably', () => {
+      expect(moveChecklistItem(three, 0, 2).map((i) => i.id)).toEqual(['b', 'c', 'a']);
+      expect(moveChecklistItem(three, 2, 0).map((i) => i.id)).toEqual(['c', 'a', 'b']);
+      expect(three.map((i) => i.id)).toEqual(['a', 'b', 'c']); // original untouched
+    });
+
+    it('same-position and out-of-range moves return the input unchanged', () => {
+      expect(moveChecklistItem(three, 1, 1)).toBe(three);
+      expect(moveChecklistItem(three, -1, 1)).toBe(three);
+      expect(moveChecklistItem(three, 0, 3)).toBe(three);
+      expect(moveChecklistItem(three, 5, 0)).toBe(three);
+    });
   });
 });
 

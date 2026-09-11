@@ -4,6 +4,31 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-09-11 — Top bar drops the language switcher; note popup pin-in-create + drag reorder
+
+- **Language switcher removed from the app-bar (Android parity).** The
+  Settings section owns language selection: full-screen picker at
+  Menu → Settings → Language (each language in its own script), reachable
+  from the settings row AND menu search (`language` entry with
+  `name_en`/`name_hi` keywords). The redundant top-bar `<Select>`
+  (`LocaleSwitcher`) is deleted; the freed toolbar width goes to the
+  business-name title, which keeps its shrink-to-fit + ellipsis behavior
+  unchanged (`useFitText` measures whatever width the flex row grants).
+  The `common.language.*` catalog keys stay (shared contract; Android may
+  still use them).
+- **Note popup: pin available while creating/editing (ADR-077 parity).**
+  The pin toggle in the popup header now also renders in edit/create mode,
+  buffered into the save payload (`NoteInput.pinned`) rather than persisted
+  immediately; view mode keeps the immediate `onTogglePin`. Re-entering
+  edit resyncs the buffer from the note.
+- **Checklist drag reorder (edit mode).** Plain HTML5 drag-and-drop on the
+  editor's checklist rows (drag-handle affordance, state-carried source
+  index, `moveChecklistItem` pure helper) — no library, no new strings; the
+  handle icon is decorative (`aria-hidden`) since the drop targets are the
+  rows themselves. Keyboard reordering is deliberately out of scope for
+  now (Android exposes move-up buttons; web parity for a keyboard path can
+  follow if requested).
+
 ## 2026-09-11 — Settings permission parity: read-only business profile, discard confirm
 
 - **Business profile is visible to every member, editable only with the

@@ -203,6 +203,107 @@ describe('NoteDialog — edit mode', () => {
   });
 });
 
+describe('NoteDialog — pin in create/edit (buffered)', () => {
+  it('create flow offers the pin toggle and saves pinned=true without onTogglePin', async () => {
+    const onTogglePin = jest.fn(async () => {});
+    const onSaveContent = jest.fn(async (_input: NoteInput) => {
+      void _input;
+    });
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <NoteDialog
+          note={makeNote({ title: null, content: null, pinned: false })}
+          tags={[]}
+          noteTagIds={[]}
+          canEdit
+          canDelete
+          startInEdit
+          onSaveContent={onSaveContent}
+          onSaveTags={jest.fn(async () => {})}
+          onCreateTag={jest.fn(async (name: string) => ({ ...vendorsTag, id: `new-${name}`, name }))}
+          onTogglePin={onTogglePin}
+          onSetStatus={jest.fn(async () => {})}
+          onPurge={jest.fn(async () => {})}
+          onShared={jest.fn()}
+          onClose={jest.fn()}
+        />
+      </NextIntlClientProvider>,
+    );
+    // Buffered toggle: pin → unpin affordance flips locally, nothing persists yet.
+    fireEvent.click(screen.getByRole('button', { name: en.notes.action.pin }));
+    expect(screen.getByRole('button', { name: en.notes.action.unpin })).toBeInTheDocument();
+    expect(onTogglePin).not.toHaveBeenCalled();
+    // The pin lands in the save payload (with some content so it isn't a discard).
+    fireEvent.change(screen.getByLabelText(en.notes.editor.title_placeholder), { target: { value: 'Pinned at birth' } });
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
+    expect(onSaveContent.mock.calls[0]![0]!.pinned).toBe(true);
+    expect(onTogglePin).not.toHaveBeenCalled();
+  });
+
+  it('cancelling an edit drops the buffered pin change', async () => {
+    const { onSaveContent } = renderDialog(); // existing unpinned note, view mode
+    fireEvent.click(action(en.notes.action.edit)!);
+    fireEvent.click(screen.getByRole('button', { name: en.notes.action.pin }));
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.cancel }));
+    // Back in view mode the note is still unpinned; a fresh edit + save keeps pinned=false.
+    fireEvent.click(action(en.notes.action.edit)!);
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
+    expect(onSaveContent.mock.calls[0]![0]!.pinned).toBe(false);
+  });
+});
+
+describe('NoteDialog — checklist drag reorder', () => {
+  const draggableRow = (text: string) =>
+    screen.getByText(text).closest('[draggable="true"]') as HTMLElement;
+
+  it('dropping a dragged row onto another reorders the checklist in the save payload', async () => {
+    const note = makeNote({
+      kind: 'checklist',
+      content: null,
+      checklist: [
+        { id: 'i1', text: 'Garlands', done: false },
+        { id: 'i2', text: 'Diyas', done: false },
+        { id: 'i3', text: 'Lights', done: false },
+      ],
+    });
+    const { onSaveContent } = renderDialog({ note, startInEdit: true });
+
+    // Drag the last row and drop it on the first.
+    fireEvent.dragStart(draggableRow('Lights'));
+    fireEvent.dragOver(draggableRow('Garlands'));
+    fireEvent.drop(draggableRow('Garlands'));
+
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
+    expect(onSaveContent.mock.calls[0]![0]!.checklist.map((i) => i.text)).toEqual([
+      'Lights',
+      'Garlands',
+      'Diyas',
+    ]);
+  });
+
+  it('a drop with no tracked drag leaves the order unchanged', async () => {
+    const note = makeNote({
+      kind: 'checklist',
+      content: null,
+      checklist: [
+        { id: 'i1', text: 'Garlands', done: false },
+        { id: 'i2', text: 'Diyas', done: false },
+      ],
+    });
+    const { onSaveContent } = renderDialog({ note, startInEdit: true });
+    fireEvent.drop(draggableRow('Garlands'));
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
+    expect(onSaveContent.mock.calls[0]![0]!.checklist.map((i) => i.text)).toEqual([
+      'Garlands',
+      'Diyas',
+    ]);
+  });
+});
+
 describe('NoteDialog — tag type-ahead', () => {
   const otherTag: NoteTagRecord = { ...vendorsTag, id: 't2', name: 'Decor' };
 

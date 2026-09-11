@@ -173,6 +173,29 @@ export function removeChecklistItem(items: ChecklistItem[], itemId: string): Che
   return items.filter((item) => item.id !== itemId);
 }
 
+/**
+ * Moves a checklist item to another position (drag reorder in the editor).
+ * Out-of-range or same-position moves return the input untouched so drop
+ * handlers can call this unconditionally.
+ */
+export function moveChecklistItem(items: ChecklistItem[], from: number, to: number): ChecklistItem[] {
+  if (
+    from === to ||
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= items.length ||
+    to >= items.length
+  ) {
+    return items;
+  }
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved!);
+  return next;
+}
+
 /** Share/clipboard text: title line, then body or "[x]/[ ] item" lines. */
 export function noteShareText(note: NoteRecord): string {
   const lines: string[] = [];

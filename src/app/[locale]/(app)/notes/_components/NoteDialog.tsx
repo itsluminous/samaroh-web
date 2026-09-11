@@ -3,10 +3,13 @@
 // Note popup (Keep-style): VIEW mode shows the note with its actions —
 // Pin/Unpin, Edit, Share (Web Share API with clipboard fallback),
 // Complete/un-complete, Delete→Trash, Restore, Delete forever (Trash only) —
-// and EDIT mode edits title, body or checklist (add/toggle/remove),
-// color (compact ColorSwatchPicker row) and tags (debounced type-ahead:
-// suggestions only while typing, with a create-on-the-fly option; selected
-// tags are removable chips). Closing a brand-new note without content
+// and EDIT mode edits title, body or checklist (add/toggle/remove and drag
+// reorder), color (compact ColorSwatchPicker row) and tags (debounced
+// type-ahead: suggestions only while typing, with a create-on-the-fly
+// option; selected tags are removable chips). The pin toggle is available
+// in BOTH modes (ADR-077 parity): immediate in view mode, buffered into the
+// save payload while editing — so a note can be pinned during create.
+// Closing a brand-new note without content
 // discards it (onDiscard) so empty cards never linger in the grid.
 // Members without notes.edit get a view-only popup (Share stays available).
 
@@ -14,6 +17,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
@@ -43,6 +47,7 @@ import type { NoteInput } from '../_lib/queries';
 import {
   addChecklistItem,
   isNoteContentEmpty,
+  moveChecklistItem,
   noteShareText,
   removeChecklistItem,
   toggleChecklistItem,
@@ -107,6 +112,11 @@ export default function NoteDialog({
   const [checklist, setChecklist] = useState<ChecklistItem[]>(note.checklist);
   const [newItem, setNewItem] = useState('');
   const [color, setColor] = useState<string | null>(note.color);
+  // Buffered pin (ADR-077 parity): edit/create toggles this local flag and it
+  // lands in the save payload; view mode bypasses it via onTogglePin.
+  const [pinned, setPinned] = useState(note.pinned);
+  // Index of the checklist row a drag started on (HTML5 drag reorder).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [selectedTags, setSelectedTags] = useState<NoteTagRecord[]>(
     tags.filter((tag) => noteTagIds.includes(tag.id)),
   );
@@ -190,7 +200,7 @@ export default function NoteDialog({
         content: note.kind === 'note' ? (content.trim() === '' ? null : content) : null,
         checklist: note.kind === 'checklist' ? items : [],
         color,
-        pinned: note.pinned,
+        pinned,
       };
       // Saving a brand-new note with no content at all = discard (Keep-style).
       if (startInEdit && selectedTags.length === 0 && isNoteContentEmpty(input)) {
@@ -296,16 +306,30 @@ export default function NoteDialog({
               </Typography>
             ) : null}
           </Box>
-          {!editing && canEdit && !inTrash ? (
-            <Tooltip title={note.pinned ? t('action.unpin') : t('action.pin')}>
-              <IconButton
-                aria-label={note.pinned ? t('action.unpin') : t('action.pin')}
-                sx={{ color: 'inherit' }}
-                onClick={() => void onTogglePin()}
-              >
-                {note.pinned ? <PushPinIcon /> : <PushPinOutlinedIcon />}
-              </IconButton>
-            </Tooltip>
+          {canEdit && !inTrash ? (
+            // Edit/create: buffered toggle saved with the content. View:
+            // immediate persist through onTogglePin (unchanged behavior).
+            editing ? (
+              <Tooltip title={pinned ? t('action.unpin') : t('action.pin')}>
+                <IconButton
+                  aria-label={pinned ? t('action.unpin') : t('action.pin')}
+                  sx={{ color: 'inherit' }}
+                  onClick={() => setPinned(!pinned)}
+                >
+                  {pinned ? <PushPinIcon /> : <PushPinOutlinedIcon />}
+                </IconButton>
+              </Tooltip>
+            ) : (
+              <Tooltip title={note.pinned ? t('action.unpin') : t('action.pin')}>
+                <IconButton
+                  aria-label={note.pinned ? t('action.unpin') : t('action.pin')}
+                  sx={{ color: 'inherit' }}
+                  onClick={() => void onTogglePin()}
+                >
+                  {note.pinned ? <PushPinIcon /> : <PushPinOutlinedIcon />}
+                </IconButton>
+              </Tooltip>
+            )
           ) : null}
           <Tooltip title={tCommon('action.close')}>
             <IconButton aria-label={tCommon('action.close')} sx={{ color: 'inherit' }} onClick={handleDialogClose}>
@@ -331,8 +355,36 @@ export default function NoteDialog({
             ) : null
           ) : editing ? (
             <Box>
-              {checklist.map((item) => (
-                <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {checklist.map((item, index) => (
+                <Box
+                  key={item.id}
+                  // HTML5 drag reorder: the dragged row's index is kept in
+                  // state (jsdom/Safari-safe); dataTransfer is only fed so
+                  // Firefox actually starts the drag.
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer?.setData('text/plain', String(index));
+                    if (e.dataTransfer) {
+                      e.dataTransfer.effectAllowed = 'move';
+                    }
+                    setDragIndex(index);
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIndex !== null) {
+                      setChecklist(moveChecklistItem(checklist, dragIndex, index));
+                    }
+                    setDragIndex(null);
+                  }}
+                  onDragEnd={() => setDragIndex(null)}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                >
+                  <DragIndicatorIcon
+                    aria-hidden
+                    fontSize="small"
+                    sx={{ cursor: 'grab', opacity: 0.5 }}
+                  />
                   <Checkbox
                     size="small"
                     checked={item.done}
@@ -460,7 +512,14 @@ export default function NoteDialog({
             </Tooltip>
             {canEdit && !inTrash ? (
               <Tooltip title={t('action.edit')}>
-                <IconButton aria-label={t('action.edit')} sx={{ color: 'inherit' }} onClick={() => setEditing(true)}>
+                <IconButton
+                  aria-label={t('action.edit')}
+                  sx={{ color: 'inherit' }}
+                  onClick={() => {
+                    setPinned(note.pinned); // resync the buffer on re-entry
+                    setEditing(true);
+                  }}
+                >
                   <EditOutlinedIcon />
                 </IconButton>
               </Tooltip>

@@ -4,6 +4,37 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-09-25 — Tombstoned names never block re-creation (shared migration 008)
+
+- **Bug.** Deleting a party (or master item) and adding one with the same
+  name again was rejected server-side with PostgREST 409 / Postgres `23505`
+  on `parties_business_id_name_key` / `master_items_business_id_name_key`
+  (owner report; reproduced with live probes on 2026-09-25). The 001
+  baseline declared `unique (business_id, name)` as a plain NON-PARTIAL
+  constraint, so a soft-deleted row kept owning its name forever, while both
+  clients dedup against LIVE rows only and mint a fresh id for a re-created
+  name. `note_tags` / `event_types` already used partial indexes.
+- **Server contract (shared `008_live_name_uniqueness.sql`).** Both plain
+  constraints are replaced by partial unique indexes
+  `(business_id, lower(name)) WHERE deleted_at IS NULL`
+  (`uq_parties_biz_name`, `uq_master_items_biz_name`) — uniqueness over LIVE
+  rows only, CASE-INSENSITIVE (stricter than before for mixed-case twins; the
+  migration pre-checks live data and aborts listing any collision — the live
+  DB had none).
+- **Client contract (unchanged, now pinned).** This app never resurrects a
+  tombstoned id: `createParty` / `createMasterItem` / `createTag` /
+  `createEventType` always insert a new UUID. Every duplicate-steering source
+  is LIVE-only (`fetchParties`, `fetchMasterItems`, `fetchNotesData().tags`,
+  `fetchEventTypes` all filter `.is('deleted_at', null)`) and the dialogs'
+  exact-duplicate checks are case-insensitive (`toLocaleLowerCase()` /
+  `normalizeTypeLabel`) — matching `lower(name)` server-side. New
+  `__tests__/live-name-steering.test.ts` pins all four sources against the
+  guest local client (delete → re-create with a new id → only the live row
+  steers).
+- **Self-healing.** Outbox items that failed with 23505 are plain inserts
+  with fresh ids; once 008 is applied the next replay succeeds. No client
+  change needed beyond the regression test and this ADR.
+
 ## 2026-09-11 — Notes checklist permission split (shared migration 007) + strike parity
 
 - **Two new notes permission keys** (shared `permissions-schema.json` +

@@ -19,12 +19,14 @@ export const NAV_MODULES = ['booking', 'expenses', 'inventory', 'notes', 'files'
 export type NavModule = (typeof NAV_MODULES)[number];
 
 /**
- * Bottom-bar cap (D15): at most this many MODULES sit in the mobile bottom
- * bar next to Menu (Material 3's 5-item limit). Visible modules fill the bar
- * in order; the rest overflow into the "More" section at the top of the Menu
- * tab (and into menu search). The desktop rail is uncapped.
+ * Bottom-bar cap (D15 as amended by owner feedback 2026-09-29): the mobile
+ * bottom bar holds MODULES ONLY — Menu moved to the title-bar kebab — so
+ * Material 3's 5-item limit is all modules. Visible modules fill the bar in
+ * order; anything past the cap (none today: NAV_MODULES has exactly 5
+ * entries) overflows into the "More" section at the top of the Menu tab (and
+ * into menu search). The desktop rail is uncapped and keeps Menu last.
  */
-export const BOTTOM_BAR_MODULE_CAP = 4;
+export const BOTTOM_BAR_MODULE_CAP = 5;
 
 /** The membership facts visibility depends on (subset of `Membership`). */
 export interface VisibilityInput {
@@ -52,10 +54,11 @@ export function visibleNavModules(m: VisibilityInput): NavModule[] {
 
 /**
  * Splits the visible modules into the bottom-bar set (first `cap`) and the
- * overflow set (everything past it) — the D15 rule shared with Android and
- * web-mobile. A full-permission owner sees Booking/Expenses/Inventory/Notes
- * in the bar and Files under Menu → More; a member without inventory.view
- * gets Files in the bar and no overflow.
+ * overflow set (everything past it) — the rule shared with Android and
+ * web-mobile. With the cap at 5 and five modules, a full-permission owner
+ * sees Booking/Expenses/Inventory/Notes/Files in the bar and nothing
+ * overflows; the split stays so a sixth module would land under Menu → More
+ * instead of crowding the bar.
  */
 export function splitNavModules<T extends { key: NavModule }>(
   visible: readonly T[],

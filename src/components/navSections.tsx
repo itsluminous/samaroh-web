@@ -2,10 +2,11 @@
 
 /**
  * The permission-gated nav modules (§1.2 + Notes + Files) with their icons
- * and label keys, plus the D15 bottom-bar split: the mobile bar shows at
- * most BOTTOM_BAR_MODULE_CAP modules before Menu; visible modules past the
- * cap overflow into the "More" section at the top of the Menu tab. Shared by
- * AppShell (rail + bar), MenuHome (More rows) and menu search.
+ * and label keys, plus the bottom-bar split: the mobile bar shows at most
+ * BOTTOM_BAR_MODULE_CAP modules (Menu is NOT in the bar — it lives behind the
+ * title-bar kebab); visible modules past the cap overflow into the "More"
+ * section at the top of the Menu tab. Shared by AppShell (rail + bar),
+ * MenuHome (More rows) and menu search.
  */
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -40,7 +41,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
 export interface NavLayout {
   /** Every visible module (desktop rail — uncapped). */
   rail: NavSection[];
-  /** Modules that fit the mobile bottom bar (before Menu). */
+  /** Modules that fit the mobile bottom bar (modules only — Menu is the title-bar kebab). */
   bar: NavSection[];
   /** Visible modules past the cap — rendered under Menu → More. */
   overflow: NavSection[];

@@ -88,8 +88,9 @@ degrade gracefully, middleware skips protection). Never remove that guard.
   `hooks/`.
 - `src/theme/theme.ts` — Material-You-like MUI theme from `shared/brand/palette.md`
   (light/dark/system via CSS variables).
-- `src/components/` — `AppShell` (left rail / bottom nav + toolbar with
-  `SyncIndicator`; bottom bar capped at 4 modules + Menu, overflow → Menu → More),
+- `src/components/` — `AppShell` (left rail with Menu last / modules-only bottom
+  nav, cap 5, overflow → Menu → More / toolbar with `SyncIndicator` + the mobile
+  Menu kebab; NO sign-out in the title bar — the Menu identity row owns it),
   `navSections` (module nav entries + overflow split), `AppTheme`, `ChipRow` (scrollable single-line filter pills),
   `ColorSwatchPicker`, `GuestBanner`, `GlassFab`,
   `MaskedAmount` (view_amounts masking), `SectionGuard` (route permission

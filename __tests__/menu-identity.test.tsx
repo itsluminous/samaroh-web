@@ -15,6 +15,15 @@ jest.mock('@/lib/guest/guest', () => ({
   isGuestMode: jest.fn(() => false),
 }));
 
+// The i18n Link (Sign in action) needs the App Router context.
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/en/menu',
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), refresh: jest.fn(), prefetch: jest.fn(), back: jest.fn(), forward: jest.fn() }),
+  useParams: () => ({ locale: 'en' }),
+  useSearchParams: () => new URLSearchParams(),
+  redirect: jest.fn(),
+}));
+
 jest.mock('@/lib/supabase/client', () => ({
   createRemoteClient: jest.fn(() => null),
   createClient: jest.fn(() => null),
@@ -98,11 +107,29 @@ describe('MenuIdentityRow', () => {
     expect(screen.getByRole('button', { name: en.menu.sign_out.confirm_action })).toBeInTheDocument();
   });
 
-  it('not signed in: no sign-out icon', async () => {
+  it('not signed in: no sign-out icon — the Sign in link (guest-mode counterpart) instead', async () => {
     mockCreateRemoteClient.mockReturnValue(clientWithUser(null));
     renderRow();
 
     await screen.findByText(en.menu.identity.not_signed_in);
     expect(screen.queryByRole('button', { name: en.menu.identity.sign_out })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: en.menu.identity.sign_in })).toHaveAttribute('href', '/en/sign-in');
+  });
+
+  it('guest mode: the identity row offers Sign in (localized, both locales) and never sign-out', async () => {
+    mockIsGuestMode.mockReturnValue(true);
+    renderRow();
+    expect(await screen.findByRole('link', { name: en.menu.identity.sign_in })).toHaveAttribute('href', '/en/sign-in');
+    expect(screen.queryByLabelText(en.menu.identity.sign_out)).not.toBeInTheDocument();
+
+    renderRow('hi', hi as Messages);
+    expect(await screen.findByRole('link', { name: hi.menu.identity.sign_in })).toBeInTheDocument();
+  });
+
+  it('signed in: no Sign in link', async () => {
+    mockCreateRemoteClient.mockReturnValue(clientWithUser({ email: 'owner@example.com' }));
+    renderRow();
+    await screen.findByText('owner@example.com');
+    expect(screen.queryByRole('link', { name: en.menu.identity.sign_in })).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Menu search (§4.4 parity): a static, localized index of every destination
  * reachable from the Menu tab — section pages, settings rows, the About
- * items, all 10 report names and the sign-out affordance — filtered live by
+ * items, all 10 report names and the sign-out (or guest sign-in) affordance — filtered live by
  * substring plus the shared fuzzy matcher.
  *
  * Permission parity is the hard rule: an entry's `visible` gate reuses the
@@ -93,13 +93,21 @@ const ENTRY_DEFS: readonly EntryDef[] = [
     visible: (g) => g.isOwner, // MenuHome hides (not disables) Members for non-owners.
   },
   { id: 'about', labelKey: 'menu.section.about', sectionKey: 'menu.home.title', href: '/menu/about', keywordKeys: ['menu.section.about_subtitle'] },
-  // Sign-out lives on the identity row of the menu home (real session only).
+  // Sign-out lives on the identity row of the menu home (real session only);
+  // its guest-mode counterpart is the row's Sign in action (sign-in page).
   {
     id: 'sign_out',
     labelKey: 'menu.identity.sign_out',
     sectionKey: 'menu.home.title',
     href: '/menu?hl=identity',
     visible: (g) => g.signedIn,
+  },
+  {
+    id: 'sign_in',
+    labelKey: 'menu.identity.sign_in',
+    sectionKey: 'menu.home.title',
+    href: '/sign-in',
+    visible: (g) => !g.signedIn,
   },
   // Settings rows (SettingsScreen).
   {

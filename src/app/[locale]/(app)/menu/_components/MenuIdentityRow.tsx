@@ -9,12 +9,16 @@
  *
  * Signed in, the row carries a sign-out icon (ADR-040 parity with Android):
  * always confirm first, and warn with the pending-outbox count when unsynced
- * changes would be lost. Confirming wipes the queued outbox (clearOutbox —
+ * changes would be lost. This row is the ONLY sign-out affordance (the title
+ * bar has none — owner feedback 2026-09-29); its guest-mode / no-session
+ * counterpart is a Sign in action that opens the sign-in page (signing in
+ * ends guest mode, SignInForm → leaveGuestMode). Confirming wipes the queued outbox (clearOutbox —
  * a later account on this browser must never replay this session's writes)
  * and posts to the non-localized /auth/sign-out route (ends the session and
  * guest mode server-side).
  */
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import LoginIcon from '@mui/icons-material/Login';
 import LogoutIcon from '@mui/icons-material/Logout';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -29,6 +33,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from '@/i18n/navigation';
 import { isGuestMode } from '@/lib/guest/guest';
 import { highlightSx } from '@/lib/hooks/useHighlightParam';
 import { clearOutbox } from '@/lib/outbox/outbox';
@@ -92,6 +97,12 @@ export default function MenuIdentityRow({ highlighted = false }: { highlighted?:
               onClick={() => setConfirmOpen(true)}
             >
               <LogoutIcon />
+            </IconButton>
+          </Tooltip>
+        ) : identity.kind === 'anonymous' ? (
+          <Tooltip title={t('menu.identity.sign_in')}>
+            <IconButton component={Link} href="/sign-in" edge="end" aria-label={t('menu.identity.sign_in')}>
+              <LoginIcon />
             </IconButton>
           </Tooltip>
         ) : undefined

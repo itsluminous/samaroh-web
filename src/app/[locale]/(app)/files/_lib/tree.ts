@@ -82,6 +82,33 @@ export function sortFiles(files: readonly FileRecord[]): FileRecord[] {
   );
 }
 
+/** One row of the flattened folder tree (destination picker). */
+export interface FolderTreeRow {
+  folder: FolderRecord;
+  /** 0 = top-level folder. */
+  depth: number;
+}
+
+/**
+ * Depth-first flattening of the reachable folder tree in display order:
+ * every level A–Z, children right under their parent — the rows of the
+ * destination-folder picker (indented by `depth`).
+ */
+export function flattenFolderTree(folders: Map<string, FolderRecord>): FolderTreeRow[] {
+  const rows: FolderTreeRow[] = [];
+  const visit = (parentId: string | null, depth: number) => {
+    if (depth > 64) {
+      return; // corrupt cycle guard (reachableFolders already prunes these)
+    }
+    for (const folder of sortFolders([...folders.values()].filter((f) => f.parent_id === parentId))) {
+      rows.push({ folder, depth });
+      visit(folder.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return rows;
+}
+
 export interface FolderListing {
   folders: FolderRecord[];
   files: FileRecord[];

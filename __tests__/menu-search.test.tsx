@@ -231,12 +231,15 @@ describe('permission gating parity', () => {
     }
   });
 
-  it('offers sign-out only with a real session', () => {
+  it('offers sign-out only with a real session, and the guest sign-in counterpart otherwise', () => {
     const signedOut = buildMenuSearchIndex(gates({ signedIn: false }), tEn);
     expect(signedOut.map((entry) => entry.id)).not.toContain('sign_out');
+    const signIn = signedOut.find((entry) => entry.id === 'sign_in');
+    expect(signIn).toMatchObject({ label: en.menu.identity.sign_in, href: '/sign-in', section: en.menu.home.title });
 
     const signedIn = buildMenuSearchIndex(gates(), tEn);
     expect(signedIn.map((entry) => entry.id)).toContain('sign_out');
+    expect(signedIn.map((entry) => entry.id)).not.toContain('sign_in');
   });
 
   it('grants owners everything regardless of the permissions object', () => {

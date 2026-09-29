@@ -1,6 +1,9 @@
 /**
  * Renders the app shell in both v1 locales and asserts the chrome (app name,
- * 4 section nav labels) is fully localized from the generated catalog.
+ * section nav labels, title-bar kebab) is fully localized from the generated
+ * catalog, that the title bar carries NO sign-out icon (owner feedback
+ * 2026-09-29: sign-out lives on the Menu identity row only) and that Menu is
+ * the last rail entry + the title-bar kebab rather than a bottom-bar tab.
  */
 import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
@@ -52,6 +55,15 @@ jest.mock('next/navigation', () => ({
 
 type Messages = typeof en;
 
+/** The title-bar kebab (⋮): the only link carrying the MoreVert icon (the rail's Menu row uses the hamburger icon). */
+function kebabLink(): HTMLAnchorElement {
+  const link = document.querySelector('[data-testid="MoreVertIcon"]')?.closest('a');
+  if (!link) {
+    throw new Error('kebab link not rendered');
+  }
+  return link;
+}
+
 function renderShell(locale: string, messages: Messages, children: ReactNode = null) {
   return render(
     <NextIntlClientProvider locale={locale} messages={messages}>
@@ -79,10 +91,35 @@ describe('AppShell', () => {
 
     expect(screen.getByRole('heading', { name: appName })).toBeInTheDocument();
     expect(navLabels).toHaveLength(4);
+    const menuLabel = (messages as Messages).common.nav.menu;
     for (const label of navLabels) {
-      // Each section label appears in the desktop rail and the mobile bottom nav.
-      expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(2);
+      // Each MODULE label appears in the desktop rail and the mobile bottom
+      // nav; Menu is rail-only (its mobile entry is the title-bar kebab).
+      expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(label === menuLabel ? 1 : 2);
     }
+    // The kebab is a localized link to the Menu route.
+    expect(kebabLink()).toHaveAttribute('href', `/${locale}/menu`);
+  });
+
+  it('has no sign-out icon in the title bar (sign-out lives on the Menu identity row)', () => {
+    renderShell('en', en);
+    expect(screen.queryByLabelText(en.auth.action.sign_out)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(en.menu.identity.sign_out)).not.toBeInTheDocument();
+    expect(document.querySelector('form[action="/auth/sign-out"]')).toBeNull();
+    expect(document.querySelector('[data-testid="LogoutIcon"]')).toBeNull();
+  });
+
+  it('Menu is not a bottom-bar tab; the title-bar kebab opens the Menu route', () => {
+    renderShell('en', en);
+    const barLabels = Array.from(document.querySelectorAll('.MuiBottomNavigationAction-root')).map((el) => el.textContent);
+    expect(barLabels).not.toContain(en.common.nav.menu);
+    const kebab = kebabLink();
+    expect(kebab).toHaveAttribute('href', '/en/menu');
+    expect(kebab).toHaveAccessibleName(en.common.nav.menu);
+    // Rail: Menu is the last entry.
+    const rail = screen.getAllByRole('navigation')[0]!;
+    const railLabels = Array.from(rail.querySelectorAll('.MuiListItemText-primary')).map((el) => el.textContent);
+    expect(railLabels.at(-1)).toBe(en.common.nav.menu);
   });
 
   it('renders its children in the main region', () => {
@@ -110,8 +147,11 @@ describe('AppShell', () => {
 describe('AppShell nav visibility (§3)', () => {
   const navLabel = (key: keyof typeof en.common.nav) => en.common.nav[key];
 
-  /** Rail + bottom nav both render the label; 0 hits = hidden everywhere. */
+  /** Rail + bottom nav both render a module label; 0 hits = hidden everywhere. */
   const countNav = (key: keyof typeof en.common.nav) => screen.queryAllByText(navLabel(key)).length;
+  /** Menu: rail text + title-bar kebab link (never a bottom-bar tab). */
+  const menuReachable = () =>
+    countNav('menu') >= 1 && kebabLink().getAttribute('href') === '/en/menu';
 
   function renderWith(permissions: MemberPermissions, overrides: Record<string, unknown> = {}) {
     mockUseMembership.mockReturnValue(
@@ -137,21 +177,27 @@ describe('AppShell nav visibility (§3)', () => {
     for (const key of hidden) {
       expect(countNav(key as never)).toBe(0);
     }
-    // Menu never disappears.
-    expect(countNav('menu')).toBeGreaterThanOrEqual(2);
+    // Menu never disappears (rail entry + kebab).
+    expect(menuReachable()).toBe(true);
+    if (view.length === 0) {
+      // No viewable module → no bottom bar at all (Menu is the kebab).
+      expect(document.querySelector('.MuiBottomNavigation-root')).toBeNull();
+    }
   });
 
   it('shows every section to the owner', () => {
     renderWith(emptyPermissions(), { isOwner: true });
-    for (const key of ['booking', 'expenses', 'inventory', 'menu'] as const) {
+    for (const key of ['booking', 'expenses', 'inventory'] as const) {
       expect(countNav(key)).toBeGreaterThanOrEqual(2);
     }
+    expect(menuReachable()).toBe(true);
   });
 
   it('fails open while membership is loading', () => {
     renderWith(emptyPermissions(), { loading: true });
-    for (const key of ['booking', 'expenses', 'inventory', 'menu'] as const) {
+    for (const key of ['booking', 'expenses', 'inventory'] as const) {
       expect(countNav(key)).toBeGreaterThanOrEqual(2);
     }
+    expect(menuReachable()).toBe(true);
   });
 });

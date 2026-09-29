@@ -7,6 +7,7 @@ import {
   directChildCount,
   fileSizeParts,
   fileTypeKind,
+  flattenFolderTree,
   folderDepth,
   folderPath,
   hasThumbnail,
@@ -127,6 +128,20 @@ describe('breadcrumbs', () => {
   it('renders the catalog-driven path string', () => {
     expect(pathLabel('All files', '›', folderPath(reach, 'y'))).toBe('All files › Contracts › 2026');
     expect(pathLabel('All files', '›', [])).toBe('All files');
+  });
+});
+
+describe('destination picker tree', () => {
+  it('flattens the reachable tree depth-first, A–Z per level, children right under their parent', () => {
+    const { folders: reach } = pruneIndex({ folders, files });
+    expect(flattenFolderTree(reach).map(({ folder: f, depth }) => `${depth}:${f.name}`)).toEqual([
+      '0:Contracts',
+      '1:2026',
+      '0:photos',
+    ]);
+    // Tombstoned parent + its orphan never show up as destinations.
+    expect(flattenFolderTree(reach).some(({ folder: f }) => f.id === 'oc' || f.id === 'gone')).toBe(false);
+    expect(flattenFolderTree(new Map())).toEqual([]);
   });
 });
 

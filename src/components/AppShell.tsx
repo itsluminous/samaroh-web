@@ -1,7 +1,7 @@
 'use client';
 
-import LogoutIcon from '@mui/icons-material/Logout';
 import MenuIcon from '@mui/icons-material/Menu';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AppBar from '@mui/material/AppBar';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -18,17 +18,18 @@ import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
-import type { FormEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { resolveNavLayout } from '@/components/navSections';
 import SyncIndicator from '@/components/SyncIndicator';
 import { Link, usePathname } from '@/i18n/navigation';
 import { useFitText } from '@/lib/hooks/useFitText';
-import { clearOutbox } from '@/lib/outbox/outbox';
 import { useMembership } from '@/lib/permissions/useMembership';
 
 const RAIL_WIDTH = 220;
 
-// Menu is always visible and always last (both navs).
+// Menu is always visible: last entry of the desktop rail, and the title-bar
+// kebab on mobile (owner feedback 2026-09-29 — it no longer takes a bottom-bar
+// slot; Files sits there directly).
 const MENU_SECTION = { key: 'menu', href: '/menu', icon: <MenuIcon />, labelKey: 'common.nav.menu' } as const;
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -37,20 +38,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const membership = useMembership();
 
   // Modules the member cannot view disappear from BOTH navs (§3); Menu is
-  // always visible. Degraded modes (loading, guest, unconfigured) fail open.
-  // Desktop rail lists every visible module; the mobile bar is capped (D15 —
-  // 4 modules + Menu) and the overflow surfaces under Menu → More.
+  // always reachable. Degraded modes (loading, guest, unconfigured) fail
+  // open. Desktop rail lists every visible module + Menu; the mobile bar is
+  // modules only (capped at 5) and any overflow surfaces under Menu → More.
   const layout = resolveNavLayout(membership);
   const railSections = [...layout.rail, MENU_SECTION];
-  const barSections = [...layout.bar, MENU_SECTION];
+  const barSections = layout.bar;
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  // An overflowed module's route highlights Menu in the bar (its row lives there).
   const barActiveIndex = barSections.findIndex((s) => isActive(s.href));
-  const activeIndex =
-    barActiveIndex === -1 && layout.overflow.some((s) => isActive(s.href))
-      ? barSections.length - 1
-      : barActiveIndex;
+  const menuActive = isActive(MENU_SECTION.href);
 
   // Top bar shows the ACTIVE BUSINESS NAME (Android parity); the app name is
   // the fallback for the no-business states (signed out, guest without a
@@ -59,6 +56,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // Long names shrink (down to 65% of the h6 size) instead of wrapping or
   // truncating hard; past the floor the ellipsis takes over.
   const titleRef = useFitText<HTMLHeadingElement>(title);
+  const menuLabel = t(MENU_SECTION.labelKey);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -85,29 +83,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {title}
           </Typography>
           <SyncIndicator />
-          {/* No language switcher here (Android parity): the full picker
-              lives at Menu → Settings → Language (menu-searchable) — the
-              freed toolbar width goes to the business-name title. */}
-          {/* Sign-out posts to the non-localized auth route. The outbox is
-              wiped first (ADR-040 parity — see clearOutbox) so a later
-              session on this browser can never replay this session's writes. */}
-          <Box
-            component="form"
-            action="/auth/sign-out"
-            method="post"
-            sx={{ display: 'flex' }}
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              const form = event.currentTarget;
-              event.preventDefault();
-              void clearOutbox().finally(() => form.submit());
-            }}
-          >
-            <Tooltip title={t('auth.action.sign_out')}>
-              <IconButton type="submit" aria-label={t('auth.action.sign_out')}>
-                <LogoutIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
+          {/* No language switcher and NO sign-out here (Android parity): the
+              language picker lives at Menu → Settings → Language, sign-out on
+              the Menu identity row (guest mode: its Sign in action) — both
+              menu-searchable. */}
+          {/* Mobile: the kebab to the right of the sync icon opens the
+              existing Menu route (same as Android's top-bar kebab → Menu
+              screen). Desktop keeps Menu as the last rail entry instead. */}
+          <Tooltip title={menuLabel}>
+            <IconButton
+              component={Link}
+              href={MENU_SECTION.href}
+              aria-label={menuLabel}
+              aria-current={menuActive ? 'page' : undefined}
+              color={menuActive ? 'primary' : 'default'}
+              edge="end"
+              sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+            >
+              <MoreVertIcon />
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
 
@@ -149,37 +144,41 @@ export default function AppShell({ children }: { children: ReactNode }) {
           // narrow phones instead of the row scrolling or wrapping locally.
           minWidth: 0,
           p: 3,
-          pb: { xs: 10, md: 3 }, // keep content clear of the mobile bottom nav
+          // Keep content clear of the mobile bottom nav (when it renders).
+          pb: { xs: barSections.length > 0 ? 10 : 3, md: 3 },
         }}
       >
         <Toolbar />
         {children}
       </Box>
 
-      {/* Mobile: fixed bottom navigation */}
-      <Paper
-        elevation={3}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: (theme) => theme.zIndex.appBar,
-        }}
-      >
-        <BottomNavigation showLabels value={activeIndex === -1 ? false : activeIndex}>
-          {barSections.map((section) => (
-            <BottomNavigationAction
-              key={section.key}
-              component={Link}
-              href={section.href}
-              label={t(section.labelKey)}
-              icon={section.icon}
-            />
-          ))}
-        </BottomNavigation>
-      </Paper>
+      {/* Mobile: fixed bottom navigation — modules only. A member who can
+          view no module gets no bar at all (Menu is the kebab). */}
+      {barSections.length > 0 ? (
+        <Paper
+          elevation={3}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: (theme) => theme.zIndex.appBar,
+          }}
+        >
+          <BottomNavigation showLabels value={barActiveIndex === -1 ? false : barActiveIndex}>
+            {barSections.map((section) => (
+              <BottomNavigationAction
+                key={section.key}
+                component={Link}
+                href={section.href}
+                label={t(section.labelKey)}
+                icon={section.icon}
+              />
+            ))}
+          </BottomNavigation>
+        </Paper>
+      ) : null}
     </Box>
   );
 }

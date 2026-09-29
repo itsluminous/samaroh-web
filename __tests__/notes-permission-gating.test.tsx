@@ -201,7 +201,9 @@ describe('notes nav entry (rail + bottom nav)', () => {
     renderShell();
     expect(screen.queryAllByText(en.notes.nav.tab)).toHaveLength(0);
     expect(screen.getAllByText(en.common.nav.booking).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(en.common.nav.menu).length).toBeGreaterThanOrEqual(2);
+    // Menu: rail entry (text) + title-bar kebab (aria-label) — never a bottom-bar tab.
+    expect(screen.getAllByText(en.common.nav.menu).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByLabelText(en.common.nav.menu).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows the Notes tab to the owner, localized in Hindi too', () => {

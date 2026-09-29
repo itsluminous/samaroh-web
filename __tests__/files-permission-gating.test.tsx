@@ -1,7 +1,9 @@
 /**
  * Files module (shared migration 009) — permission model, permission-matrix
- * row + labels, nav overflow rule (D15: 4 modules + Menu, overflow → Menu →
- * More), SectionGuard on files.view, and the menu-search index entries for
+ * row + labels, nav composition (owner feedback 2026-09-29: Files sits
+ * DIRECTLY in the mobile bottom bar in place of Menu, hidden without
+ * files.view; the bar holds modules only, cap 5, overflow → Menu → More),
+ * SectionGuard on files.view, and the menu-search index entries for
  * overflowed modules.
  */
 import { render, screen, within } from '@testing-library/react';
@@ -56,6 +58,15 @@ function membership(overrides: Record<string, unknown> = {}) {
     refresh: jest.fn(),
     ...overrides,
   };
+}
+
+/** The title-bar kebab (⋮): the only link carrying the MoreVert icon (the rail's Menu row uses the hamburger icon). */
+function kebabLink(): HTMLAnchorElement {
+  const link = document.querySelector('[data-testid="MoreVertIcon"]')?.closest('a');
+  if (!link) {
+    throw new Error('kebab link not rendered');
+  }
+  return link;
 }
 
 function wrap(node: React.ReactElement, messages: typeof en = en, locale = 'en') {
@@ -135,15 +146,22 @@ describe('files permission model (009)', () => {
   });
 });
 
-describe('nav overflow rule (D15: 4 modules + Menu)', () => {
-  it('a full-permission owner overflows Files into More', () => {
+describe('nav composition (modules-only bottom bar, cap 5, overflow → Menu → More)', () => {
+  it('a full-permission owner gets all five modules in the bar and nothing overflows', () => {
     const m = { supabase: {}, loading: false, error: null, isOwner: true, permissions: emptyPermissions() };
     const visible = visibleNavModules(m);
     expect(visible).toEqual(['booking', 'expenses', 'inventory', 'notes', 'files']);
     const split = splitNavModules(visible.map((key) => ({ key })));
-    expect(split.bar.map((s) => s.key)).toEqual(['booking', 'expenses', 'inventory', 'notes']);
-    expect(split.overflow.map((s) => s.key)).toEqual(['files']);
-    expect(BOTTOM_BAR_MODULE_CAP).toBe(4);
+    expect(split.bar.map((s) => s.key)).toEqual(['booking', 'expenses', 'inventory', 'notes', 'files']);
+    expect(split.overflow).toEqual([]);
+    expect(BOTTOM_BAR_MODULE_CAP).toBe(5);
+  });
+
+  it('the split still overflows past the cap (a hypothetical sixth module lands under Menu → More)', () => {
+    const six = ['booking', 'expenses', 'inventory', 'notes', 'files', 'files'].map((key) => ({ key: key as 'files' }));
+    const split = splitNavModules(six);
+    expect(split.bar).toHaveLength(5);
+    expect(split.overflow).toHaveLength(1);
   });
 
   it('a member without inventory.view gets Files in the bar and no overflow', () => {
@@ -160,41 +178,51 @@ describe('nav overflow rule (D15: 4 modules + Menu)', () => {
     expect(NAV_SECTIONS.at(-1)?.labelKey).toBe('files.nav.tab');
   });
 
-  it('AppShell: owner sees Files in the desktop rail but NOT in the bottom bar; Menu is last in both', () => {
+  it('AppShell: owner sees Files LAST in the bottom bar (same position as the rail) and Menu only as rail entry + kebab', () => {
     mockUseMembership.mockReturnValue(membership({ isOwner: true }));
     wrap(<AppShell>{null}</AppShell>);
     const navs = screen.getAllByRole('navigation');
-    // Rail (List component="nav") lists every module incl. Files.
+    // Rail (List component="nav") lists every module incl. Files, then Menu.
     const rail = navs[0]!;
+    const railLabels = Array.from(rail.querySelectorAll('.MuiListItemText-primary')).map((el) => el.textContent);
+    expect(railLabels).toEqual([en.common.nav.booking, en.common.nav.expenses, en.common.nav.inventory, en.notes.nav.tab, en.files.nav.tab, en.common.nav.menu]);
     expect(within(rail).getByText(en.files.nav.tab)).toBeInTheDocument();
-    // Bottom bar: 4 modules + Menu, no Files.
+    // Bottom bar: the five modules in rail order, Files in Menu's old slot, no Menu tab.
     const barLinks = document.querySelectorAll('.MuiBottomNavigationAction-root');
     const barLabels = Array.from(barLinks).map((el) => el.textContent);
-    expect(barLabels).toEqual([en.common.nav.booking, en.common.nav.expenses, en.common.nav.inventory, en.notes.nav.tab, en.common.nav.menu]);
+    expect(barLabels).toEqual([en.common.nav.booking, en.common.nav.expenses, en.common.nav.inventory, en.notes.nav.tab, en.files.nav.tab]);
+    // Menu: the title-bar kebab link (localized accessible name).
+    expect(kebabLink()).toHaveAttribute('href', '/en/menu');
+    expect(kebabLink()).toHaveAccessibleName(en.common.nav.menu);
   });
 
-  it('AppShell: a member with only files.view sees Files in the bottom bar', () => {
+  it('AppShell: a member with only files.view gets a one-tab bar (Files), still no Menu tab', () => {
     const p = emptyPermissions();
     p.files.view = true;
     mockUseMembership.mockReturnValue(membership({ permissions: p }));
     wrap(<AppShell>{null}</AppShell>);
     const barLabels = Array.from(document.querySelectorAll('.MuiBottomNavigationAction-root')).map((el) => el.textContent);
-    expect(barLabels).toEqual([en.files.nav.tab, en.common.nav.menu]);
+    expect(barLabels).toEqual([en.files.nav.tab]);
+    expect(kebabLink()).toBeInTheDocument();
   });
 
-  it('AppShell: no Files entry anywhere without files.view', () => {
+  it('AppShell: without files.view the bar simply has one fewer tab (hidden-tab pattern, nothing greyed)', () => {
     const p = emptyPermissions();
-    p.booking.view = true;
+    p.booking.view = p.expenses.view = p.inventory.view = p.notes.view = true;
     mockUseMembership.mockReturnValue(membership({ permissions: p }));
     wrap(<AppShell>{null}</AppShell>);
     expect(screen.queryAllByText(en.files.nav.tab)).toHaveLength(0);
+    const barLabels = Array.from(document.querySelectorAll('.MuiBottomNavigationAction-root')).map((el) => el.textContent);
+    expect(barLabels).toEqual([en.common.nav.booking, en.common.nav.expenses, en.common.nav.inventory, en.notes.nav.tab]);
+    expect(document.querySelectorAll('.Mui-disabled')).toHaveLength(0);
   });
 
-  it('MenuHome shows the More section with the overflowed module only when something overflowed', () => {
+  it('MenuHome shows no More section when nothing overflowed (all five modules fit), in en and hi', () => {
     mockUseMembership.mockReturnValue(membership({ isOwner: true }));
     wrap(<MenuHome title={en.menu.home.title} />);
-    expect(screen.getByText(en.files.nav.more_section)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: new RegExp(en.files.nav.tab) })).toHaveAttribute('href', '/en/files');
+    expect(screen.queryByText(en.files.nav.more_section)).not.toBeInTheDocument();
+    // The Menu page itself (reached from the kebab) keeps its search field.
+    expect(screen.getByLabelText(en.menu.search.placeholder)).toBeInTheDocument();
 
     const p = emptyPermissions();
     p.files.view = true;

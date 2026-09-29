@@ -1,9 +1,11 @@
 /**
- * Files tab smoke (hermetic): the route exists behind the nav-overflow rule
- * (D15 — a fail-open/full-access shell shows Files in the desktop rail and
- * under Menu → More), and in guest mode the screen works end to end on the
- * local store: empty state → create a folder → open it → breadcrumb back →
- * global search — with the guest upload hint in place of the Upload action.
+ * Files tab smoke (hermetic): the route exists behind the nav composition
+ * (a fail-open/full-access shell shows Files in the desktop rail — Menu last
+ * — and, at a mobile viewport, DIRECTLY in the bottom bar in Menu's old
+ * slot while Menu is the title-bar kebab), and in guest mode the screen
+ * works end to end on the local store: empty state → create a folder → open
+ * it → breadcrumb back → global search — with the guest upload hint in
+ * place of the Upload action.
  */
 import { expect, test } from '@playwright/test';
 import { authConfigured, msg, type Locale } from './helpers';
@@ -11,15 +13,17 @@ import { authConfigured, msg, type Locale } from './helpers';
 test.skip(authConfigured, 'hermetic-only: route protection is active in authenticated mode');
 
 for (const locale of ['en', 'hi'] as Locale[]) {
-  test(`files appears in the rail and under Menu → More (${locale})`, async ({ page }) => {
+  test(`files appears in the rail right before Menu; no More section in the menu (${locale})`, async ({ page }) => {
     await page.goto(`/${locale}/menu`);
-    // Desktop rail lists every module incl. Files.
+    // Desktop rail lists every module incl. Files, then Menu last.
     const rail = page.getByRole('navigation').first();
-    await expect(rail.getByText(msg(locale, 'files.nav.tab')).first()).toBeVisible();
-    // Menu → More section carries the overflowed Files row.
+    const railLabels = await rail.locator('.MuiListItemText-primary').allTextContents();
+    expect(railLabels.at(-2)).toBe(msg(locale, 'files.nav.tab'));
+    expect(railLabels.at(-1)).toBe(msg(locale, 'common.nav.menu'));
+    // Nothing overflowed → no More section on the Menu page.
     const main = page.getByRole('main');
-    await expect(main.getByText(msg(locale, 'files.nav.more_section'), { exact: true }).first()).toBeVisible();
-    await main.getByRole('link', { name: msg(locale, 'files.nav.tab'), exact: true }).click();
+    await expect(main.getByText(msg(locale, 'files.nav.more_section'), { exact: true })).toHaveCount(0);
+    await rail.getByText(msg(locale, 'files.nav.tab'), { exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/${locale}/files$`));
   });
 }

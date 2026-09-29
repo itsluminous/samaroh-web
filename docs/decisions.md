@@ -871,3 +871,55 @@ repo interprets it where the spec leaves web-specific latitude.)
   shows `files.upload.not_configured`. The Menu → Settings Google row is
   untouched (still the "not configured" stub) — linking is contextual to the
   first upload, matching the Android "Connect Google Drive" prompt.
+
+- **Web chrome feedback batch: no title-bar sign-out, Files in the bottom
+  bar, Menu behind a kebab, destination-folder picker** (2026-09-29, owner
+  feedback on the Files tab). Four interpretations:
+  1. *Sign-out leaves the title bar.* The persistent logout icon (and its
+     hidden POST form) is gone from `AppShell`; the Menu identity row is the
+     ONLY sign-out affordance (confirm dialog + outbox wipe unchanged, ADR-040
+     parity) and it renders on every breakpoint because the Menu page is one
+     page. Guest mode / no session had no counterpart (the header icon was
+     the guest's only way out), so the identity row's not-signed-in state now
+     carries a **Sign in** action (`menu.identity.sign_in`, web-menu
+     fragment) that opens the sign-in page — signing in ends guest mode
+     (`SignInForm` → `leaveGuestMode`), and the same route clears the guest
+     cookie server-side on a real sign-out later. Menu search gains the
+     matching `sign_in` entry (visible exactly when `sign_out` is not).
+  2. *Bottom bar = modules only; Files takes Menu's slot.* `BOTTOM_BAR_MODULE_CAP`
+     4 → 5 (Material 3's 5-item limit now holds modules alone); the bar shows
+     the visible modules in nav order — Booking, Expenses, Inventory, Notes,
+     Files — with Files hidden (not greyed) without `files.view`, so the bar
+     simply has one fewer tab (a member with no viewable module gets no bar at
+     all). The D15 overflow split + Menu → More section + menu-search rows
+     stay wired but are inert with five modules (a sixth would overflow —
+     documented in `visibility.ts`). Desktop: the rail already listed Files
+     in the same position; Menu stays its LAST rail entry because the rail
+     does not list the Menu page's children (Settings / Reports / Members /
+     About) — it is the desktop's discoverable route to them and there is no
+     crowding to relieve. Nothing in the shared contract changed; the
+     Android track applies the same feedback in parallel.
+  3. *Menu = title-bar kebab on mobile.* A `MoreVert` icon button to the
+     RIGHT of the sync indicator (last toolbar control; `aria-label` =
+     `common.nav.menu`, `aria-current="page"` + primary tint on `/menu`)
+     links to the EXISTING `/menu` route — matching Android's kebab → Menu
+     screen — so the search field, identity row, More section and every
+     permission-gated row survive untouched. Shown on `xs`–`sm` only; on `md+`
+     the rail's Menu entry is the affordance (no duplicate control). Guest
+     mode: same kebab, guest-appropriate items (Sign in, no Members).
+  4. *Destination-folder picker with New folder (D18 parity).* Web has no
+     share sheet and the upload dialog is the native file picker, so the
+     picker applies to the Files screen upload flow when uploading from a
+     NON-folder context — the global search results view (picker or drop):
+     `FolderPickerDialog` (title reuses `files.share_target.pick_folder_title`,
+     confirm `files.picker.confirm`, hint `files.picker.selected_hint`; new
+     `web-files` fragment) lists the whole reachable tree indented (root
+     row + folders A–Z per level, `flattenFolderTree`) with the current route
+     folder preselected (top level at `/files`). **New folder** is
+     permission-HIDDEN (`files.manage_folders`, plus the client depth cap),
+     reuses `FolderNameDialog` (same duplicate validation against the LIVE
+     siblings of the selected folder), creates the folder through the outbox
+     path and SELECTS it, so the very next confirm uploads there. Confirm then
+     runs the normal chain (Connect-Google prompt when unlinked → upload).
+     Uploads from a folder view stay direct (no picker); there is no move
+     action on web (nothing else to apply the picker to).

@@ -7,14 +7,17 @@
  *
  * A search bar on top filters a static localized index of EVERY destination
  * nested under the Menu tab (settings rows, About items, the 10 reports,
- * sign-out) — see src/lib/menuSearch.ts. Results reuse the exact permission
- * gates of the rows they point at, so nothing unreachable ever surfaces.
- * An empty query shows the normal menu.
+ * sign-out / guest sign-in) — see src/lib/menuSearch.ts. Results reuse the
+ * exact permission gates of the rows they point at, so nothing unreachable
+ * ever surfaces. An empty query shows the normal menu. On mobile this page
+ * is reached from the title-bar kebab (Menu left the bottom bar), so the
+ * search field is the one that survives that move.
  *
  * A "More" section sits ABOVE the identity row whenever the mobile bottom
- * bar overflowed (D15: 4 modules + Menu) — icon rows for the modules that
- * did not fit, in nav order. Desktop has the full rail, but the section
- * renders there too so the menu is the same on every width.
+ * bar overflowed (modules past BOTTOM_BAR_MODULE_CAP — none with today's
+ * five modules) — icon rows for the modules that did not fit, in nav order.
+ * Desktop has the full rail, but the section renders there too so the menu
+ * is the same on every width.
  */
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';

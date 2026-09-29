@@ -7,7 +7,10 @@
  * Google Drive (anyone-with-link). Folder breadcrumbs, list/grid toggle
  * (persisted per device), GLOBAL search (D11), New folder / Upload (picker +
  * drag-and-drop, any MIME, ≤20 per batch, ≤25 MiB each), per-item kebab
- * actions, owner-only Manage access. Every action is permission-HIDDEN
+ * actions, owner-only Manage access. Uploads land in the current folder;
+ * from a NON-folder context (global search results) a destination-folder
+ * picker with a permission-gated "New folder" option opens first
+ * (FolderPickerDialog). Every action is permission-HIDDEN
  * (never greyed, ADR-038): `files.upload`, `files.manage_folders` (inherits
  * upload when absent), `files.delete`; only the owner sees Manage access.
  *
@@ -88,6 +91,7 @@ import FileLightbox from './FileLightbox';
 import FileThumb from './FileThumb';
 import FolderAccessDialog from './FolderAccessDialog';
 import FolderNameDialog from './FolderNameDialog';
+import FolderPickerDialog from './FolderPickerDialog';
 
 const VIEW_MODE_KEY = 'samaroh_files_view';
 
@@ -97,6 +101,13 @@ interface UploadProgress {
   done: number;
   total: number;
   fraction: number;
+}
+
+/** Accepted files waiting on a step (destination pick / Google link) before the upload runs. */
+interface StagedUpload {
+  files: File[];
+  /** Destination folder (null = top level). */
+  folderId: string | null;
 }
 
 function readViewMode(): FilesViewMode {
@@ -157,7 +168,8 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
   const [deleteFileTarget, setDeleteFileTarget] = useState<FileRecord | null>(null);
   const [accessTarget, setAccessTarget] = useState<FolderRecord | null>(null);
   const [lightbox, setLightbox] = useState<FileRecord | null>(null);
-  const [pendingUpload, setPendingUpload] = useState<File[] | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<StagedUpload | null>(null);
+  const [pickerUpload, setPickerUpload] = useState<File[] | null>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -240,13 +252,18 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
 
   // ---- folder actions ----
 
-  const handleCreateFolder = async (name: string) => {
+  const createFolderIn = async (parentId: string | null, name: string): Promise<FolderRecord> => {
     if (!supabase || !businessId || !userId) {
-      return;
+      throw new Error('no session');
     }
-    const created = await createFolder(supabase, businessId, userId, folderMissing ? null : folderId, name);
+    const created = await createFolder(supabase, businessId, userId, parentId, name);
     setIndex((prev) => ({ ...prev, folders: [...prev.folders, created] }));
     setSnack(t('folder.created'));
+    return created;
+  };
+
+  const handleCreateFolder = async (name: string) => {
+    await createFolderIn(folderMissing ? null : folderId, name);
   };
 
   const handleRenameFolder = async (name: string) => {
@@ -319,7 +336,7 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
 
   // ---- upload ----
 
-  const runUpload = async (files: File[]) => {
+  const runUpload = async ({ files, folderId: targetId }: StagedUpload) => {
     if (!supabase || !businessId || !userId || !business) {
       return;
     }
@@ -330,7 +347,7 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
         businessId,
         userId,
         uploader: createDriveFilesUploader(supabase, userId),
-        target: { businessName: business.name, folderChain: chain, folderId: folderMissing ? null : folderId },
+        target: { businessName: business.name, folderChain: folderPath(pruned.folders, targetId), folderId: targetId },
         onProgress: (done, total, fraction) => setProgress({ done, total, fraction }),
       });
       if (result.uploaded.length > 0) {
@@ -373,19 +390,29 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
     if (plan.accepted.length === 0) {
       return;
     }
+    if (trimmedQuery !== '') {
+      // Non-folder context (global search results): ask where to save —
+      // current route folder preselected, New folder available (gated).
+      setPickerUpload(plan.accepted);
+      return;
+    }
+    uploadInto({ files: plan.accepted, folderId: folderMissing ? null : folderId });
+  };
+
+  const uploadInto = (staged: StagedUpload) => {
     if (!hasDriveToken()) {
       // Connect-Google prompt (D8): the popup itself is opened from the
       // dialog's Connect button (user gesture — popup blockers).
-      setPendingUpload(plan.accepted);
+      setPendingUpload(staged);
       return;
     }
-    void runUpload(plan.accepted);
+    void runUpload(staged);
   };
 
   const connectAndUpload = async () => {
-    const files = pendingUpload;
+    const staged = pendingUpload;
     setPendingUpload(null);
-    if (!files) {
+    if (!staged) {
       return;
     }
     try {
@@ -398,7 +425,7 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
       setSnack(t('upload.link_failed'));
       return;
     }
-    await runUpload(files);
+    await runUpload(staged);
   };
 
   const onPick = (event: ChangeEvent<HTMLInputElement>) => {
@@ -879,6 +906,22 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <FolderPickerDialog
+        open={pickerUpload !== null}
+        folders={pruned.folders}
+        initialFolderId={folderMissing ? null : folderId}
+        canCreateFolder={canManageFolders}
+        onCreateFolder={createFolderIn}
+        onClose={() => setPickerUpload(null)}
+        onConfirm={(target) => {
+          const files = pickerUpload;
+          setPickerUpload(null);
+          if (files) {
+            uploadInto({ files, folderId: target });
+          }
+        }}
+      />
 
       {isOwner && userId ? (
         <FolderAccessDialog

@@ -789,3 +789,85 @@ repo interprets it where the spec leaves web-specific latitude.)
   drawer+1 paints over the drawer paper), hiding the top entries — the
   temporary drawer now opens with a `<Toolbar />` spacer, the same
   convention as the shell's permanent rail.
+
+- **FILES section (shared migration 009) + nav overflow rule** (2026-09-29).
+  Implements the cross-platform contract in the shared repo's
+  `docs/files-tab-design.md` (D1–D22) — the Android track builds from the
+  same document in parallel; nothing in the shared contract was changed here
+  (one additive key, `files.action.more`, the kebab a11y label). Web
+  interpretations:
+  1. *Route.* `/files/[[...folder]]` (optional catch-all): `/files` = top
+     level, `/files/{folderId}` = inside a folder. One mounted screen for
+     every folder (only the param changes), so the index is fetched once and
+     folder navigation is instant; breadcrumbs / Up / folder rows push the
+     route. A folder id the index does not contain (tombstoned, or RLS
+     withheld a restricted subtree) shows `files.access.no_access` over the
+     top-level listing.
+  2. *Index authoritative, client prunes.* `fetchFilesIndex` loads the LIVE
+     `folders` + `files` rows of the business; `pruneIndex` hides every
+     subtree whose ancestor chain is broken (no server cascade — D2/D10) and
+     the files under it. Clients never re-derive restricted-folder access
+     (RLS already filtered); only the owner's access editor reads
+     `folder_access`.
+  3. *Nav overflow (D15).* `NAV_MODULES` = booking, expenses, inventory,
+     notes, files; the mobile bottom bar shows the first
+     `BOTTOM_BAR_MODULE_CAP` (4) visible modules + Menu, the rest overflow
+     into a "More" section at the TOP of the Menu tab
+     (`files.nav.more_section`, icon rows) and into menu search (entries
+     gated exactly like the rows). An overflowed module's route highlights
+     Menu in the bar. The desktop rail is uncapped. Section definitions moved
+     to `src/components/navSections.tsx` (shared by AppShell, MenuHome,
+     menu search).
+  4. *Writes.* All three tables go through `insertWithOutbox` /
+     `updateWithOutbox` (`OutboxModule` gains `files`); `folder_access` uses
+     the composite `match` locator with `entityId = "folderId|memberId"` and
+     is a soft link (revoke = tombstone, re-grant clears it on the same PK
+     row — never a DELETE op). Folder delete = client-side recursive
+     tombstone (files, then folders children-first, then the folder) +
+     best-effort Drive deletes of the copies this tab's linked account owns.
+     An unrestricted folder keeps its (inert) allow-list rows so flipping it
+     back restores the previous members.
+  5. *Search (D11).* Global, client-side over the fetched index
+     (case-insensitive substring, folders A–Z then files newest first) with
+     `files.search.result_path` = `All files › Folder › Sub` built from
+     catalog strings; empty query = current folder.
+  6. *Guest mode.* Dexie v4 adds `folders` / `files` / `folder_access`
+     stores, so folders, listing, search and the index work on-device; the
+     Upload action is replaced by `files.upload.guest_hint` (no Google
+     account to upload with) and drag-and-drop is disabled.
+  7. *Permissions.* `files.manage_folders` normalises as
+     `coalesce(manage_folders, upload, false)` (generalised inheritance table
+     shared with the notes split keys); presets Viewer = view, Staff = view +
+     upload (+ manage_folders materialised), Manager = all four. Every
+     action is permission-HIDDEN (ADR-038): Upload / New folder / Rename /
+     Delete / Manage access (owner only); a folder without any applicable
+     action has no kebab at all. Pre-009 permission blobs no longer match a
+     preset chip until the owner re-saves (same launch posture notes had).
+  8. *Backup parity.* Not applicable on web — Drive backup/restore is an
+     Android-only feature (see "Web Settings scope"); the metadata rows sync
+     through Supabase like every other table.
+
+- **Browser-side Google Drive linking (GIS `drive.file`) for Files uploads**
+  (2026-09-29, design D8/D9). The web app gains its first Drive write path:
+  `src/lib/google/drive.ts` loads the Google Identity Services script on
+  demand and requests a `drive.file` access token with the SAME
+  Web-application OAuth client id Android uses,
+  `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (the owner registers the site origins as
+  Authorized JavaScript origins). Tokens live in memory + sessionStorage
+  (tab-scoped, refreshed a minute early; a 401 drops the cache); the popup is
+  only ever opened from the Connect button of the `files.upload.link_google_*`
+  prompt (user gesture → no popup blockers), and `interactive: false` calls
+  never open one. Uploads: multipart Drive v3 (XHR for progress, 3 in
+  flight), original bytes (no recompression), into
+  `Samaroh/{Business}/files/{Folder}/{Sub}` (find-or-create per segment,
+  memoised per session, `/` → `-`), then an anyone-with-link reader
+  permission (best-effort, ADR-059 posture), THEN the `files` row — a server
+  row is always openable (D19). The user's `google_accounts` row is upserted
+  with the `Samaroh/` root folder id so Android and web share one root.
+  Uploads are online-only (bytes are never queued); the size (25 MiB) and
+  batch (20) gates run before any network call. Every network call has a hard
+  timeout (anti-stall: script 15 s, consent 120 s, metadata 30 s, upload
+  180 s). The app builds and runs without the env var: picking a file then
+  shows `files.upload.not_configured`. The Menu → Settings Google row is
+  untouched (still the "not configured" stub) — linking is contextual to the
+  first upload, matching the Android "Connect Google Drive" prompt.

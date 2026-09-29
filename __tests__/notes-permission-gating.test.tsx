@@ -145,26 +145,30 @@ describe('notes permission model', () => {
   });
 
   it('a pre-007 preset blob still round-trips to its preset (inherited keys materialize)', () => {
-    // What the matrix editor saved BEFORE the split existed.
+    // What the matrix editor saved BEFORE the checklist split existed (the
+    // files module — 009 — is included: a pre-009 blob has files absent →
+    // false, which no preset matches, same launch posture notes had in 005).
     const legacyStaff = normalizePermissions({
       booking: { view: true, create: true },
       expenses: { view: true, create: true },
       inventory: { view: true, create: true },
       notes: { view: true, create: true },
+      files: { view: true, upload: true },
     });
     expect(matchingPreset(legacyStaff)).toBe('staff');
   });
 
-  it('PERMISSION_MATRIX gains the notes row between inventory and reports', () => {
+  it('PERMISSION_MATRIX gains the notes row between inventory and files', () => {
     const modules = PERMISSION_MATRIX.map((row) => row.module);
     expect(modules.indexOf('notes')).toBe(modules.indexOf('inventory') + 1);
-    expect(modules.indexOf('reports')).toBe(modules.indexOf('notes') + 1);
+    expect(modules.indexOf('files')).toBe(modules.indexOf('notes') + 1);
+    expect(modules.indexOf('reports')).toBe(modules.indexOf('files') + 1);
     const row = PERMISSION_MATRIX.find((r) => r.module === 'notes');
     expect(row?.actions).toEqual(['view', 'view_checklists', 'create', 'edit', 'toggle_checklist', 'delete']);
   });
 
   it('notes participates in nav visibility and landing order (after inventory)', () => {
-    expect(NAV_MODULES).toEqual(['booking', 'expenses', 'inventory', 'notes']);
+    expect(NAV_MODULES).toEqual(['booking', 'expenses', 'inventory', 'notes', 'files']);
     const p = emptyPermissions();
     p.notes.view = true;
     expect(canViewSection({ supabase: {}, loading: false, error: null, isOwner: false, permissions: p }, 'notes')).toBe(true);

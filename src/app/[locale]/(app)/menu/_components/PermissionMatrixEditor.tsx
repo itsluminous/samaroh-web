@@ -26,15 +26,21 @@ export default function PermissionMatrixEditor({
   onChange: (next: MemberPermissions) => void;
 }) {
   const t = useTranslations('auth.permissions');
-  // The notes module ships its labels in the notes fragment (notes.permission.*)
-  // — its action_delete reads "Delete forever" (Trash purge), not plain "Delete".
+  // The notes and files modules ship their labels in their own fragments
+  // (notes.permission.* / files.permission.*) — e.g. notes' action_delete
+  // reads "Delete forever" (Trash purge), files' action_upload "Upload files".
   const tNotes = useTranslations('notes.permission');
+  const tFiles = useTranslations('files.permission');
   const activePreset = matchingPreset(value);
 
   const groupLabel = (module: PermissionModule) =>
-    module === 'notes' ? tNotes('group') : t(`group_${module}`);
+    module === 'notes' ? tNotes('group') : module === 'files' ? tFiles('group') : t(`group_${module}`);
   const actionLabel = (module: PermissionModule, action: string) =>
-    module === 'notes' ? tNotes(`action_${action}`) : t(`action_${action}`);
+    module === 'notes'
+      ? tNotes(`action_${action}`)
+      : module === 'files'
+        ? tFiles(`action_${action}`)
+        : t(`action_${action}`);
 
   const toggle = (module: PermissionModule, action: string, checked: boolean) => {
     const next = structuredClone(value) as MemberPermissions;

@@ -50,3 +50,13 @@ export function driveThumbnailFallbackUrl(
 export function driveViewUrl(driveImageId: string): string {
   return `https://drive.google.com/file/d/${encodeURIComponent(driveImageId)}/view`;
 }
+
+/**
+ * Direct download of an anyone-with-link file (Files module D3). Drive may
+ * answer with an HTML virus-scan interstitial for large files — the browser
+ * shows it as a page in the new tab; the ADR-059 interstitial guard applies
+ * to programmatic fetches only.
+ */
+export function driveDownloadUrl(driveFileId: string): string {
+  return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`;
+}

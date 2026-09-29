@@ -12,7 +12,17 @@
  */
 import { findSimilarItems } from '@/lib/fuzzy';
 import type { MemberPermissions } from '@/lib/permissions/permissions';
+import { NAV_MODULES, type NavModule } from '@/lib/permissions/visibility';
 import { isMoneyReport, REPORT_KEYS } from '@/lib/reports/types';
+
+/** Tab label key per module (the same keys the shell's nav uses). */
+const MODULE_LABEL_KEYS: Readonly<Record<NavModule, string>> = {
+  booking: 'common.nav.booking',
+  expenses: 'common.nav.expenses',
+  inventory: 'common.nav.inventory',
+  notes: 'notes.nav.tab',
+  files: 'files.nav.tab',
+};
 
 /** Membership facts the visibility gates depend on. */
 export interface MenuSearchGates {
@@ -20,6 +30,12 @@ export interface MenuSearchGates {
   permissions: MemberPermissions;
   /** True only with a real (non-guest) session — gates the sign-out entry. */
   signedIn: boolean;
+  /**
+   * Modules that did not fit the mobile bottom bar (D15 nav overflow) — they
+   * are reachable from the Menu tab's "More" section, so search indexes them
+   * under that section. Absent/empty = nothing overflowed.
+   */
+  overflowModules?: readonly NavModule[];
 }
 
 /** A resolved (localized) search result. */
@@ -57,6 +73,14 @@ const canEditBusiness = (g: MenuSearchGates) => g.isOwner || g.permissions.setti
 const canViewReports = (g: MenuSearchGates) => g.isOwner || g.permissions.reports.view;
 
 const ENTRY_DEFS: readonly EntryDef[] = [
+  // Overflowed nav modules (MenuHome "More" rows) — same gate as the rows.
+  ...NAV_MODULES.map((module): EntryDef => ({
+    id: `module_${module}`,
+    labelKey: MODULE_LABEL_KEYS[module],
+    sectionKey: 'files.nav.more_section',
+    href: `/${module}`,
+    visible: (g) => g.overflowModules?.includes(module) ?? false,
+  })),
   // Menu home sections (MenuHome rows).
   { id: 'settings', labelKey: 'menu.section.settings', sectionKey: 'menu.home.title', href: '/menu/settings', keywordKeys: ['menu.section.settings_subtitle'] },
   { id: 'reports', labelKey: 'menu.section.reports', sectionKey: 'menu.home.title', href: '/menu/reports', keywordKeys: ['menu.section.reports_subtitle'] },

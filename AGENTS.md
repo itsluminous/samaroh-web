@@ -66,7 +66,9 @@ Full local gate (same as CI):
 ## Supabase env setup
 Copy `.env.local.example` → `.env.local` and fill `NEXT_PUBLIC_SUPABASE_URL` /
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the Supabase project (schema lives in
-`shared/supabase/migrations`). **The app must always build and run without these** —
+`shared/supabase/migrations`). `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (Files uploads to
+Drive) is optional too — `src/lib/google/drive.ts` degrades to the not-configured
+message without it. **The app must always build and run without these** —
 client creation is guarded (`src/lib/supabase/env.ts` returns null → auth features
 degrade gracefully, middleware skips protection). Never remove that guard.
 
@@ -81,17 +83,21 @@ degrade gracefully, middleware skips protection). Never remove that guard.
   `invoice/` (pdf-lib renderer), `outbox/` (Dexie offline outbox: `mutate.ts`,
   `outbox.ts` with `isReplaying()` + sync-state events, `useOutbox.ts`), `guest/`
   (local client + seed), `permissions/`, `format/`, `fuzzy.ts`, `images/` (Drive
-  thumbnail/download URL helpers), `hooks/`.
+  thumbnail/download URL helpers), `google/` (browser-side Drive client: GIS
+  `drive.file` token + REST upload/permission/delete, `google_accounts` root cache),
+  `hooks/`.
 - `src/theme/theme.ts` — Material-You-like MUI theme from `shared/brand/palette.md`
   (light/dark/system via CSS variables).
 - `src/components/` — `AppShell` (left rail / bottom nav + toolbar with
-  `SyncIndicator`), `AppTheme`, `ChipRow` (scrollable single-line filter pills),
+  `SyncIndicator`; bottom bar capped at 4 modules + Menu, overflow → Menu → More),
+  `navSections` (module nav entries + overflow split), `AppTheme`, `ChipRow` (scrollable single-line filter pills),
   `ColorSwatchPicker`, `GuestBanner`, `GlassFab`,
   `MaskedAmount` (view_amounts masking), `SectionGuard` (route permission
   guard), `SignInForm`, `ServiceWorkerRegistrar`.
-- `src/app/[locale]/(app)/{booking,expenses,inventory,menu}/` — the 4 sections
-  (inventory includes the per-item detail page with permission-gated edit/delete via
-  the shared `MasterItemDialog`).
+- `src/app/[locale]/(app)/{booking,expenses,inventory,notes,files,menu}/` — the
+  sections (inventory includes the per-item detail page with permission-gated
+  edit/delete via the shared `MasterItemDialog`; `files/[[...folder]]` is the
+  Drive-indexed Files tab — shared design `shared/docs/files-tab-design.md`).
 - `src/app/auth/sign-out/` — non-localized sign-out POST route.
 
 ## Ownership map (parallel tracks)

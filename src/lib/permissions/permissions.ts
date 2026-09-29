@@ -8,7 +8,7 @@
  * this object entirely (implicit full access, enforced by RLS).
  */
 
-export type PermissionModule = 'booking' | 'expenses' | 'inventory' | 'notes' | 'reports' | 'settings';
+export type PermissionModule = 'booking' | 'expenses' | 'inventory' | 'notes' | 'files' | 'reports' | 'settings';
 
 export interface MemberPermissions {
   booking: {
@@ -51,6 +51,18 @@ export interface MemberPermissions {
     toggle_checklist: boolean;
     delete: boolean;
   };
+  /**
+   * Files module (shared migration 009): Drive-indexed file storage.
+   * `manage_folders` inherits `upload` when absent (coalesce semantics,
+   * mirroring the DB's has_files_perm — an explicit false never falls
+   * through); everything else absent = false. No view_amounts key.
+   */
+  files: {
+    view: boolean;
+    upload: boolean;
+    manage_folders: boolean;
+    delete: boolean;
+  };
   reports: {
     view: boolean;
     view_amounts: boolean;
@@ -76,6 +88,21 @@ export const NOTES_INHERITED_ACTIONS: Readonly<Record<string, string>> = {
   toggle_checklist: 'edit',
 };
 
+/**
+ * Files inheritance (shared migration 009): `manage_folders` falls back to
+ * `upload` when absent — coalesce(manage_folders, upload, false), the DB's
+ * has_files_perm byte-for-byte.
+ */
+export const FILES_INHERITED_ACTIONS: Readonly<Record<string, string>> = {
+  manage_folders: 'upload',
+};
+
+/** Per-module inherited-action tables (module → child → parent). */
+const INHERITED_ACTIONS: Partial<Record<PermissionModule, Readonly<Record<string, string>>>> = {
+  notes: NOTES_INHERITED_ACTIONS,
+  files: FILES_INHERITED_ACTIONS,
+};
+
 /** Matrix rows in display order — drives the permission editor UI. */
 export const PERMISSION_MATRIX: ReadonlyArray<{
   module: PermissionModule;
@@ -85,6 +112,7 @@ export const PERMISSION_MATRIX: ReadonlyArray<{
   { module: 'expenses', actions: ['view', 'create', 'edit', 'delete', 'manage_parties', 'view_amounts'] },
   { module: 'inventory', actions: ['view', 'create', 'edit', 'delete', 'manage_master_items', 'view_amounts'] },
   { module: 'notes', actions: ['view', 'view_checklists', 'create', 'edit', 'toggle_checklist', 'delete'] },
+  { module: 'files', actions: ['view', 'upload', 'manage_folders', 'delete'] },
   { module: 'reports', actions: ['view', 'view_amounts'] },
   { module: 'settings', actions: ['manage_business', 'manage_members', 'gcal_sync'] },
 ];
@@ -95,6 +123,7 @@ export function emptyPermissions(): MemberPermissions {
     expenses: { view: false, create: false, edit: false, delete: false, manage_parties: false, view_amounts: true },
     inventory: { view: false, create: false, edit: false, delete: false, manage_master_items: false, view_amounts: true },
     notes: { view: false, view_checklists: false, create: false, edit: false, toggle_checklist: false, delete: false },
+    files: { view: false, upload: false, manage_folders: false, delete: false },
     reports: { view: false, view_amounts: true },
     settings: { manage_business: false, manage_members: false, gcal_sync: false },
   };
@@ -104,8 +133,9 @@ export function emptyPermissions(): MemberPermissions {
  * Normalises a permissions jsonb blob from the DB into the full shape.
  * Actions default to false unless explicitly true — except `view_amounts`,
  * which defaults to true unless explicitly false (schema contract), and the
- * notes checklist split keys, which inherit their parent action when absent
- * (coalesce(child, parent, false) — DB parity, shared migration 007).
+ * notes checklist split keys / files.manage_folders, which inherit their
+ * parent action when absent (coalesce(child, parent, false) — DB parity,
+ * shared migrations 007 and 009).
  */
 export function normalizePermissions(raw: unknown): MemberPermissions {
   const base = emptyPermissions();
@@ -119,15 +149,15 @@ export function normalizePermissions(raw: unknown): MemberPermissions {
       continue;
     }
     const target = base[module] as Record<string, boolean>;
+    const inherited = INHERITED_ACTIONS[module];
     for (const action of actions) {
       if (action === DEFAULT_TRUE_ACTION) {
         target[action] = mod[action] !== false;
-      } else if (module === 'notes' && action in NOTES_INHERITED_ACTIONS) {
+      } else if (inherited && action in inherited) {
         // coalesce semantics: an explicit boolean (true OR false) wins;
         // absent/junk falls through to the RAW parent value, then false.
         const explicit = mod[action];
-        target[action] =
-          typeof explicit === 'boolean' ? explicit : mod[NOTES_INHERITED_ACTIONS[action]!] === true;
+        target[action] = typeof explicit === 'boolean' ? explicit : mod[inherited[action]!] === true;
       } else if (mod[action] === true) {
         target[action] = true;
       }
@@ -158,6 +188,7 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   // Presets materialize the inherited value (view_checklists ← view), so a
   // preset round-trips through normalizePermissions unchanged.
   p.notes.view_checklists = true;
+  p.files.view = true;
   if (preset === 'viewer') {
     return p;
   }
@@ -165,6 +196,9 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   p.expenses.create = true;
   p.inventory.create = true;
   p.notes.create = true;
+  p.files.upload = true;
+  // Materialized inheritance: manage_folders ← upload (shared 009 presets).
+  p.files.manage_folders = true;
   if (preset === 'staff') {
     return p;
   }
@@ -183,6 +217,7 @@ export function presetPermissions(preset: PresetKey): MemberPermissions {
   // Materialized inheritance: toggle_checklist ← edit (see above).
   p.notes.toggle_checklist = true;
   p.notes.delete = true;
+  p.files.delete = true;
   p.reports.view = true;
   return p;
 }

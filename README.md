@@ -117,8 +117,13 @@ in its own script). New strings are added in the `samaroh-shared` repo only.
 2. **Environment variables** (Production + Preview):
    - `NEXT_PUBLIC_SUPABASE_URL` — the Supabase project URL
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the Supabase anon (public) key
-   Both are optional at build time by design — a build without them yields the
-   signed-out shell — but required for a functional deployment.
+   - `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` — the Google **Web application** OAuth client
+     id (the same one the Android app uses) for Files uploads to Google Drive; add the
+     site origins (production + preview) as *Authorized JavaScript origins* on that
+     client. Optional: without it the Files tab works read-only and shows the
+     "uploads aren't set up" message when picking a file.
+   All are optional at build time by design — a build without them yields the
+   signed-out shell — but the Supabase pair is required for a functional deployment.
 3. **Git submodule access** — `shared/` is a git submodule. Vercel clones submodules
    over **HTTPS only**:
    - If `samaroh-shared` is **public**: ensure `.gitmodules` uses the

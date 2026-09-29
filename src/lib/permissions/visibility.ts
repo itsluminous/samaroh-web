@@ -10,9 +10,21 @@
  */
 import type { MemberPermissions } from './permissions';
 
-/** The four permission-gated nav sections; Menu is always visible. */
-export const NAV_MODULES = ['booking', 'expenses', 'inventory', 'notes'] as const;
+/**
+ * The five permission-gated nav sections in module order (shared Files
+ * design D15: Booking, Expenses, Inventory, Notes, Files); Menu is always
+ * visible and always last.
+ */
+export const NAV_MODULES = ['booking', 'expenses', 'inventory', 'notes', 'files'] as const;
 export type NavModule = (typeof NAV_MODULES)[number];
+
+/**
+ * Bottom-bar cap (D15): at most this many MODULES sit in the mobile bottom
+ * bar next to Menu (Material 3's 5-item limit). Visible modules fill the bar
+ * in order; the rest overflow into the "More" section at the top of the Menu
+ * tab (and into menu search). The desktop rail is uncapped.
+ */
+export const BOTTOM_BAR_MODULE_CAP = 4;
 
 /** The membership facts visibility depends on (subset of `Membership`). */
 export interface VisibilityInput {
@@ -33,10 +45,29 @@ export function canViewSection(m: VisibilityInput, module: NavModule): boolean {
   return m.permissions[module].view === true;
 }
 
+/** Visible modules in nav order (the rail listing; input to the bar split). */
+export function visibleNavModules(m: VisibilityInput): NavModule[] {
+  return NAV_MODULES.filter((module) => canViewSection(m, module));
+}
+
+/**
+ * Splits the visible modules into the bottom-bar set (first `cap`) and the
+ * overflow set (everything past it) — the D15 rule shared with Android and
+ * web-mobile. A full-permission owner sees Booking/Expenses/Inventory/Notes
+ * in the bar and Files under Menu → More; a member without inventory.view
+ * gets Files in the bar and no overflow.
+ */
+export function splitNavModules<T extends { key: NavModule }>(
+  visible: readonly T[],
+  cap: number = BOTTOM_BAR_MODULE_CAP,
+): { bar: T[]; overflow: T[] } {
+  return { bar: visible.slice(0, cap), overflow: visible.slice(cap) };
+}
+
 /**
  * Landing target for the locale root: the first visible section in nav
  * order (§4.1 makes Booking the home tab), falling back to Menu when the
- * member can view none of the four.
+ * member can view none of the modules.
  */
 export function firstVisibleSection(permissions: MemberPermissions, isOwner: boolean): string {
   for (const mod of NAV_MODULES) {

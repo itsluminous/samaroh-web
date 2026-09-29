@@ -10,6 +10,11 @@
  * sign-out) — see src/lib/menuSearch.ts. Results reuse the exact permission
  * gates of the rows they point at, so nothing unreachable ever surfaces.
  * An empty query shows the normal menu.
+ *
+ * A "More" section sits ABOVE the identity row whenever the mobile bottom
+ * bar overflowed (D15: 4 modules + Menu) — icon rows for the modules that
+ * did not fit, in nav order. Desktop has the full rail, but the section
+ * renders there too so the menu is the same on every width.
  */
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
@@ -25,11 +30,13 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import ListSubheader from '@mui/material/ListSubheader';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
+import { resolveNavLayout } from '@/components/navSections';
 import { Link } from '@/i18n/navigation';
 import { useHighlightParam } from '@/lib/hooks/useHighlightParam';
 import { useSignedIn } from '@/lib/hooks/useSignedIn';
@@ -43,8 +50,11 @@ const IDENTITY_HIGHLIGHT_MS = 2400;
 export default function MenuHome({ title }: { title: string }) {
   const t = useTranslations();
   const tSection = useTranslations('menu.section');
-  const { isOwner, permissions } = useMembership();
+  const membership = useMembership();
+  const { isOwner, permissions } = membership;
   const signedIn = useSignedIn();
+  const overflow = resolveNavLayout(membership).overflow;
+  const overflowModules = useMemo(() => overflow.map((section) => section.key), [overflow]);
 
   const [query, setQuery] = useState('');
   // The sign-out result points at the identity row on THIS page: clicking it
@@ -61,8 +71,8 @@ export default function MenuHome({ title }: { title: string }) {
   }, [identityFlash]);
 
   const index = useMemo(
-    () => buildMenuSearchIndex({ isOwner, permissions, signedIn }, t),
-    [isOwner, permissions, signedIn, t],
+    () => buildMenuSearchIndex({ isOwner, permissions, signedIn, overflowModules }, t),
+    [isOwner, permissions, signedIn, overflowModules, t],
   );
   const trimmed = query.trim();
   const results = useMemo(() => filterMenuSearchEntries(query, index), [query, index]);
@@ -145,6 +155,29 @@ export default function MenuHome({ title }: { title: string }) {
           </Paper>
         )
       ) : (
+        <>
+          {overflow.length > 0 ? (
+            <Paper variant="outlined" sx={{ maxWidth: 640, mb: 2 }}>
+              <List
+                disablePadding
+                subheader={
+                  <ListSubheader component="div" disableSticky>
+                    {t('files.nav.more_section')}
+                  </ListSubheader>
+                }
+              >
+                {overflow.map((section) => (
+                  <ListItem key={section.key} disablePadding>
+                    <ListItemButton component={Link} href={section.href}>
+                      <ListItemIcon>{section.icon}</ListItemIcon>
+                      <ListItemText primary={t(section.labelKey)} />
+                      <ChevronRightIcon color="action" />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          ) : null}
         <Paper variant="outlined" sx={{ maxWidth: 640 }}>
           <List disablePadding>
             <MenuIdentityRow highlighted={identityFlash || hlParam === 'identity'} />
@@ -161,6 +194,7 @@ export default function MenuHome({ title }: { title: string }) {
               ))}
           </List>
         </Paper>
+        </>
       )}
     </>
   );

@@ -9,7 +9,7 @@ import Dexie, { type EntityTable } from 'dexie';
 export type OutboxOperation = 'create' | 'update' | 'delete';
 
 /** Sections whose mutations flow through the outbox (drives grouping in UI). */
-export type OutboxModule = 'booking' | 'expenses' | 'inventory' | 'notes';
+export type OutboxModule = 'booking' | 'expenses' | 'inventory' | 'notes' | 'files';
 
 export type OutboxStatus = 'queued' | 'error' | 'conflict';
 

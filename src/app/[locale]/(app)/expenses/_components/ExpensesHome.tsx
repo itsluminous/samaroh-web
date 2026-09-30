@@ -14,11 +14,21 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
+import {
+  SUMMARY_PERIODS,
+  filterBySummaryPeriod,
+  readSummaryPeriod,
+  writeSummaryPeriod,
+  type SummaryPeriod,
+} from '@/lib/expenses/summaryPeriod';
+import AutoShrinkText from '@/app/[locale]/(app)/menu/_components/AutoShrinkText';
 import MaskedAmount from '@/components/MaskedAmount';
 import SortMenuButton from '@/components/SortMenuButton';
 import { formatAmount } from '@/lib/format/amount';
@@ -70,10 +80,22 @@ export default function ExpensesHome() {
   );
   const [addOpen, setAddOpen] = useState(false);
   const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
+  // Summary period for the totals card (default THIS MONTH), persisted per device.
+  const [period, setPeriod] = useState<SummaryPeriod>(() => readSummaryPeriod());
 
   const changeSort = useCallback((order: ListSortOrder) => {
     setSort(order);
     writeListSort(PARTY_LIST_SORT_STORAGE_KEY, order);
+  }, []);
+
+  const changePeriod = useCallback((next: SummaryPeriod | null) => {
+    // Exclusive toggle groups report null when the active button is tapped
+    // again — one period is always selected, so ignore that.
+    if (next === null) {
+      return;
+    }
+    setPeriod(next);
+    writeSummaryPeriod(next);
   }, []);
 
   // Party deletion navigates back here; the ledger leaves the name behind.
@@ -119,7 +141,13 @@ export default function ExpensesHome() {
     void reload();
   }, [businessLoading, supabase, businessId, reload]);
 
-  const totals = useMemo(() => computeTotals(expenses.map(toLedgerEntry)), [expenses]);
+  // Header totals scoped to the chosen period by expense_date (local
+  // calendar). Per-party balances below stay all-time — the period only
+  // changes the summary card.
+  const totals = useMemo(
+    () => computeTotals(filterBySummaryPeriod(expenses, period).map(toLedgerEntry)),
+    [expenses, period],
+  );
 
   const rows = useMemo<PartyListRow[]>(() => {
     const byParty = new Map<string, ExpenseRecord[]>();
@@ -174,22 +202,50 @@ export default function ExpensesHome() {
 
   return (
     <Box sx={{ pb: 10 }}>
-      <Card variant="outlined" sx={{ display: 'flex', mb: 2 }}>
-        <Box sx={{ flex: 1, p: 2, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            {t('home.you_gave')}
-          </Typography>
-          <Typography variant="h6" color="error.main">
-            {showAmounts ? formatAmount(totals.gave) : <MaskedAmount />}
-          </Typography>
+      <Card variant="outlined" sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', px: 1, pt: 1.5 }}>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            fullWidth
+            value={period}
+            onChange={(_event, value: SummaryPeriod | null) => changePeriod(value)}
+            aria-label={t('summary.period_label')}
+            sx={{ maxWidth: 420 }}
+          >
+            {SUMMARY_PERIODS.map((option) => (
+              <ToggleButton key={option} value={option} sx={{ whiteSpace: 'nowrap' }}>
+                {t(`summary.period_${option}`)}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
         </Box>
-        <Box sx={{ flex: 1, p: 2, textAlign: 'center', borderLeft: 1, borderColor: 'divider' }}>
-          <Typography variant="body2" color="text.secondary">
-            {t('home.you_got')}
-          </Typography>
-          <Typography variant="h6" color="success.main">
-            {showAmounts ? formatAmount(totals.got) : <MaskedAmount />}
-          </Typography>
+        <Box sx={{ display: 'flex' }}>
+          <Box sx={{ flex: 1, minWidth: 0, p: 2, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {t('home.you_gave')}
+            </Typography>
+            <Typography variant="h6" color="error.main" data-testid="summary-gave">
+              {showAmounts ? <AutoShrinkText>{formatAmount(totals.gave)}</AutoShrinkText> : <MaskedAmount />}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              p: 2,
+              textAlign: 'center',
+              borderLeft: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {t('home.you_got')}
+            </Typography>
+            <Typography variant="h6" color="success.main" data-testid="summary-got">
+              {showAmounts ? <AutoShrinkText>{formatAmount(totals.got)}</AutoShrinkText> : <MaskedAmount />}
+            </Typography>
+          </Box>
         </Box>
       </Card>
 

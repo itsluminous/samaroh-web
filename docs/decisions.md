@@ -1039,3 +1039,46 @@ repo interprets it where the spec leaves web-specific latitude.)
      helper. Gating, name rules, depth/cycle guards were already identical
      (shared `files-tab-design.md` §6 records the reconciled UX). Tests in
      `files-rename-move` assert the disabled button + live error per case.
+
+- **Expenses summary period switch — This month (default) / This year / All
+  time** (2026-10-01, owner feedback; web + Android in parallel against the
+  same shared keys, shared 5ee7711). Interpretations:
+  1. *Scope.* Only the "You gave / You got" card at the top of the Expenses
+     home is period-scoped. Per-party net balances in the list and the party
+     ledger stay ALL-TIME — a balance is a running total, cutting it by month
+     would show a number nobody owes.
+  2. *Membership is by `expense_date`, local calendar.* `isInSummaryPeriod`
+     (`src/lib/expenses/summaryPeriod.ts`) compares the ISO `yyyy-mm-dd`
+     PREFIX with the device's local `yyyy` / `yyyy-mm` built from `Date`
+     getters — never `toISOString()`, never `new Date(expenseDate)` — so an
+     entry dated today is never pushed into last month/year for a user east
+     of UTC in the evening (IST 23:30 is tomorrow in UTC), and a
+     `yyyy-mm-01` row is never parsed as the previous local day west of UTC.
+     Boundaries inclusive on both ends; `created_at` is irrelevant.
+  3. *Default THIS MONTH; persisted per device.* `localStorage`
+     `samaroh_expenses_summary_period` ∈ `month|year|all`, same contract as
+     the list-sort / booking view-toggle prefs (unknown or unavailable
+     storage → default; nothing written until the user chooses). MUI
+     `ToggleButtonGroup` (exclusive, `fullWidth`, ≤ 420 px) inside the card,
+     `aria-label` `expenses.summary.period_label`; re-tapping the active
+     segment is ignored so exactly one period is always selected.
+  4. *Masking unchanged.* `view_amounts=false` renders `MaskedAmount` in every
+     period; the switch still works (it is a layout preference, not data).
+  5. *Single line.* Each amount renders through the reports'
+     `AutoShrinkText` (imported from `menu/_components`, not moved — shared
+     components change via the integrator) so long ₹ totals shrink instead of
+     wrapping in a 160 px half-card; labels are `noWrap`. The MUI `h6` box
+     carries `data-testid="summary-gave|summary-got"` for tests.
+  6. *Strings* (shared `expenses` fragment, en + hi, ADD only):
+     `expenses.summary.period_label|period_month|period_year|period_all`.
+     Pulled `origin/main` first — no Android keys existed yet, so the web
+     track authored them; Android adopts the same ids.
+  7. *Tests.* `expenses-summary-period-logic` (month/year/all boundaries,
+     local-midnight safety both directions, zero-padding, no-parse guarantee,
+     persistence incl. blocked storage), `expenses-summary-period` (screen:
+     default + three states + totals by `expense_date`, persistence and
+     restore, unknown value fallback, party balances untouched, masked member,
+     autoshrink wrapper, Hindi labels); Playwright
+     `expenses-summary-period.spec.ts` at a 360 px phone viewport in guest
+     mode (default pressed state, no segment wrap, one-line amounts, reload
+     restores the choice; screenshots in `test-results/expenses-summary-period/`).

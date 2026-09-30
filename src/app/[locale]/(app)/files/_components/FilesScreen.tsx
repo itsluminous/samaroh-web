@@ -7,7 +7,11 @@
  * Google Drive (anyone-with-link). Folder breadcrumbs, list/grid toggle
  * (persisted per device), GLOBAL search (D11), New folder / Upload (picker +
  * drag-and-drop, any MIME, ≤20 per batch, ≤25 MiB each), per-item kebab
- * actions, owner-only Manage access. Uploads land in the current folder;
+ * actions (Open / Open in Drive / Download / Copy link / Rename / Move /
+ * Delete on files; Rename / Move / Manage access / Delete on folders),
+ * owner-only Manage access. Rename + Move (owner feedback 2026-09-30, shared
+ * migration 010) update the metadata row through the outbox and mirror into
+ * Drive best-effort when this browser has a Drive token (`_lib/driveMirror`). Uploads land in the current folder;
  * from a NON-folder context (global search results) a destination-folder
  * picker with a permission-gated "New folder" option opens first
  * (FolderPickerDialog). Every action is permission-HIDDEN
@@ -70,8 +74,19 @@ import { isLocalClient } from '@/lib/guest/localClient';
 import { driveDownloadUrl, driveViewUrl } from '@/lib/images/drive';
 import { fetchMembers } from '@/lib/permissions/membersRepo';
 import { useMembership } from '@/lib/permissions/useMembership';
-import { createFolder, deleteFile, deleteFolderTree, fetchFilesIndex, renameFolder } from '../_lib/queries';
+import { mirrorFileMove, mirrorFileRename, mirrorFolderMove, mirrorFolderRename } from '../_lib/driveMirror';
 import {
+  createFolder,
+  deleteFile,
+  deleteFolderTree,
+  fetchFilesIndex,
+  moveFile,
+  moveFolder,
+  renameFile,
+  renameFolder,
+} from '../_lib/queries';
+import {
+  canModifyFile,
   descendantCount,
   directChildCount,
   fileSizeParts,
@@ -84,10 +99,13 @@ import {
   pathLabel,
   pruneIndex,
   searchIndex,
+  validateFileMove,
+  validateFolderMove,
 } from '../_lib/tree';
 import type { FileRecord, FilesViewMode, FolderRecord } from '../_lib/types';
 import { createDriveFilesUploader, planUpload, runUploadBatch } from '../_lib/upload';
 import FileLightbox from './FileLightbox';
+import FileNameDialog from './FileNameDialog';
 import FileThumb from './FileThumb';
 import FolderAccessDialog from './FolderAccessDialog';
 import FolderNameDialog from './FolderNameDialog';
@@ -164,6 +182,8 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
   const [menu, setMenu] = useState<{ anchor: HTMLElement; target: MenuTarget } | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<FolderRecord | null>(null);
+  const [renameFileTarget, setRenameFileTarget] = useState<FileRecord | null>(null);
+  const [moveTarget, setMoveTarget] = useState<MenuTarget | null>(null);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderRecord | null>(null);
   const [deleteFileTarget, setDeleteFileTarget] = useState<FileRecord | null>(null);
   const [accessTarget, setAccessTarget] = useState<FolderRecord | null>(null);
@@ -267,12 +287,41 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
   };
 
   const handleRenameFolder = async (name: string) => {
-    if (!supabase || !userId || !renameTarget) {
+    if (!supabase || !userId || !renameTarget || !business) {
       return;
     }
+    const oldChain = folderPath(pruned.folders, renameTarget.id);
     const next = await renameFolder(supabase, renameTarget, userId, name);
     setIndex((prev) => ({ ...prev, folders: prev.folders.map((f) => (f.id === next.id ? next : f)) }));
     setSnack(t('folder.renamed'));
+    void mirrorFolderRename(supabase, userId, business.name, oldChain, next.name);
+  };
+
+  /** Move (2026-09-30, shared 010): metadata first, Drive mirror best-effort after. */
+  const handleMove = async (destinationId: string | null) => {
+    if (!supabase || !userId || !business || !moveTarget) {
+      return;
+    }
+    const target = moveTarget;
+    setMoveTarget(null);
+    const destinationChain = folderPath(pruned.folders, destinationId);
+    // Snackbar names the destination FOLDER (root label at the top level) — files.move.done {folder}.
+    const destinationLabel = destinationChain.at(-1)?.name ?? rootLabel;
+    try {
+      if (target.kind === 'folder') {
+        const oldChain = folderPath(pruned.folders, target.folder.id);
+        const next = await moveFolder(supabase, target.folder, userId, destinationId);
+        setIndex((prev) => ({ ...prev, folders: prev.folders.map((f) => (f.id === next.id ? next : f)) }));
+        void mirrorFolderMove(supabase, userId, business.name, oldChain, [...destinationChain, next]);
+      } else {
+        const next = await moveFile(supabase, target.file, destinationId);
+        setIndex((prev) => ({ ...prev, files: prev.files.map((f) => (f.id === next.id ? next : f)) }));
+        void mirrorFileMove(supabase, userId, business.name, next.drive_file_id, destinationChain);
+      }
+      setSnack(t('move.done', { folder: destinationLabel }));
+    } catch {
+      setSnack(tError('save_failed'));
+    }
   };
 
   const handleDeleteFolder = async () => {
@@ -307,6 +356,16 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
     } else {
       window.open(driveViewUrl(file.drive_file_id), '_blank', 'noopener,noreferrer');
     }
+  };
+
+  const handleRenameFile = async (name: string) => {
+    if (!supabase || !renameFileTarget) {
+      return;
+    }
+    const next = await renameFile(supabase, renameFileTarget, name);
+    setIndex((prev) => ({ ...prev, files: prev.files.map((f) => (f.id === next.id ? next : f)) }));
+    setSnack(t('file.renamed'));
+    void mirrorFileRename(next.drive_file_id, next.name);
   };
 
   const copyLink = async (file: FileRecord) => {
@@ -493,6 +552,8 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
 
   const restrictedChip = (folder: FolderRecord) =>
     folder.restricted ? <Chip size="small" icon={<LockOutlinedIcon />} label={t('access.restricted_badge')} /> : null;
+
+  const fileActor = { isOwner, userId, canUpload, canDelete };
 
   const kebab = (target: MenuTarget, name: string) => {
     // Permission-hidden: no kebab at all when no action applies.
@@ -810,6 +871,16 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
               <MenuItem key="copy" onClick={() => closeMenu(() => void copyLink(menuFile))}>
                 {t('action.copy_link')}
               </MenuItem>,
+              ...(canModifyFile(menuFile, fileActor)
+                ? [
+                    <MenuItem key="rename" onClick={() => closeMenu(() => setRenameFileTarget(menuFile))}>
+                      {t('action.rename_file')}
+                    </MenuItem>,
+                    <MenuItem key="move" onClick={() => closeMenu(() => setMoveTarget({ kind: 'file', file: menuFile }))}>
+                      {t('action.move')}
+                    </MenuItem>,
+                  ]
+                : []),
               ...(canDelete
                 ? [
                     <MenuItem key="delete" onClick={() => closeMenu(() => setDeleteFileTarget(menuFile))}>
@@ -824,6 +895,9 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
                   ? [
                       <MenuItem key="rename" onClick={() => closeMenu(() => setRenameTarget(menuFolder))}>
                         {t('action.rename_folder')}
+                      </MenuItem>,
+                      <MenuItem key="move" onClick={() => closeMenu(() => setMoveTarget({ kind: 'folder', folder: menuFolder }))}>
+                        {t('action.move')}
                       </MenuItem>,
                     ]
                   : []),
@@ -861,6 +935,30 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
         selfId={renameTarget?.id ?? null}
         onClose={() => setRenameTarget(null)}
         onSubmit={handleRenameFolder}
+      />
+      <FileNameDialog
+        open={renameFileTarget !== null}
+        initialName={renameFileTarget?.name}
+        onClose={() => setRenameFileTarget(null)}
+        onSubmit={handleRenameFile}
+      />
+      <FolderPickerDialog
+        open={moveTarget !== null}
+        mode="move"
+        folders={pruned.folders}
+        initialFolderId={moveTarget?.kind === 'folder' ? moveTarget.folder.parent_id : moveTarget?.kind === 'file' ? moveTarget.file.folder_id : null}
+        excludeFolderId={moveTarget?.kind === 'folder' ? moveTarget.folder.id : null}
+        validateTarget={(destination) =>
+          moveTarget?.kind === 'folder'
+            ? validateFolderMove(pruned.folders, moveTarget.folder, destination)
+            : moveTarget?.kind === 'file'
+              ? validateFileMove(moveTarget.file, destination)
+              : null
+        }
+        canCreateFolder={canManageFolders}
+        onCreateFolder={createFolderIn}
+        onClose={() => setMoveTarget(null)}
+        onConfirm={(destination) => void handleMove(destination)}
       />
 
       <Dialog open={deleteFolderTarget !== null} onClose={() => setDeleteFolderTarget(null)}>

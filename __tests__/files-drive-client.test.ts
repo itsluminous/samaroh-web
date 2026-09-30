@@ -2,7 +2,8 @@
  * Browser Drive client (design D9): configuration guard, token cache
  * semantics (non-interactive never opens a popup), Drive `q` escaping and
  * name sanitisation, find-or-create folder chain with the per-session memo,
- * anyone-with-link permission, and the swallow-everything best-effort delete.
+ * anyone-with-link permission, and the swallow-everything best-effort delete,
+ * rename and move (owner feedback 2026-09-30) plus the find-only path lookup.
  */
 import {
   clearDriveToken,
@@ -10,7 +11,10 @@ import {
   driveDeleteFileBestEffort,
   driveEnsureAnyoneReader,
   driveEnsureFolderPath,
+  driveFindFolderPath,
   driveFindOrCreateFolder,
+  driveMoveBestEffort,
+  driveRenameBestEffort,
   getDriveAccessToken,
   getGoogleWebClientId,
   hasDriveToken,
@@ -144,5 +148,43 @@ describe('permission + best-effort delete', () => {
     mockFetch(() => ({ status: 401, body: { error: { message: 'expired' } } }));
     await expect(driveEnsureAnyoneReader('tok', 'f')).rejects.toMatchObject({ status: 401 });
     expect(hasDriveToken()).toBe(false);
+  });
+});
+
+describe('best-effort rename / move mirror (2026-09-30)', () => {
+  it('rename PATCHes the sanitized name and swallows failures', async () => {
+    const calls = mockFetch(() => ({ status: 200, body: { id: 'f' } }));
+    await expect(driveRenameBestEffort('tok', 'file-1', ' a/b.pdf ')).resolves.toBe(true);
+    expect(calls[0]!.init!.method).toBe('PATCH');
+    expect(calls[0]!.url).toContain('/files/file-1?fields=id');
+    expect(JSON.parse(calls[0]!.init!.body as string)).toEqual({ name: 'a-b.pdf' });
+    mockFetch(() => ({ status: 403, body: { error: { message: 'not mine' } } }));
+    await expect(driveRenameBestEffort('tok', 'file-1', 'x')).resolves.toBe(false);
+  });
+
+  it('move reads the current parents, then PATCHes addParents/removeParents; no-op when already there', async () => {
+    const calls = mockFetch(({ init }) =>
+      init?.method === 'PATCH' ? { status: 200, body: { id: 'f' } } : { status: 200, body: { parents: ['old-1', 'old-2'] } },
+    );
+    await expect(driveMoveBestEffort('tok', 'file-1', 'new-p')).resolves.toBe(true);
+    expect(calls[0]!.url).toContain('/files/file-1?fields=parents');
+    expect(calls[1]!.init!.method).toBe('PATCH');
+    expect(calls[1]!.url).toContain('addParents=new-p');
+    expect(calls[1]!.url).toContain('removeParents=old-1%2Cold-2');
+    const again = mockFetch(() => ({ status: 200, body: { parents: ['new-p'] } }));
+    await expect(driveMoveBestEffort('tok', 'file-1', 'new-p')).resolves.toBe(true);
+    expect(again).toHaveLength(1); // read only — nothing to change
+    mockFetch(() => ({ status: 404 }));
+    await expect(driveMoveBestEffort('tok', 'gone', 'new-p')).resolves.toBe(false);
+  });
+
+  it('find-only path lookup never creates and returns null at the first missing segment', async () => {
+    const calls = mockFetch(({ url }) => ({
+      status: 200,
+      body: { files: url.includes(encodeURIComponent("name = 'Hall'")) || url.includes(encodeURIComponent("name = 'files'")) ? [{ id: url.includes('Hall') ? 'h' : 'fl' }] : [] },
+    }));
+    await expect(driveFindFolderPath('tok', 'root', ['Hall', 'files', 'Missing'])).resolves.toBeNull();
+    expect(calls.every((c) => !c.init?.method || c.init.method === 'GET')).toBe(true);
+    await expect(driveFindFolderPath('tok', 'root', ['Hall', 'files'])).resolves.toBe('fl');
   });
 });

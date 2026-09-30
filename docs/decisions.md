@@ -923,3 +923,110 @@ repo interprets it where the spec leaves web-specific latitude.)
      runs the normal chain (Connect-Google prompt when unlinked → upload).
      Uploads from a folder view stay direct (no picker); there is no move
      action on web (nothing else to apply the picker to).
+
+- **Files feedback batch 2 — rename files, move files/folders, lazy folder
+  picker, phone-sized dialogs** (2026-09-30, owner feedback on the Android
+  Files tab; web parity, both tracks in parallel against the same shared
+  keys). Six items, one contract change:
+  1. *Shared migration 010 (`010_files_rename_move.sql`, shared a5ee3b9 —
+     authored on the Android track; the web track validated it independently)
+     — REQUIRED on the live DB before Move works.* 009 pinned
+     `folders.parent_id` and `files.folder_id` as immutable in the guard
+     triggers (design D14 "move out of scope v1"). 010 replaces the two guard
+     bodies and keeps every other 009 rule: a folder move needs
+     owner/`files.manage_folders` and an accessible destination
+     (`can_access_folder`, checked in the trigger because a WITH CHECK
+     subquery cannot see the new parent chain) and is cycle-guarded for
+     everyone (destination = self or a live descendant → exception); a file
+     move rides the unchanged `files_update` policy (owner / `files.delete` /
+     uploader with `files.upload`) whose WITH CHECK covers the destination
+     folder. The **depth cap is client-only** (D13: 10 levels; the RLS walk
+     cap is 64) — both clients validate `depth(destination) + height(moved
+     subtree) ≤ 10` before writing; a nonexistent destination fails the FK; a
+     name clash fails the 009 partial unique index (23505) — clients pre-check
+     both. File `name` was already mutable for whoever passes RLS (the 009
+     upsert-retry allowance); 010 only documents it as the Rename-file
+     contract. Web re-validated the adopted file on scratch Postgres 15
+     (001→010 replay + probes as owner / staff / manager / viewer: viewer
+     move → no row, staff move OK via inherited manage_folders, cycle
+     rejected, restricted destination rejected for a non-member and accepted
+     for the owner, FK on a nonexistent destination, 23505 on a name clash,
+     staff renaming someone else's file → row invisible, tombstone without
+     `files.delete` rejected, idempotent re-apply). Owner handoff:
+     `~/.luminous/handoff/shared-010-files-move-owner-ddl.md`. Until the owner
+     applies it, Move fails server-side and the UI shows
+     `expenses.error.save_failed` — nothing is lost; PostgREST answers 4xx so
+     the op is rejected, not queued forever.
+  2. *Rename (files + folders) — kebab → prefilled name dialog.* Folder rename
+     already existed (`FolderNameDialog`, D12 rules + live-sibling
+     uniqueness). File rename: new `FileNameDialog`, `validateFileName`
+     (required / no `/` / ≤ 255 — **no** duplicate rule, file names may repeat,
+     D12), `renameFile` through `updateWithOutbox`. **Gating** (recorded here
+     for both tracks): folders → `files.manage_folders`; files → `files.upload`
+     **for the member's own uploads**, any file for the owner or a
+     `files.delete` holder — `canModifyFile` mirrors the `files_update` RLS
+     policy exactly so the client never offers a write the server rejects
+     (a plain "files.upload" gate would 0-row-update someone else's file for
+     a Staff member). Hidden, never greyed (ADR-038).
+  3. *Drive mirror is best-effort and token-gated* (`_lib/driveMirror.ts`):
+     only when the client id is configured AND this browser already holds a
+     Drive token (`interactive: false` — never a popup from a rename); the
+     metadata row is written FIRST and is authoritative. File rename → PATCH
+     `name`; folder rename → find the mirror folder by its OLD path
+     (find-only, no create) → PATCH; file move → find-or-create the
+     destination path → PATCH `addParents/removeParents` after reading the
+     current parents; folder move → find old path + ensure destination path →
+     re-parent. Every failure (403 not my copy, 404, timeout) is swallowed;
+     the path-keyed folder memo is cleared after a rename/move. Other
+     members' copies are untouched (their Drives, D4).
+  4. *Move (files + folders) — kebab "Move to…" (`files.action.move`, one key
+     for both kinds) → `FolderPickerDialog mode="move"`.* Current location
+     preselected (its ancestors pre-expanded), the moved folder's own subtree
+     HIDDEN from the list (it can never be its own destination), confirm runs
+     `validateFolderMove` / `validateFileMove` (`same_folder` / `into_self` /
+     `too_deep` / `duplicate_folder` → inline `files.move.*` error, nothing
+     written), then ONE `parent_id` / `folder_id` UPDATE through the outbox —
+     the subtree follows by reference, no per-child ops. Snackbar
+     `files.move.done` names the destination folder (root label at the top
+     level). Gating: files as in (2), folders `files.manage_folders`.
+  5. *Lazy folder picker (both modes).* `lazyFolderTreeRows`: top-level row +
+     ROOT folders only until a row is expanded; a row with children carries a
+     chevron (`files.picker.expand/collapse` a11y labels, `role=tree` /
+     `treeitem` + `aria-level` / `aria-expanded`); children indent one level
+     per depth; the root row is selectable. New folder still creates under the
+     selection, expands the parent and selects the child.
+  6. *Dialog sizing on phones.* `compactDialogProps` (`_lib/dialogSx.ts`):
+     paper margin 8 px (MUI default 32 px left a 296 px dialog on a 360 px
+     viewport), `calc(100% - 16px)` width on `xs`, the usual `xs` max-width
+     from `sm` up; body-size (`body2`) row text, 40 px rows, 36/32 px icon
+     gutters. Applied to the picker, both name dialogs and the access editor
+     (item 4 of the feedback: the only other "chooser" dialogs on web; the
+     text-only confirms keep MUI defaults). Opening files (item 5) is
+     unchanged and already consistent with expenses/inventory: images → the
+     in-app lightbox (public thumbnail ladder), anything else →
+     `drive.google.com/file/d/{id}/view` in a new tab — the same URL the
+     ledger's bill chips use, anyone-with-link, so no account prompt beyond
+     what a bill attachment shows.
+  7. *Strings* (shared `files` fragment, en + hi, ADD only). Adopted from the
+     Android track's a5ee3b9: `files.action.rename_file`, `files.action.move`,
+     `files.file.name_label|name_required|name_invalid|renamed`,
+     `files.move.title|confirm|done|same_folder|into_self|too_deep`,
+     `files.picker.expand|collapse` (`files.file.no_viewer_app` is
+     Android-only). Added by web in d6e94e8: `files.move.selected_hint`
+     (helper line under the list) and `files.move.duplicate_folder` (the
+     23505 pre-check). The web track's first draft of the same batch (own
+     010 with a server-side depth cap + `move_file`/`move_folder`/`same_place`
+     keys) was discarded unpushed in favour of the contract that landed
+     first — one contract, no renames.
+  8. *Tests.* `files-rename-move-logic` (file-name rules, lazy rows incl.
+     exclusion, move validation incl. the 9+3 / 7+3 depth boundary, RLS
+     gating), `files-rename-move` (screen: hidden-not-greyed kebab entries per
+     role, prefilled rename + validation + mirror call, move file/folder end
+     to end on the local store incl. same-place / duplicate / depth errors,
+     Hindi), `files-drive-client` (rename / move / find-only path),
+     `files-folder-picker` updated for the lazy tree; Playwright
+     `files-rename-move.spec.ts` at a 360 px phone viewport (root-only
+     picker, paper ≥ 340 px wide, expand → move → listing updates;
+     screenshots in `test-results/files-rename-move/`). Pre-existing, unrelated:
+     `e2e/files.spec.ts` rail test fails hermetically since fa8c07a (`/menu`
+     now redirects to sign-in without a session) — not touched here.

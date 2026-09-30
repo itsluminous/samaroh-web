@@ -14,7 +14,7 @@ Supabase project with the Android app, so data is live-identical across both cli
 | 📒 Expenses | party ledger ("You gave / You got"), business/personal party flag, party edit + cascade delete, scrollable filter chips | ✅ |
 | 📦 Inventory | stock, transactions, masterlist with fuzzy duplicate chips, per-item detail page with history + permission-gated edit/delete, Drive-backed item photos with in-app lightbox | ✅ |
 | 📝 Notes | checklists + free-text notes with tags, fine-grained `notes.*` permissions (shared 007) | ✅ |
-| 📁 Files | Drive-indexed file storage (shared 009): folders, uploads via the browser-side Google Drive client, global search, restricted folders (owner allow-lists), destination-folder picker with **New folder** | ✅ |
+| 📁 Files | Drive-indexed file storage (shared 009/010): folders, uploads via the browser-side Google Drive client, global search, restricted folders (owner allow-lists), **rename** files + folders, **move** files + folders through a lazy destination-folder picker (root folders first, expand chevrons, **New folder**) | ✅ |
 | ☰ Menu | opened from the **⋮ kebab in the title bar, right of the sync indicator** on mobile (last rail entry on desktop; the bottom bar holds only the module tabs, Files last); settings (language/theme/business/booking-form fields/sync status), 10 reports incl. personal expenses + TOTAL rows + machine-readable CSV, members, sign-out/sign-in on the identity row, about | ✅ |
 | 🔐 Auth | email sign-in + **sign-up** with first-run business creation, **guest mode** ("try without an account") | ✅ |
 

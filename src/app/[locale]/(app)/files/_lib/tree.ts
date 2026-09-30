@@ -109,6 +109,51 @@ export function flattenFolderTree(folders: Map<string, FolderRecord>): FolderTre
   return rows;
 }
 
+/** One row of the LAZY folder tree (owner feedback 2026-09-30, picker item 2). */
+export interface LazyTreeRow extends FolderTreeRow {
+  /** The row shows an expand/collapse chevron. */
+  hasChildren: boolean;
+  expanded: boolean;
+}
+
+/**
+ * Lazy folder tree for the pickers: only the ROOT folders are listed until a
+ * row is expanded; expanded rows show their children (A–Z, indented by
+ * `depth`) and so on. `excludeSubtreeOf` hides a folder AND everything under
+ * it (the folder being MOVED can never be its own destination — hidden, not
+ * greyed).
+ */
+export function lazyFolderTreeRows(
+  folders: Map<string, FolderRecord>,
+  expanded: ReadonlySet<string>,
+  excludeSubtreeOf: string | null = null,
+): LazyTreeRow[] {
+  const rows: LazyTreeRow[] = [];
+  const children = (parentId: string | null) =>
+    sortFolders([...folders.values()].filter((f) => f.parent_id === parentId && f.id !== excludeSubtreeOf));
+  const visit = (parentId: string | null, depth: number) => {
+    if (depth > 64) {
+      return;
+    }
+    for (const folder of children(parentId)) {
+      const kids = children(folder.id);
+      const isExpanded = kids.length > 0 && expanded.has(folder.id);
+      rows.push({ folder, depth, hasChildren: kids.length > 0, expanded: isExpanded });
+      if (isExpanded) {
+        visit(folder.id, depth + 1);
+      }
+    }
+  };
+  visit(null, 0);
+  return rows;
+}
+
+/** Ids to pre-expand so `folderId` (the preselected row) is visible: its ancestors. */
+export function ancestorIds(folders: Map<string, FolderRecord>, folderId: string | null): Set<string> {
+  const chain = folderPath(folders, folderId);
+  return new Set(chain.slice(0, -1).map((f) => f.id));
+}
+
 export interface FolderListing {
   folders: FolderRecord[];
   files: FileRecord[];
@@ -253,6 +298,110 @@ export function sanitizeFileName(raw: string): string {
   const cleaned = raw.replace(/\//g, '-').trim();
   const name = cleaned === '' ? 'file' : cleaned;
   return name.length > FILE_NAME_MAX ? name.slice(0, FILE_NAME_MAX) : name;
+}
+
+export type FileNameError = 'name_required' | 'name_invalid';
+
+/**
+ * File RENAME validation (owner feedback 2026-09-30; D12): blank → required;
+ * '/' or > 255 chars → invalid. File names may REPEAT within a folder (Drive
+ * allows it, camera exports collide), so there is no sibling check.
+ */
+export function validateFileName(raw: string): FileNameError | null {
+  const name = raw.trim();
+  if (name === '') {
+    return 'name_required';
+  }
+  if (name.length > FILE_NAME_MAX || name.includes('/')) {
+    return 'name_invalid';
+  }
+  return null;
+}
+
+/** Height of a folder's reachable subtree: the folder alone = 1. */
+export function subtreeHeight(folders: Map<string, FolderRecord>, folderId: string): number {
+  let height = 1;
+  const visit = (parentId: string, depth: number) => {
+    if (depth > 64) {
+      return;
+    }
+    for (const f of folders.values()) {
+      if (f.parent_id === parentId) {
+        height = Math.max(height, depth + 1);
+        visit(f.id, depth + 1);
+      }
+    }
+  };
+  visit(folderId, 1);
+  return height;
+}
+
+/** True when `candidateId` is `folderId` itself or lies underneath it. */
+export function isSelfOrDescendant(folders: Map<string, FolderRecord>, folderId: string, candidateId: string | null): boolean {
+  let current = candidateId === null ? undefined : folders.get(candidateId);
+  let guard = 0;
+  while (current && guard < 64) {
+    if (current.id === folderId) {
+      return true;
+    }
+    current = current.parent_id === null ? undefined : folders.get(current.parent_id);
+    guard += 1;
+  }
+  return false;
+}
+
+export type MoveError = 'same_folder' | 'into_self' | 'too_deep' | 'duplicate_folder';
+
+/**
+ * Folder MOVE validation (mirrors the 010 guard trigger): destination must
+ * not be the current parent (no-op), not the folder itself or a descendant
+ * (cycle), the moved subtree must fit under the depth cap, and no LIVE
+ * sibling in the destination may carry the same name case-insensitively
+ * (uq_folders_biz_parent_name).
+ */
+export function validateFolderMove(
+  folders: Map<string, FolderRecord>,
+  folder: FolderRecord,
+  destinationId: string | null,
+): MoveError | null {
+  if (destinationId === folder.parent_id) {
+    return 'same_folder';
+  }
+  if (destinationId !== null && isSelfOrDescendant(folders, folder.id, destinationId)) {
+    return 'into_self';
+  }
+  if (folderDepth(folders, destinationId) + subtreeHeight(folders, folder.id) > FOLDER_DEPTH_MAX) {
+    return 'too_deep';
+  }
+  const siblings = listFolder(folders, [], destinationId).folders;
+  return validateFolderName(folder.name, siblings, folder.id) === 'duplicate' ? 'duplicate_folder' : null;
+}
+
+/** File MOVE validation: only the no-op case can fail (names may repeat, files add no depth). */
+export function validateFileMove(file: FileRecord, destinationId: string | null): MoveError | null {
+  return destinationId === file.folder_id ? 'same_folder' : null;
+}
+
+export interface FileActor {
+  isOwner: boolean;
+  userId: string | null;
+  /** files.upload */
+  canUpload: boolean;
+  /** files.delete */
+  canDelete: boolean;
+}
+
+/**
+ * Who may RENAME / MOVE a file — mirrors the `files_update` RLS policy (009,
+ * unchanged by 010): the owner, any `files.delete` holder, or the file's own
+ * uploader with `files.upload`. Actions are HIDDEN (never greyed) otherwise,
+ * so the client never offers a write the server would reject.
+ */
+export function canModifyFile(file: Pick<FileRecord, 'created_by'>, actor: FileActor): boolean {
+  if (actor.isOwner || actor.canDelete) {
+    return true;
+  }
+  return actor.canUpload && actor.userId !== null && file.created_by === actor.userId;
 }
 
 export function isImageMime(mime: string): boolean {

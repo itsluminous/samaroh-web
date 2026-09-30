@@ -421,6 +421,88 @@ export async function driveEnsureAnyoneReader(token: string, fileId: string): Pr
 }
 
 /**
+ * Resolves an EXISTING folder path below `rootId` (find only — never creates).
+ * Returns null as soon as one segment is missing. Used by the best-effort
+ * folder rename/move mirror: a mirror folder that was never created (nobody
+ * uploaded through this account) simply has nothing to rename.
+ */
+export async function driveFindFolderPath(
+  token: string,
+  rootId: string,
+  segments: readonly string[],
+): Promise<string | null> {
+  let parent = rootId;
+  for (const raw of segments) {
+    const name = sanitizeDriveName(raw);
+    const key = `${parent}/${name}`;
+    let id = folderMemo.get(key);
+    if (!id) {
+      const query = `name = '${q(name)}' and mimeType = '${FOLDER_MIME}' and '${q(parent)}' in parents and trashed = false`;
+      const found = await driveFetch<{ files?: { id: string }[] }>(
+        token,
+        `/files?q=${encodeURIComponent(query)}&fields=files(id)&pageSize=1&spaces=drive`,
+      );
+      id = found.files?.[0]?.id;
+      if (!id) {
+        return null;
+      }
+      folderMemo.set(key, id);
+    }
+    parent = id;
+  }
+  return parent;
+}
+
+/**
+ * Best-effort rename of a Drive file or folder (owner feedback 2026-09-30:
+ * "Rename" mirrors into Drive when this browser's linked account owns the
+ * copy). Failures (403 not my file, 404 gone, network) are swallowed — the
+ * metadata row is authoritative (D4: Drive is a human-readable mirror).
+ */
+export async function driveRenameBestEffort(token: string, fileId: string, name: string): Promise<boolean> {
+  try {
+    await driveFetch(token, `/files/${encodeURIComponent(fileId)}?fields=id`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: sanitizeDriveName(name) }),
+    });
+    // A renamed mirror folder invalidates the path-keyed memo below it.
+    folderMemo.clear();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Best-effort re-parenting of a Drive file or folder into `newParentId`
+ * (MOVE mirror). Reads the current parents first so `removeParents` is exact;
+ * a file already under the destination is a no-op. Every failure is
+ * swallowed — the metadata row's folder_id is authoritative.
+ */
+export async function driveMoveBestEffort(token: string, fileId: string, newParentId: string): Promise<boolean> {
+  try {
+    const meta = await driveFetch<{ parents?: string[] }>(token, `/files/${encodeURIComponent(fileId)}?fields=parents`);
+    const current = meta.parents ?? [];
+    if (current.includes(newParentId)) {
+      return true;
+    }
+    const params = new URLSearchParams({ addParents: newParentId, fields: 'id' });
+    if (current.length > 0) {
+      params.set('removeParents', current.join(','));
+    }
+    await driveFetch(token, `/files/${encodeURIComponent(fileId)}?${params.toString()}`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+    // Folder ids under a moved/renamed mirror folder are path-keyed — forget them.
+    folderMemo.clear();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Best-effort delete (D10): 403 (not my file) and 404 (already gone) are
  * swallowed — the metadata tombstone is authoritative. Other failures are
  * ALSO swallowed by design (the caller has already tombstoned); returns

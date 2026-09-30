@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
+import { compactDialogProps } from '../_lib/dialogSx';
 import { fetchMembers, type MemberRecord } from '@/lib/permissions/membersRepo';
 import { fetchFolderAccess, saveFolderAccess, setFolderRestricted } from '../_lib/queries';
 import type { FolderAccessRecord, FolderRecord } from '../_lib/types';
@@ -126,7 +127,7 @@ export default function FolderAccessDialog({
   };
 
   return (
-    <Dialog open={folder !== null} onClose={onClose} fullWidth maxWidth="xs">
+    <Dialog open={folder !== null} onClose={onClose} {...compactDialogProps}>
       <DialogTitle>{t('title')}</DialogTitle>
       <DialogContent>
         {loading ? (

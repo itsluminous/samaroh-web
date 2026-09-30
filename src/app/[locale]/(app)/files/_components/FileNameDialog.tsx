@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * New-folder / rename-folder dialog (design §6): one text field, validation
- * mirroring the server CHECK + unique index (required / invalid / duplicate
- * against LIVE siblings case-insensitively). Pure validation lives in
- * `_lib/tree.ts` (`validateFolderName`).
+ * Rename-file dialog (owner feedback 2026-09-30): one text field prefilled
+ * with the current display name (incl. extension), validation mirroring the
+ * server CHECK on files.name (required / no '/' / ≤ 255). File names may
+ * repeat within a folder (D12), so there is no duplicate check. Pure
+ * validation lives in `_lib/tree.ts` (`validateFileName`).
  */
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -15,32 +16,23 @@ import TextField from '@mui/material/TextField';
 import { useTranslations } from 'next-intl';
 import { type FormEvent, useEffect, useState } from 'react';
 import { compactDialogProps } from '../_lib/dialogSx';
-import { type FolderNameError, validateFolderName } from '../_lib/tree';
-import type { FolderRecord } from '../_lib/types';
+import { FILE_NAME_MAX, type FileNameError, validateFileName } from '../_lib/tree';
 
-export default function FolderNameDialog({
+export default function FileNameDialog({
   open,
-  mode,
   initialName,
-  siblings,
-  selfId,
   onClose,
   onSubmit,
 }: {
   open: boolean;
-  mode: 'create' | 'rename';
   initialName?: string;
-  /** Live folders in the same parent (duplicate check). */
-  siblings: readonly FolderRecord[];
-  /** The folder being renamed (excluded from the duplicate check). */
-  selfId?: string | null;
   onClose: () => void;
   onSubmit: (name: string) => Promise<void>;
 }) {
   const t = useTranslations('files');
   const tCommon = useTranslations('common');
   const [name, setName] = useState(initialName ?? '');
-  const [error, setError] = useState<FolderNameError | null>(null);
+  const [error, setError] = useState<FileNameError | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -53,7 +45,7 @@ export default function FolderNameDialog({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    const validation = validateFolderName(name, siblings, selfId ?? null);
+    const validation = validateFileName(name);
     if (validation) {
       setError(validation);
       return;
@@ -70,21 +62,21 @@ export default function FolderNameDialog({
   return (
     <Dialog open={open} onClose={onClose} {...compactDialogProps}>
       <form onSubmit={handleSubmit}>
-        <DialogTitle>{mode === 'create' ? t('action.new_folder') : t('action.rename_folder')}</DialogTitle>
+        <DialogTitle>{t('action.rename_file')}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             fullWidth
             margin="dense"
-            label={t('folder.name_label')}
+            label={t('file.name_label')}
             value={name}
             onChange={(e) => {
               setName(e.target.value);
               setError(null);
             }}
             error={error !== null}
-            helperText={error ? t(`folder.${error}`) : ' '}
-            slotProps={{ htmlInput: { maxLength: 120 } }}
+            helperText={error ? t(`file.${error}`) : ' '}
+            slotProps={{ htmlInput: { maxLength: FILE_NAME_MAX } }}
           />
         </DialogContent>
         <DialogActions>

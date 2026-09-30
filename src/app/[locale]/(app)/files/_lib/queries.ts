@@ -100,6 +100,58 @@ export async function renameFolder(
   return { ...folder, ...patch };
 }
 
+/**
+ * Folder MOVE (owner feedback 2026-09-30; shared migration 010 relaxed the
+ * parent_id guard): one UPDATE of `parent_id` through the outbox — the
+ * subtree follows because children reference the folder by id. Caller has
+ * already run `validateFolderMove` (cycle / depth / duplicate).
+ */
+export async function moveFolder(
+  db: SupabaseClient,
+  folder: FolderRecord,
+  userId: string,
+  parentId: string | null,
+): Promise<FolderRecord> {
+  const patch = { parent_id: parentId, updated_by: userId, updated_at: new Date().toISOString() };
+  await updateWithOutbox(db, {
+    module: 'files',
+    table: 'folders',
+    entityId: folder.id,
+    patch,
+    baseUpdatedAt: folder.updated_at,
+    label: folder.name,
+  });
+  return { ...folder, ...patch };
+}
+
+/** File RENAME (owner feedback 2026-09-30): `name` was already mutable for whoever passes RLS. */
+export async function renameFile(db: SupabaseClient, file: FileRecord, name: string): Promise<FileRecord> {
+  const patch = { name: name.trim(), updated_at: new Date().toISOString() };
+  await updateWithOutbox(db, {
+    module: 'files',
+    table: 'files',
+    entityId: file.id,
+    patch,
+    baseUpdatedAt: file.updated_at,
+    label: patch.name,
+  });
+  return { ...file, ...patch };
+}
+
+/** File MOVE (shared migration 010 relaxed the folder_id guard). */
+export async function moveFile(db: SupabaseClient, file: FileRecord, folderId: string | null): Promise<FileRecord> {
+  const patch = { folder_id: folderId, updated_at: new Date().toISOString() };
+  await updateWithOutbox(db, {
+    module: 'files',
+    table: 'files',
+    entityId: file.id,
+    patch,
+    baseUpdatedAt: file.updated_at,
+    label: file.name,
+  });
+  return { ...file, ...patch };
+}
+
 /** Owner-only: flips `restricted` (the guard trigger rejects non-owners). */
 export async function setFolderRestricted(
   db: SupabaseClient,

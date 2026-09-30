@@ -6,6 +6,11 @@
  * where?" (current route folder preselected) → optional permission-gated
  * "New folder" that creates AND selects the folder → Upload here. Uploads
  * from a folder view stay direct (no picker).
+ *
+ * 2026-09-30 owner feedback: the picker is a LAZY tree — top level + ROOT
+ * folders only at first, expand chevrons reveal children (indented); the
+ * preselected folder's ancestors start expanded. Near-full-width paper on a
+ * phone viewport, compact rows.
  */
 import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -130,16 +135,27 @@ describe('upload from a folder view (no picker)', () => {
 });
 
 describe('upload from the global search view (destination picker)', () => {
-  it('opens the picker with the current route folder preselected and lists the whole tree indented', async () => {
+  it('opens the picker with the current route folder preselected; ROOT folders only, chevron expands children (lazy tree)', async () => {
     const { contracts } = await seed();
     mockUseMembership.mockReturnValue(membership({ permissions: perms({ upload: true }) }));
     renderScreen(contracts.id);
     await pickDuringSearch();
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(en.files.share_target.pick_folder_title)).toBeInTheDocument();
-    const options = within(dialog).getAllByRole('option');
-    expect(options.map((o) => o.textContent)).toEqual([en.files.home.root_label, 'Contracts', '2026', 'zebra']);
-    expect(within(dialog).getByRole('option', { name: 'Contracts' })).toHaveAttribute('aria-selected', 'true');
+    // Root row + root folders only — "2026" (a child of Contracts) is not listed yet.
+    const rowNames = () => within(dialog).getAllByRole('treeitem').map((o) => o.querySelector('.MuiListItemText-primary')?.textContent);
+    expect(rowNames()).toEqual([en.files.home.root_label, 'Contracts', 'zebra']);
+    expect(within(dialog).getByRole('treeitem', { name: /Contracts/ })).toHaveAttribute('aria-selected', 'true');
+    // Only the row WITH children carries a chevron.
+    expect(within(dialog).getByRole('button', { name: en.files.picker.expand.replace('{name}', 'Contracts') })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: en.files.picker.expand.replace('{name}', 'zebra') })).not.toBeInTheDocument();
+    // Expand → child appears indented under its parent; collapse hides it again.
+    fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.expand.replace('{name}', 'Contracts') }));
+    expect(rowNames()).toEqual([en.files.home.root_label, 'Contracts', '2026', 'zebra']);
+    expect(within(dialog).getByRole('treeitem', { name: /2026/ })).toHaveAttribute('aria-level', '3');
+    expect(within(dialog).getByRole('treeitem', { name: /Contracts/ })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.collapse.replace('{name}', 'Contracts') }));
+    expect(rowNames()).toEqual([en.files.home.root_label, 'Contracts', 'zebra']);
     expect(within(dialog).getByText(en.files.picker.selected_hint.replace('{path}', `${en.files.home.root_label} › Contracts`))).toBeInTheDocument();
     // Nothing uploaded yet.
     expect(mockRunUploadBatch).not.toHaveBeenCalled();
@@ -151,7 +167,8 @@ describe('upload from the global search view (destination picker)', () => {
     renderScreen();
     await pickDuringSearch();
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('option', { name: '2026' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.expand.replace('{name}', 'Contracts') }));
+    fireEvent.click(within(dialog).getByRole('treeitem', { name: /2026/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.confirm }));
     await waitFor(() => expect(mockRunUploadBatch).toHaveBeenCalledTimes(1));
     const target = mockRunUploadBatch.mock.calls[0]![1].target;
@@ -173,7 +190,7 @@ describe('upload from the global search view (destination picker)', () => {
     renderScreen();
     await pickDuringSearch();
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('option', { name: 'Contracts' }));
+    fireEvent.click(within(dialog).getByRole('treeitem', { name: /Contracts/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.action.new_folder }));
     const nameField = await screen.findByLabelText(en.files.folder.name_label);
     // Duplicate against LIVE siblings of the selected folder (case-insensitive).
@@ -192,7 +209,7 @@ describe('upload from the global search view (destination picker)', () => {
     await waitFor(() => expect(screen.queryByLabelText(en.files.folder.name_label)).not.toBeInTheDocument());
     const picker = screen.getByRole('dialog');
     expect(within(picker).getByText(en.files.share_target.pick_folder_title)).toBeInTheDocument();
-    await waitFor(() => expect(within(picker).getByRole('option', { name: 'Invoices' })).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(within(picker).getByRole('treeitem', { name: /Invoices/ })).toHaveAttribute('aria-selected', 'true'));
     expect(within(picker).getByText(en.files.picker.selected_hint.replace('{path}', `${en.files.home.root_label} › Contracts › Invoices`))).toBeInTheDocument();
 
     fireEvent.click(within(picker).getByRole('button', { name: en.files.picker.confirm }));
@@ -219,7 +236,7 @@ describe('upload from the global search view (destination picker)', () => {
     renderScreen();
     await pickDuringSearch();
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('option', { name: 'Contracts' }));
+    fireEvent.click(within(dialog).getByRole('treeitem', { name: /Contracts/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.confirm }));
     expect(await screen.findByText(en.files.upload.link_google_title)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: en.files.upload.link_google_connect }));
@@ -238,6 +255,6 @@ describe('upload from the global search view (destination picker)', () => {
     expect(within(dialog).getByText(hi.files.share_target.pick_folder_title)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: hi.files.picker.confirm })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: hi.files.action.new_folder })).toBeInTheDocument();
-    expect(within(dialog).getByRole('option', { name: hi.files.home.root_label })).toHaveAttribute('aria-selected', 'true');
+    expect(within(dialog).getByRole('treeitem', { name: hi.files.home.root_label })).toHaveAttribute('aria-selected', 'true');
   });
 });

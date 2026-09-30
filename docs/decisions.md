@@ -1030,3 +1030,12 @@ repo interprets it where the spec leaves web-specific latitude.)
      screenshots in `test-results/files-rename-move/`). Pre-existing, unrelated:
      `e2e/files.spec.ts` rail test fails hermetically since fa8c07a (`/menu`
      now redirects to sign-in without a session) — not touched here.
+  9. *Reconcile with Android (2026-09-30, cross-track parity).* The move
+     picker's validation is now LIVE, matching Android: `validateTarget` runs
+     on the CURRENT selection, the `files.move.*` error shows at once and the
+     Move button is `disabled` until a valid destination is picked (previously
+     it ran on confirm). Android in turn adopted this picker's hidden moved
+     subtree, `files.move.duplicate_folder` and the `files.move.selected_hint`
+     helper. Gating, name rules, depth/cycle guards were already identical
+     (shared `files-tab-design.md` §6 records the reconciled UX). Tests in
+     `files-rename-move` assert the disabled button + live error per case.

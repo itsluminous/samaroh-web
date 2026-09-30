@@ -255,14 +255,18 @@ describe('move file', () => {
     const names = () => within(dialog).getAllByRole('treeitem').map((o) => o.querySelector('.MuiListItemText-primary')?.textContent);
     expect(names()).toEqual([en.files.home.root_label, 'Contracts', 'zebra']);
     expect(within(dialog).getByRole('treeitem', { name: new RegExp(en.files.home.root_label) })).toHaveAttribute('aria-selected', 'true');
-    // Same place → inline error, nothing written.
+    // Same place → LIVE inline error and a disabled Move button (Android parity), nothing written.
+    expect(within(dialog).getByText(en.files.move.same_folder)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: en.files.move.confirm })).toBeDisabled();
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.move.confirm }));
-    expect(await within(dialog).findByText(en.files.move.same_folder)).toBeInTheDocument();
     expect((await guestDb.files.get(mine.id))?.folder_id ?? null).toBeNull();
     // Expand Contracts → pick 2026 → Move here.
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.expand.replace('{name}', 'Contracts') }));
     fireEvent.click(within(dialog).getByRole('treeitem', { name: /2026/ }));
     expect(within(dialog).getByText(en.files.move.selected_hint.replace('{path}', `${en.files.home.root_label} › Contracts › 2026`))).toBeInTheDocument();
+    // A valid destination clears the error and enables Move.
+    expect(within(dialog).queryByText(en.files.move.same_folder)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: en.files.move.confirm })).toBeEnabled();
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.move.confirm }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(async () => expect((await guestDb.files.get(mine.id))?.folder_id).toBe(y2026.id));
@@ -310,10 +314,11 @@ describe('move folder', () => {
     expect(names()).toEqual([en.files.home.root_label, 'Contracts', 'zebra']);
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.expand.replace('{name}', 'Contracts') }));
     expect(names()).toEqual([en.files.home.root_label, 'Contracts', 'Drafts', 'zebra']);
-    // Duplicate in the destination.
+    // Duplicate in the destination → live error, Move disabled.
     fireEvent.click(within(dialog).getByRole('treeitem', { name: /zebra/ }));
+    expect(within(dialog).getByText(en.files.move.duplicate_folder)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: en.files.move.confirm })).toBeDisabled();
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.move.confirm }));
-    expect(await within(dialog).findByText(en.files.move.duplicate_folder)).toBeInTheDocument();
     expect((await guestDb.folders.get(y2026.id))?.parent_id).toBe(contracts.id);
     // Valid: into Drafts.
     fireEvent.click(within(dialog).getByRole('treeitem', { name: /Drafts/ }));
@@ -347,8 +352,9 @@ describe('move folder', () => {
       fireEvent.click(within(dialog).getByRole('button', { name: en.files.picker.expand.replace('{name}', `D${i}`) }));
     }
     fireEvent.click(within(dialog).getByRole('treeitem', { name: /D9/ }));
+    expect(within(dialog).getByText(en.files.move.too_deep)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: en.files.move.confirm })).toBeDisabled();
     fireEvent.click(within(dialog).getByRole('button', { name: en.files.move.confirm }));
-    expect(await within(dialog).findByText(en.files.move.too_deep)).toBeInTheDocument();
     expect((await guestDb.folders.get(contracts.id))?.parent_id ?? null).toBeNull();
     // D7 (7 + 3 = 10) is fine.
     fireEvent.click(within(dialog).getByRole('treeitem', { name: /D7/ }));
@@ -372,7 +378,8 @@ describe('move folder', () => {
     expect(within(dialog).getByText(hi.files.move.title)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: hi.files.move.confirm })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: hi.files.picker.expand.replace('{name}', 'Contracts') })).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole('button', { name: hi.files.move.confirm }));
-    expect(await within(dialog).findByText(hi.files.move.same_folder)).toBeInTheDocument();
+    // Current location preselected → live Hindi same-place error, Move disabled.
+    expect(within(dialog).getByText(hi.files.move.same_folder)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: hi.files.move.confirm })).toBeDisabled();
   });
 });

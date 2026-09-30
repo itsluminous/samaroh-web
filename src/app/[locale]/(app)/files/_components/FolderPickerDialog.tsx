@@ -9,8 +9,10 @@
  *   global search results): "Save where?" → "Upload here".
  * - `mode="move"` — the kebab's "Move to…" action: "Move where?" → "Move";
  *   the moved folder's own subtree is HIDDEN from the list (it
- *   can never be its own destination) and `validateTarget` runs on confirm
- *   (cycle / depth cap / duplicate name / same place → inline error).
+ *   can never be its own destination) and `validateTarget` runs LIVE on the
+ *   current selection (cycle / depth cap / duplicate name / same place →
+ *   inline error + the confirm button disabled — Android parity, reconcile
+ *   2026-09-30).
  *
  * LAZY TREE (2026-09-30 item 2): the list opens with the top-level row and
  * the ROOT folders only; a row with subfolders carries an expand chevron
@@ -80,7 +82,7 @@ export default function FolderPickerDialog({
   initialFolderId: string | null;
   /** Move mode: the folder being moved — it and its subtree are hidden. */
   excludeFolderId?: string | null;
-  /** Move mode: runs on confirm; a non-null result is shown inline and blocks the move. */
+  /** Move mode: evaluated live for the selection; a non-null result is shown inline and disables confirm. */
   validateTarget?: (folderId: string | null) => MoveError | null;
   /** files.manage_folders (inherits upload) — hides the New folder action when false. */
   canCreateFolder: boolean;
@@ -95,14 +97,12 @@ export default function FolderPickerDialog({
   const [selected, setSelected] = useState<string | null>(initialFolderId);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const [error, setError] = useState<MoveError | null>(null);
 
   useEffect(() => {
     if (open) {
       setSelected(initialFolderId);
       setExpanded(ancestorIds(folders, initialFolderId));
       setNewFolderOpen(false);
-      setError(null);
     }
     // `folders` is intentionally not a dependency: re-fetches must not reset the user's expansion.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,15 +129,14 @@ export default function FolderPickerDialog({
     });
   };
 
-  const select = (id: string | null) => {
-    setSelected(id);
-    setError(null);
-  };
+  const select = (id: string | null) => setSelected(id);
+
+  // Live steering (Android parity): the error for the CURRENT selection is shown
+  // at once and the confirm button stays disabled until a valid destination is picked.
+  const error: MoveError | null = validateTarget ? validateTarget(selectedId) : null;
 
   const confirm = () => {
-    const problem = validateTarget ? validateTarget(selectedId) : null;
-    if (problem) {
-      setError(problem);
+    if (error) {
       return;
     }
     onConfirm(selectedId);
@@ -214,7 +213,7 @@ export default function FolderPickerDialog({
         ) : null}
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button onClick={onClose}>{tCommon('action.cancel')}</Button>
-          <Button variant="contained" onClick={confirm}>
+          <Button variant="contained" onClick={confirm} disabled={error !== null}>
             {mode === 'move' ? t('move.confirm') : t('picker.confirm')}
           </Button>
         </Box>
@@ -230,7 +229,6 @@ export default function FolderPickerDialog({
           // Reveal the new child under its (now expanded) parent and select it.
           setExpanded((prev) => (selectedId === null ? prev : new Set(prev).add(selectedId)));
           setSelected(created.id);
-          setError(null);
         }}
       />
     </Dialog>

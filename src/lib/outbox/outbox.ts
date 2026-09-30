@@ -70,6 +70,26 @@ export interface ReplayResult {
   errors: number;
   /** True when a network failure interrupted the run. */
   offline: boolean;
+  /**
+   * True when the run was skipped because the client has NO user session
+   * (Android ADR-089 parity): RLS would reject every push as `anon` (42501)
+   * and the queue would fill with misleading "errors". Items stay queued and
+   * push automatically after the next sign-in.
+   */
+  signedOut: boolean;
+}
+
+/**
+ * Whether the client carries a user session. A client without an `auth`
+ * surface (server-side helpers) is trusted as-is.
+ */
+export async function hasUserSession(db: SupabaseClient): Promise<boolean> {
+  const auth = (db as { auth?: { getSession?: () => Promise<{ data: { session: unknown } }> } }).auth;
+  if (!auth || typeof auth.getSession !== 'function') {
+    return true;
+  }
+  const { data } = await auth.getSession();
+  return Boolean(data.session);
 }
 
 let replaying = false;
@@ -124,7 +144,7 @@ export function cancelImmediateReplay(): void {
  * meant to run on reconnect, on app load and from the "Sync now" button.
  */
 export async function replayOutbox(db: SupabaseClient): Promise<ReplayResult> {
-  const result: ReplayResult = { applied: 0, conflicts: 0, errors: 0, offline: false };
+  const result: ReplayResult = { applied: 0, conflicts: 0, errors: 0, offline: false, signedOut: false };
   // Never replay into the guest-mode local client: queued items belong to a
   // signed-in session and must only ever land on the server. Replaying them
   // locally would dequeue (lose) them.
@@ -134,6 +154,12 @@ export async function replayOutbox(db: SupabaseClient): Promise<ReplayResult> {
   replaying = true;
   notifySyncState();
   try {
+    // Never replay as `anon` either (session revoked/expired mid-tab): hold
+    // the queue untouched; SessionLostBanner tells the user to sign in again.
+    if (!(await hasUserSession(db))) {
+      result.signedOut = true;
+      return result;
+    }
     const items = await outboxDb.outbox.orderBy('seq').toArray();
     for (const item of items) {
       if (item.status === 'conflict') {

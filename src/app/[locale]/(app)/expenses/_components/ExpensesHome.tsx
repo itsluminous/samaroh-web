@@ -214,16 +214,16 @@ export default function ExpensesHome() {
             sx={{ maxWidth: 420 }}
           >
             {SUMMARY_PERIODS.map((option) => (
-              <ToggleButton key={option} value={option} sx={{ whiteSpace: 'nowrap' }}>
-                {t(`summary.period_${option}`)}
+              <ToggleButton key={option} value={option} sx={{ minWidth: 0 }}>
+                <AutoShrinkText sx={{ flex: '1 1 0', textAlign: 'center' }}>{t(`summary.period_${option}`)}</AutoShrinkText>
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
         </Box>
         <Box sx={{ display: 'flex' }}>
           <Box sx={{ flex: 1, minWidth: 0, p: 2, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary" noWrap>
-              {t('home.you_gave')}
+            <Typography variant="body2" color="text.secondary">
+              <AutoShrinkText>{t('home.you_gave')}</AutoShrinkText>
             </Typography>
             <Typography variant="h6" color="error.main" data-testid="summary-gave">
               {showAmounts ? <AutoShrinkText>{formatAmount(totals.gave)}</AutoShrinkText> : <MaskedAmount />}
@@ -239,8 +239,8 @@ export default function ExpensesHome() {
               borderColor: 'divider',
             }}
           >
-            <Typography variant="body2" color="text.secondary" noWrap>
-              {t('home.you_got')}
+            <Typography variant="body2" color="text.secondary">
+              <AutoShrinkText>{t('home.you_got')}</AutoShrinkText>
             </Typography>
             <Typography variant="h6" color="success.main" data-testid="summary-got">
               {showAmounts ? <AutoShrinkText>{formatAmount(totals.got)}</AutoShrinkText> : <MaskedAmount />}

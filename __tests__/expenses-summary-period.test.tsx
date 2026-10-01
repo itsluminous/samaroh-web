@@ -219,6 +219,24 @@ describe('ExpensesHome summary period switch', () => {
     }
   });
 
+  it('renders the cell labels and the period segments single-line (shrink, never wrap or ellipsize)', async () => {
+    renderHome();
+    await waitForCard();
+    // "You gave" / "You got" labels — Android parity: autoshrink, not ellipsis.
+    for (const label of [screen.getByText(en.expenses.home.you_gave), screen.getByText(en.expenses.home.you_got)]) {
+      expect(label.tagName).toBe('SPAN');
+      expect(label).toHaveStyle({ whiteSpace: 'nowrap', overflow: 'hidden' });
+      expect(label).not.toHaveStyle({ textOverflow: 'ellipsis' });
+    }
+    // Segment labels sit in a flex-filling autoshrink span inside each button.
+    const group = screen.getByRole('group', { name: en.expenses.summary.period_label });
+    for (const button of within(group).getAllByRole('button')) {
+      const label = button.firstElementChild as HTMLElement;
+      expect(label.tagName).toBe('SPAN');
+      expect(label).toHaveStyle({ whiteSpace: 'nowrap', overflow: 'hidden', flex: '1 1 0' });
+    }
+  });
+
   it('labels the segments from the Hindi catalog', async () => {
     renderHome(hi as Messages, 'hi');
     await waitForCard();

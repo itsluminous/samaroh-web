@@ -1,6 +1,7 @@
 'use client';
 
 import Box from '@mui/material/Box';
+import type { SxProps, Theme } from '@mui/material/styles';
 import { useLayoutEffect, useRef } from 'react';
 
 /** Never shrink below this — an unreadable number is worse than a clipped one. */
@@ -26,8 +27,13 @@ export function isNumericCellText(text: string): boolean {
  * growing the viewport restores the full size, and large accessibility
  * fonts shrink relative to their own base. Labels never pass
  * {@link isNumericCellText}, so they keep wrapping normally.
+ *
+ * Also used for the Expenses home summary card (labels, amounts and the
+ * period segments — Android `AutoShrinkText` parity): pass `sx` to size the
+ * span inside a flex parent (e.g. `flex: '1 1 0'` inside a ToggleButton, so
+ * the span takes the button's content width instead of hugging its text).
  */
-export default function AutoShrinkText({ children }: { children: string }) {
+export default function AutoShrinkText({ children, sx }: { children: string; sx?: SxProps<Theme> }) {
   const ref = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
@@ -64,7 +70,10 @@ export default function AutoShrinkText({ children }: { children: string }) {
     <Box
       component="span"
       ref={ref}
-      sx={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}
+      sx={[
+        { display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 },
+        ...(Array.isArray(sx) ? sx : [sx]),
+      ]}
     >
       {children}
     </Box>

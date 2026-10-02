@@ -30,6 +30,7 @@ import {
 } from '@/lib/expenses/summaryPeriod';
 import AutoShrinkText from '@/app/[locale]/(app)/menu/_components/AutoShrinkText';
 import MaskedAmount from '@/components/MaskedAmount';
+import MetadataText from '@/components/MetadataText';
 import SortMenuButton from '@/components/SortMenuButton';
 import { formatAmount } from '@/lib/format/amount';
 import {
@@ -303,9 +304,11 @@ export default function ExpensesHome() {
                   </>
                 }
                 secondary={
-                  lastEntryAt
-                    ? format.relativeTime(new Date(lastEntryAt))
-                    : t('home.no_entries')
+                  lastEntryAt ? (
+                    <MetadataText>{format.relativeTime(new Date(lastEntryAt))}</MetadataText>
+                  ) : (
+                    t('home.no_entries')
+                  )
                 }
               />
               <Box sx={{ textAlign: 'right' }}>

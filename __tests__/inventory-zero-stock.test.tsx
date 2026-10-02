@@ -99,10 +99,13 @@ describe('CurrentStockList zero-stock rows', () => {
     const chairs = screen.getByText('Chairs').closest('li') as HTMLElement;
 
     // 0 qty + ₹0 value on both zero-stock variants (never-transacted and
-    // fully-removed); the latter keeps its updated-relative-time suffix.
+    // fully-removed); the latter keeps its updated-relative-time suffix, which
+    // renders as a separate MetadataText node (caption + monospace).
     expect(within(bowls).getByText('0 Pieces')).toBeInTheDocument();
     expect(within(bowls).getByText('\u20B90')).toBeInTheDocument();
-    expect(within(plates).getByText(/^0 Pieces · Updated/)).toBeInTheDocument();
+    const platesUpdated = within(plates).getByText(/^Updated /);
+    expect(platesUpdated).toHaveAttribute('data-metadata');
+    expect(platesUpdated.parentElement).toHaveTextContent(/^0 Pieces · Updated/);
     expect(within(plates).getByText('\u20B90')).toBeInTheDocument();
 
     // Dimmed via opacity; in-stock rows are not.

@@ -20,6 +20,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
+import MetadataText from '@/components/MetadataText';
 import SortMenuButton from '@/components/SortMenuButton';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
 import {
@@ -160,11 +161,18 @@ export default function CurrentStockList() {
           <ListItemText
             primary={row.name}
             secondary={
-              row.lastTransactionAt
-                ? `${quantityText} · ${t('stock.updated', {
-                    time: format.relativeTime(new Date(row.lastTransactionAt)),
-                  })}`
-                : quantityText
+              row.lastTransactionAt ? (
+                <>
+                  {`${quantityText} · `}
+                  <MetadataText>
+                    {t('stock.updated', {
+                      time: format.relativeTime(new Date(row.lastTransactionAt)),
+                    })}
+                  </MetadataText>
+                </>
+              ) : (
+                quantityText
+              )
             }
           />
           <Box sx={{ textAlign: 'right' }}>

@@ -1082,3 +1082,35 @@ repo interprets it where the spec leaves web-specific latitude.)
      `expenses-summary-period.spec.ts` at a 360 px phone viewport in guest
      mode (default pressed state, no segment wrap, one-line amounts, reload
      restores the choice; screenshots in `test-results/expenses-summary-period/`).
+
+- **Metadata lines are small + MONOSPACE + muted (`MetadataText`)**
+  (2026-10-02, owner feedback on the booking card: the notes and the
+  "Added by … on …" audit line read alike; web + Android in parallel).
+  Interpretations:
+  1. *Convention.* Attribution / timestamp / audit text is METADATA and renders
+     through `src/components/MetadataText` — the new theme typography variant
+     `metadata` (`src/theme/theme.ts`: caption size 0.75rem, monospace stack
+     `"Roboto Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+     monospace`, 0.02em tracking) in `text.secondary`. Android's equivalent is
+     `labelSmall` + `FontFamily.Monospace` + `onSurfaceVariant`. Content
+     (notes, names, amounts, sizes) stays body size in `text.primary` — the
+     booking card's notes moved from `body2 text.secondary` to `body2
+     text.primary` (`pre-wrap`) for exactly that contrast.
+  2. *Applied to* booking detail (`booking.card.audit_added`), expenses home
+     (party row "last entry" relative time) and party ledger (entry date above
+     the notes), Files list + grid (`files.file.added_by`, split from the size
+     label which is content), inventory stock list (`inventory.stock.updated`
+     suffix, split from the quantity) and the item transaction history's
+     date/time cell. Notes has no attribution/timestamp line on web today and
+     no shared key for one, so nothing was added there (zero hardcoded
+     strings); the checklist "+N more" hint stays a plain caption (count, not
+     metadata). Payment-history rows are records, not metadata — unchanged.
+  3. *Default element.* `span`, so a `MetadataText` can sit inside a
+     `ListItemText` secondary (`<p>`) next to content text; pass
+     `component="div"` for a standalone line. Carries `data-metadata` for tests.
+  4. *Tests.* `metadata-text` (variant class, monospace family, 0.75rem,
+     `--mui-palette-text-secondary`, distinct from adjacent body text, span
+     default); `inventory-zero-stock` updated for the split secondary;
+     Playwright `booking-detail-metadata.spec.ts` at a 360 px phone viewport
+     (audit line monospace and smaller than the notes; screenshot in
+     `test-results/booking-detail-metadata/`).

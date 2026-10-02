@@ -31,6 +31,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
+import MetadataText from '@/components/MetadataText';
 import { computeDue, computePaid } from '@/lib/booking/due';
 import { effectiveBookingColor } from '@/lib/booking/bookingColors';
 import { presetKindForType, type EventTypePreset } from '@/lib/booking/eventTypePresets';
@@ -177,8 +178,11 @@ export default function BookingDetail({
         <Typography color="text.secondary" sx={{ mt: 0.5 }}>
           {datesLine}
         </Typography>
+        {/* Notes are CONTENT: body size, text.primary — the audit line below is
+            metadata (MetadataText: caption + monospace + muted) so the two never
+            read alike (owner feedback, Android parity). */}
         {booking.notes ? (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography variant="body2" color="text.primary" sx={{ mt: 0.5, whiteSpace: 'pre-wrap' }}>
             {booking.notes}
           </Typography>
         ) : null}
@@ -221,12 +225,12 @@ export default function BookingDetail({
           </>
         )}
 
-        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1.5 }}>
+        <MetadataText component="div" sx={{ mt: 1.5 }}>
           {t('booking.card.audit_added', {
             name: addedBy,
             date: formatDate(booking.created_at.slice(0, 10), locale),
           })}
-        </Typography>
+        </MetadataText>
 
         <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}>
           {permissions.edit && !cancelled ? (

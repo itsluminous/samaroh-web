@@ -67,7 +67,8 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
-import { type ChangeEvent, type DragEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type DragEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import MetadataText from '@/components/MetadataText';
 import { useRouter } from '@/i18n/navigation';
 import { driveDeleteFileBestEffort, getDriveAccessToken, hasDriveToken, isDriveConfigured } from '@/lib/google/drive';
 import { isLocalClient } from '@/lib/guest/localClient';
@@ -545,9 +546,18 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
     return count === 0 ? t('folder.item_count_empty') : t('folder.item_count', { count });
   };
 
-  const fileSecondary = (file: FileRecord) => {
+  // Size is content; the uploader attribution is metadata (MetadataText:
+  // caption + monospace + muted) so the two read differently (Android parity).
+  const fileSecondary = (file: FileRecord): ReactNode => {
     const by = addedBy(file);
-    return by ? `${sizeLabel(file.size_bytes)} · ${by}` : sizeLabel(file.size_bytes);
+    return by ? (
+      <>
+        {`${sizeLabel(file.size_bytes)} · `}
+        <MetadataText>{by}</MetadataText>
+      </>
+    ) : (
+      sizeLabel(file.size_bytes)
+    );
   };
 
   const restrictedChip = (folder: FolderRecord) =>
@@ -580,7 +590,7 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
     </ListItem>
   );
 
-  const renderFileRow = (file: FileRecord, secondary: string) => (
+  const renderFileRow = (file: FileRecord, secondary: ReactNode) => (
     <ListItem key={`file-${file.id}`} disablePadding divider secondaryAction={kebab({ kind: 'file', file }, file.name)}>
       <ListItemButton onClick={() => openFile(file)}>
         <ListItemIcon>
@@ -628,6 +638,11 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
             <Typography variant="caption" color="text.secondary">
               {sizeLabel(file.size_bytes)}
             </Typography>
+            {addedBy(file) ? (
+              <MetadataText noWrap sx={{ maxWidth: '100%' }}>
+                {addedBy(file)}
+              </MetadataText>
+            ) : null}
           </Box>
           <Box sx={{ position: 'absolute', top: 4, right: 4 }}>{kebab({ kind: 'file', file }, file.name)}</Box>
         </Paper>

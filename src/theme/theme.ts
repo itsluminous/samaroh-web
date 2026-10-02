@@ -2,6 +2,25 @@
 
 import { createTheme } from '@mui/material/styles';
 
+/** Font stack of the `metadata` typography variant (monospace; used by MetadataText + tests). */
+export const METADATA_FONT_FAMILY =
+  '"Roboto Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
+
+declare module '@mui/material/styles' {
+  interface TypographyVariants {
+    metadata: React.CSSProperties;
+  }
+  interface TypographyVariantsOptions {
+    metadata?: React.CSSProperties;
+  }
+}
+
+declare module '@mui/material/Typography' {
+  interface TypographyPropsVariantOverrides {
+    metadata: true;
+  }
+}
+
 /**
  * Material-You-like theme built from the shared brand palette
  * (shared/brand/palette.md — seed #6750A4). Light + dark schemes; the
@@ -86,8 +105,25 @@ const theme = createTheme({
       textTransform: 'none',
       fontWeight: 600,
     },
+    // Metadata lines (attribution / timestamps / audit): caption size in a
+    // monospace family so they read as metadata, not content. Rendered via
+    // `src/components/MetadataText.tsx`; Android uses labelSmall + monospace.
+    metadata: {
+      fontFamily: METADATA_FONT_FAMILY,
+      fontSize: '0.75rem',
+      lineHeight: 1.66,
+      fontWeight: 400,
+      letterSpacing: '0.02em',
+    },
   },
   components: {
+    MuiTypography: {
+      defaultProps: {
+        variantMapping: {
+          metadata: 'span',
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {

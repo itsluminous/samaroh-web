@@ -32,6 +32,7 @@ import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
+import MetadataText from '@/components/MetadataText';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import {
@@ -350,10 +351,12 @@ export default function ItemDetail({ itemId }: ItemDetailProps) {
                 {visibleTransactions.map((txn) => (
                   <TableRow key={txn.id}>
                     <TableCell>
-                      {format.dateTime(new Date(txn.transactionDate), {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
+                      <MetadataText>
+                        {format.dateTime(new Date(txn.transactionDate), {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </MetadataText>
                     </TableCell>
                     <TableCell>
                       <Chip

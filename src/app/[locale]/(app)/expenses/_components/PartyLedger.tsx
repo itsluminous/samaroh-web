@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeLedger, computeNetBalance, type ExpenseDirection } from '@/lib/expenses/ledger';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
+import MetadataText from '@/components/MetadataText';
 import { formatAmount } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
@@ -219,11 +220,11 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
             const rowContent = (
               <>
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                <Typography variant="body2" color="text.secondary">
+                <MetadataText component="div">
                   {format.dateTime(new Date(`${record.expense_date}T00:00:00`), {
                     dateStyle: 'medium',
                   })}
-                </Typography>
+                </MetadataText>
                 {record.notes && (
                   <Typography variant="body2" sx={{ mt: 0.5 }}>
                     {record.notes}

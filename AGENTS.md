@@ -58,7 +58,7 @@ in `docs/decisions.md`.
 | `npm run build` | Production build — must pass **without** Supabase env vars |
 | `npm run legal-check` | Legal-hygiene denylist scan |
 | `npx playwright test` | Playwright e2e (chromium) — builds/starts its own prod server WITHOUT Supabase env (hermetic; see playwright.config.ts) |
-| `./scripts/gen-icons.sh` | Regenerate PWA icons from `shared/brand/logo.svg` (requires librsvg; PNGs are committed) |
+| `node scripts/gen-icons.mjs` | Regenerate ALL web icons (favicon.ico, icon.svg, PWA 192/512 + maskable, apple-touch) from `shared/brand/app-icon.svg` — the Android launcher icon artwork; outputs are committed |
 
 Full local gate (same as CI):
 `npm run gen:i18n && npm run lint && npm run type-check && npm test && npm run build && npm run legal-check`

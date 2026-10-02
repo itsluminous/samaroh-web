@@ -48,6 +48,7 @@
     "fake-indexeddb": "6.0.1",
     "jest": "30.0.5",
     "jest-environment-jsdom": "30.0.5",
+    "sharp": "0.34.5",
     "typescript": "5.9.2"
   }
 }

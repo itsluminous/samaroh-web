@@ -78,8 +78,10 @@ gate (see `.github/workflows/ci.yml`).
 
 ## PWA & offline
 
-- `public/manifest.webmanifest` + icons generated from `shared/brand/logo.svg`
-  (`scripts/gen-icons.sh`, requires librsvg; the PNGs are committed).
+- `public/manifest.webmanifest` + icons generated from `shared/brand/app-icon.svg` — the
+  canonical app icon, identical artwork to the Android launcher icon
+  (`node scripts/gen-icons.mjs`, uses the pinned `sharp` devDependency; outputs are
+  committed: favicon.ico 16/32/48, icon.svg, 192/512 PNG + maskable, apple-touch 180).
 - `public/sw.js` — hand-rolled service worker (production only): network-first
   navigations with cache fallback = **read-only offline cache**; cache-first for hashed
   build assets; Supabase calls are never intercepted.

@@ -15,7 +15,7 @@
  *  - Supabase/API requests are never cached (auth-sensitive, and reads must
  *    be as fresh as the network allows).
  */
-const VERSION = 'v1';
+const VERSION = 'v2'; // v2: app icon set replaced (launcher parity)
 const PAGE_CACHE = `samaroh-pages-${VERSION}`;
 const ASSET_CACHE = `samaroh-assets-${VERSION}`;
 

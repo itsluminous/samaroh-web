@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Samaroh APP ICON — flat composite of the Android adaptive launcher icon, exactly as a
+     launcher shows it: background colour ic_launcher_background (#6750A4) + the white
+     three-arch foreground (brand/app-icon-foreground.svg), cropped to the 72dp visible
+     window of the 108dp adaptive grid and masked to a rounded square (20% corner radius).
+     Web favicon / PWA / apple-touch icons are rendered from THIS file (samaroh-web
+     scripts/gen-icons.mjs). Keep in sync with
+     samaroh-android/app/src/main/res/drawable/ic_launcher_foreground.xml and
+     res/values/colors.xml (ic_launcher_background). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="512" height="512" role="img" aria-label="Samaroh">
+  <defs>
+    <clipPath id="mask">
+      <rect x="0" y="0" width="72" height="72" rx="14.4" ry="14.4"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#mask)">
+    <!-- adaptive-icon background layer -->
+    <rect x="0" y="0" width="72" height="72" fill="#6750A4"/>
+    <!-- adaptive-icon foreground layer: 108dp grid shifted so its centre 72dp is visible -->
+    <g transform="translate(-18 -18)">
+      <path fill="#FFFFFF" d="M47,68 L47,52 A7,7 0 0 1 61,52 L61,68 Z"/>
+      <path fill="#FFFFFF" d="M33,68 L33,57 A5,5 0 0 1 43,57 L43,68 Z"/>
+      <path fill="#FFFFFF" d="M65,68 L65,57 A5,5 0 0 1 75,57 L75,68 Z"/>
+      <path fill="#FFFFFF" d="M30,71 L78,71 L78,74 L30,74 Z"/>
+    </g>
+  </g>
+</svg>

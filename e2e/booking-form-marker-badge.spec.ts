@@ -54,8 +54,8 @@ test('guest (phone): marker options are badged, hint shows on selection', async 
 
   await listbox.getByRole('option', { name: /Lagan/ }).click();
   await expect(hint).toBeVisible();
-  // Closed field: "icon label" only — the badge is not duplicated into the input.
-  await expect(picker.locator('[data-marker-badge]')).toHaveCount(0);
+  // Closed field: badge + "icon label" while a marker is selected (Android prefix parity).
+  await expect(picker.locator('[data-marker-badge]')).toHaveCount(1);
   await expect(page.getByLabel(msg('en', 'booking.form.total_amount'))).toHaveCount(0);
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${SHOTS}/marker-selected-phone.png` });

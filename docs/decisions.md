@@ -1130,8 +1130,10 @@ repo interprets it where the spec leaves web-specific latitude.)
      part of the option's accessible name ("⭐ Lagan Marker") — never
      `aria-hidden`.
   2. *Picker.* `TextField select` options render "icon label" + badge for
-     markers; `renderValue` keeps the CLOSED field to plain "icon label" (no
-     badge duplicated into the input) and the field's `helperText` shows
+     markers; `renderValue` renders the CLOSED field as "icon label" for
+     bookable types and badge + "icon label" for a selected marker (the same
+     badge Android shows as the field prefix — reconciled for parity at
+     release v0.20.2) and the field's `helperText` shows
      `booking.event_type.marker_hint` ("Marks a date only - no amounts or
      availability conflicts") while a marker is selected — add and edit mode
      alike, cleared on switching to a bookable or the free-text custom type.

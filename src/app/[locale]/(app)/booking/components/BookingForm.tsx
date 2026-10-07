@@ -261,11 +261,24 @@ export default function BookingForm({
             helperText={isMarkerType ? t('booking.event_type.marker_hint') : undefined}
             slotProps={{
               select: {
-                // The closed field shows just "icon label" — the marker
-                // badge lives in the option list (and the hint below).
+                // The closed field shows "icon label"; when the selection is a
+                // marker type it also carries the badge (Android parity: the
+                // badge is the field's prefix there) so the chosen type reads
+                // as a date marker even with the list closed.
                 renderValue: (value) => {
                   const preset = presets.find((p) => p.id === value);
-                  return preset ? `${preset.icon} ${preset.label}` : customOptionLabel;
+                  if (!preset) return customOptionLabel;
+                  const label = `${preset.icon} ${preset.label}`;
+                  if (preset.kind !== 'marker') return label;
+                  return (
+                    <Box
+                      component="span"
+                      sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+                    >
+                      <MarkerBadge />
+                      {label}
+                    </Box>
+                  );
                 },
               },
             }}

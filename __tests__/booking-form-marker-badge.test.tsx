@@ -1,8 +1,9 @@
 /**
  * BookingForm event-type picker × marker badge (parity with Android): every
  * marker-kind option renders the flag "Marker" badge, booking-kind options
- * and the free-text custom option do not; the closed field shows just
- * "icon label" (no badge); the `booking.event_type.marker_hint` helper text
+ * and the free-text custom option do not; the closed field carries the badge
+ * too while a marker is selected (Android parity: it is the field prefix
+ * there); the `booking.event_type.marker_hint` helper text
  * appears under the field only while a marker type is selected — in both
  * locales, with zero hardcoded copy.
  */
@@ -107,13 +108,16 @@ describe('BookingForm event-type picker — marker badge', () => {
 
     fireEvent.click(optionFor(openPicker(), '\u2B50 Lagan'));
     expect(hint()).toBeInTheDocument();
-    // The closed field shows "icon label" without the badge — the hint explains it.
-    const combobox = screen.getByRole('combobox', { name: new RegExp(en.booking.form.event_type) });
-    expect(combobox).toHaveTextContent('\u2B50 Lagan');
-    expect(badgeIn(combobox)).toBeNull();
+    // The closed field shows the badge + "icon label" while a marker is selected
+    // (Android shows the same badge as the field prefix).
+    const combobox = () =>
+      screen.getByRole('combobox', { name: new RegExp(en.booking.form.event_type) });
+    expect(combobox()).toHaveTextContent('\u2B50 Lagan');
+    expect(badgeIn(combobox())).not.toBeNull();
 
     fireEvent.click(optionFor(openPicker(), '\u{1F492} Wedding'));
     expect(hint()).not.toBeInTheDocument();
+    expect(badgeIn(combobox())).toBeNull(); // bookable type: no badge in the closed field
 
     fireEvent.click(optionFor(openPicker(), `\u2728 ${en.booking.event_type.custom}`));
     expect(hint()).not.toBeInTheDocument(); // free-text custom types are real bookings

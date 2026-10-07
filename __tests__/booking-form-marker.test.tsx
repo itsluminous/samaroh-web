@@ -62,7 +62,13 @@ function renderForm({
 
 function pickType(name: string) {
   fireEvent.mouseDown(screen.getByRole('combobox', { name: en.booking.form.event_type }));
-  fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name }));
+  // Prefix match: marker options also carry the "Marker" badge in their
+  // accessible name (see booking-form-marker-badge.test.tsx).
+  fireEvent.click(
+    within(screen.getByRole('listbox')).getByRole('option', {
+      name: (n: string) => n === name || n.startsWith(`${name} `),
+    }),
+  );
 }
 
 const totalField = () => screen.queryByLabelText(new RegExp(en.booking.form.total_amount));

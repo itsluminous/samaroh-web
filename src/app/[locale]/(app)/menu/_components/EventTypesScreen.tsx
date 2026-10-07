@@ -38,6 +38,7 @@ import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import ChipRow from '@/components/ChipRow';
 import ColorSwatchPicker from '@/components/ColorSwatchPicker';
+import MarkerBadge from '@/components/MarkerBadge';
 import { findBookingColor } from '@/lib/booking/bookingColors';
 import type { EventTypeKind } from '@/lib/booking/eventTypes';
 import {
@@ -217,7 +218,7 @@ export default function EventTypesScreen() {
                             reorder/edit/delete buttons. */}
                         {preset.kind === 'marker' ? (
                           <Box sx={{ mt: 0.25 }}>
-                            <Chip size="small" variant="outlined" label={t('booking.marker.badge')} />
+                            <MarkerBadge />
                           </Box>
                         ) : null}
                       </>

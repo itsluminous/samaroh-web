@@ -27,7 +27,7 @@ test('marker badge does not overlap the row action buttons at 320px', async ({ p
     page.getByRole('heading', { name: msg('en', 'settings.event_types.title') }),
   ).toBeVisible();
 
-  const badges = page.getByText(msg('en', 'booking.marker.badge'), { exact: true });
+  const badges = page.getByText(msg('en', 'booking.event_type.marker_badge'), { exact: true });
   const badgeCount = await badges.count();
   expect(badgeCount).toBeGreaterThan(0); // seeded Lagan + Tilak markers
 

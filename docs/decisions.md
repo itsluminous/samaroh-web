@@ -1114,3 +1114,41 @@ repo interprets it where the spec leaves web-specific latitude.)
      Playwright `booking-detail-metadata.spec.ts` at a 360 px phone viewport
      (audit line monospace and smaller than the notes; screenshot in
      `test-results/booking-detail-metadata/`).
+
+- **Marker event types are badged in every CHOICE surface (`MarkerBadge`)**
+  (2026-10-07, owner feedback: in the Add/Edit booking form's event-type
+  picker a Lagan/Tilak-style marker type looked exactly like a bookable type;
+  web + Android in parallel). Interpretations:
+  1. *Shared component.* `src/components/MarkerBadge` — a small outlined MUI
+     `Chip` with an `OutlinedFlag` icon and the new shared key
+     `booking.event_type.marker_badge` ("Marker" / "सूचक"), carrying
+     `data-marker-badge` for tests. It renders next to every event type whose
+     `kind === 'marker'` wherever types are listed for choice: the booking
+     form's picker options and the event-types manage list (which previously
+     used a text-only chip with `booking.marker.badge`; the manage list keeps
+     its own-line layout and the default-colour dot). The chip is deliberately
+     part of the option's accessible name ("⭐ Lagan Marker") — never
+     `aria-hidden`.
+  2. *Picker.* `TextField select` options render "icon label" + badge for
+     markers; `renderValue` keeps the CLOSED field to plain "icon label" (no
+     badge duplicated into the input) and the field's `helperText` shows
+     `booking.event_type.marker_hint` ("Marks a date only - no amounts or
+     availability conflicts") while a marker is selected — add and edit mode
+     alike, cleared on switching to a bookable or the free-text custom type.
+     The picker had no colour dot before and still has none (the manage list
+     keeps its dot).
+  3. *Keys.* Both keys were agreed with the Android track and live in the
+     shared `booking` fragment (ADD only; `booking.marker.badge` — the
+     calendar/list entry badge — is untouched). Hindi: the picker/manage badge
+     says "सूचक" while the calendar-entry badge (`booking.marker.badge`) still
+     says "निशान"; harmonising the two is a follow-up for the shared repo.
+  4. *Tests.* Jest `booking-form-marker-badge` (badge on marker options only,
+     incl. the flag svg, none on bookable/custom; hint only while a marker is
+     selected, incl. edit mode; Hindi copy differs from English);
+     `booking-form-marker` option lookup became prefix-based because marker
+     options now carry the badge in their name; `event-types-row-layout` and
+     the 320 px Playwright spec read `booking.event_type.marker_badge`.
+     Playwright `booking-form-marker-badge.spec.ts` at a 360 px phone viewport
+     in guest mode (seeded Lagan + Tilak badged, no others; hint + hidden
+     amounts on selection; Hindi; screenshots in
+     `test-results/booking-form-marker-badge/`).

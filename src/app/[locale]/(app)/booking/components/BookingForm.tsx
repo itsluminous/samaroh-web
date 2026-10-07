@@ -19,6 +19,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import ChipRow from '@/components/ChipRow';
 import ColorSwatchPicker from '@/components/ColorSwatchPicker';
+import MarkerBadge from '@/components/MarkerBadge';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -255,12 +256,29 @@ export default function BookingForm({
             value={typeId}
             onChange={(e) => setTypeId(e.target.value)}
             fullWidth
+            // Marker-kind types (Lagan/Tilak date indicators) explain
+            // themselves right under the field: no amounts, no conflicts.
+            helperText={isMarkerType ? t('booking.event_type.marker_hint') : undefined}
+            slotProps={{
+              select: {
+                // The closed field shows just "icon label" — the marker
+                // badge lives in the option list (and the hint below).
+                renderValue: (value) => {
+                  const preset = presets.find((p) => p.id === value);
+                  return preset ? `${preset.icon} ${preset.label}` : customOptionLabel;
+                },
+              },
+            }}
           >
             {presets.map((p) => {
               const optionLabel = `${p.icon} ${p.label}`;
               return (
-                <MenuItem key={p.id} value={p.id}>
-                  {optionLabel}
+                <MenuItem key={p.id} value={p.id} sx={{ gap: 1 }}>
+                  <Box component="span" sx={{ flexGrow: 1, minWidth: 0 }}>
+                    {optionLabel}
+                  </Box>
+                  {/* Flag badge so marker types are distinguishable from bookable ones. */}
+                  {p.kind === 'marker' ? <MarkerBadge /> : null}
                 </MenuItem>
               );
             })}

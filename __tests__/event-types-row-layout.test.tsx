@@ -67,7 +67,7 @@ function renderScreen() {
 describe('EventTypesScreen row layout (marker badge vs action buttons)', () => {
   it('renders the marker badge without an absolutely-positioned secondaryAction', async () => {
     const { container } = renderScreen();
-    expect(await screen.findByText(en.booking.marker.badge)).toBeInTheDocument();
+    expect(await screen.findByText(en.booking.event_type.marker_badge)).toBeInTheDocument();
     // Regression: the old layout used ListItem secondaryAction (absolute
     // positioning), which the badge and colour dot slid under.
     expect(container.querySelector('.MuiListItemSecondaryAction-root')).toBeNull();
@@ -75,7 +75,7 @@ describe('EventTypesScreen row layout (marker badge vs action buttons)', () => {
 
   it('the badge lives inside the row text block, on its own line', async () => {
     renderScreen();
-    const badge = await screen.findByText(en.booking.marker.badge);
+    const badge = await screen.findByText(en.booking.event_type.marker_badge);
     const textRoot = badge.closest('.MuiListItemText-root');
     expect(textRoot).not.toBeNull();
     expect(textRoot).toHaveTextContent('Lagan');
@@ -91,6 +91,6 @@ describe('EventTypesScreen row layout (marker badge vs action buttons)', () => {
     await screen.findByText('Wedding');
     const weddingRow = screen.getByText('Wedding').closest('li');
     expect(weddingRow).not.toBeNull();
-    expect(weddingRow!.textContent).not.toContain(en.booking.marker.badge);
+    expect(weddingRow!.textContent).not.toContain(en.booking.event_type.marker_badge);
   });
 });

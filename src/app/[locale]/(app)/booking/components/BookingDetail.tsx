@@ -5,6 +5,7 @@
 
 import CallIcon from '@mui/icons-material/Call';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import EditIcon from '@mui/icons-material/Edit';
 import PaymentsIcon from '@mui/icons-material/Payments';
@@ -64,6 +65,7 @@ export default function BookingDetail({
   onClose,
   onEdit,
   onRecordPayment,
+  onDeletePayment,
   onRecordExpense,
   canRecordExpense = false,
   onCancelBooking,
@@ -83,6 +85,12 @@ export default function BookingDetail({
   onClose: () => void;
   onEdit: () => void;
   onRecordPayment: () => void;
+  /**
+   * Soft-deletes one recorded payment (tombstone; due recomputes). The per-row
+   * trash action is gated on booking.record_payment (owners always) and
+   * HIDDEN otherwise — never greyed.
+   */
+  onDeletePayment?: (payment: BookingPayment) => void;
   /** "Record expense" against this event (shared docs/expense-against-event.md §1). */
   onRecordExpense?: () => void;
   /** expenses.create (owners always) — the action is HIDDEN without it. */
@@ -101,10 +109,16 @@ export default function BookingDetail({
   const [invoiceMenuEl, setInvoiceMenuEl] = useState<HTMLElement | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /** Payment awaiting delete confirmation (null = dialog closed). */
+  const [deletingPayment, setDeletingPayment] = useState<BookingPayment | null>(null);
 
   const paid = computePaid(payments);
   const due = computeDue(booking.total_amount, payments);
   const cancelled = booking.status === 'cancelled';
+  // Per-row payment delete: owner or booking.record_payment (OWNER_PERMISSIONS
+  // already resolves owners to true). Hidden — not greyed — without it, and
+  // never on cancelled bookings (their financials are frozen, Android parity).
+  const canDeletePayment = permissions.record_payment && !cancelled && onDeletePayment !== undefined;
   // Marker-kind event types (Lagan/Tilak day indicators) are calendar-only:
   // the card shows NO payment status — no amounts, no payment history, no
   // record-payment or invoice actions (parity with Android).
@@ -221,13 +235,30 @@ export default function BookingDetail({
               </Typography>
             ) : (
               payments.map((p) => (
-                <Box key={p.id} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
-                  <Typography variant="body2" color="text.secondary">
+                <Box
+                  key={p.id}
+                  data-testid="payment-row"
+                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.25 }}
+                >
+                  <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1, minWidth: 0 }}>
                     {paymentLine(p)}
                   </Typography>
-                  <Typography variant="body2" fontWeight={500}>
+                  <Typography variant="body2" fontWeight={500} sx={{ whiteSpace: 'nowrap' }}>
                     {rupees(p.amount)}
                   </Typography>
+                  {canDeletePayment ? (
+                    <Tooltip title={t('booking.payment.delete')}>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        aria-label={t('booking.payment.delete')}
+                        onClick={() => setDeletingPayment(p)}
+                        sx={{ my: -0.5 }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
                 </Box>
               ))
             )}
@@ -356,6 +387,38 @@ export default function BookingDetail({
               }}
             >
               {t('booking.card.action_delete_booking')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Payment delete confirmation: amount + date in the body (masked amount
+            when view_amounts is off — the dialog is a financial figure too),
+            destructive (error) confirm. */}
+        <Dialog open={deletingPayment !== null} onClose={() => setDeletingPayment(null)}>
+          <DialogTitle>{t('booking.payment.delete_confirm_title')}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {deletingPayment
+                ? t('booking.payment.delete_confirm_body', {
+                    amount: maskAmount(formatRupees(deletingPayment.amount), showAmounts),
+                    date: formatDate(deletingPayment.paid_on, locale),
+                  })
+                : ''}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeletingPayment(null)}>{t('common.action.cancel')}</Button>
+            <Button
+              color="error"
+              onClick={() => {
+                const target = deletingPayment;
+                setDeletingPayment(null);
+                if (target) {
+                  onDeletePayment?.(target);
+                }
+              }}
+            >
+              {t('booking.payment.delete')}
             </Button>
           </DialogActions>
         </Dialog>

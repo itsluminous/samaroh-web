@@ -31,6 +31,7 @@ import {
   createBooking,
   createDateBlock,
   deleteBooking,
+  deletePayment,
   ensureInvoiceNumber,
   fetchBookingById,
   fetchBusinessContext,
@@ -45,7 +46,7 @@ import {
   type BusinessContext,
   type MonthData,
 } from '@/lib/booking/repo';
-import type { Booking, PaymentMethod } from '@/lib/booking/types';
+import type { Booking, BookingPayment, PaymentMethod } from '@/lib/booking/types';
 import {
   fallbackPresets,
   fetchEventTypes,
@@ -355,6 +356,19 @@ export default function BookingScreen() {
     reloadBoth();
   }
 
+  /**
+   * Soft-deletes one payment (tombstone through the offline-aware data layer);
+   * the reload recomputes the due from the remaining live payments.
+   */
+  async function handleDeletePayment(payment: BookingPayment) {
+    if (!db || !ctx || !detailBooking) {
+      return;
+    }
+    await deletePayment(db, detailBooking, payment);
+    setSnack(t('booking.payment.deleted'));
+    reloadBoth();
+  }
+
   async function handleCancelBooking() {
     if (!db || !ctx || !detailBooking) {
       return;
@@ -584,6 +598,7 @@ export default function BookingScreen() {
           onClose={() => setDetailId(null)}
           onEdit={() => setForm({ mode: 'edit', booking: detailBooking, initialDate: null })}
           onRecordPayment={() => setPayFor(detailBooking)}
+          onDeletePayment={handleDeletePayment}
           canRecordExpense={ctx.expensePermissions.create}
           onRecordExpense={() => setExpenseFor(detailBooking)}
           onCancelBooking={handleCancelBooking}

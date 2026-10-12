@@ -1357,3 +1357,51 @@ repo interprets it where the spec leaves web-specific latitude.)
      Playwright `reports-range-filter.spec.ts` at a 360 px phone viewport in
      guest mode (order, single line, −12 months pressed by default, tap +3
      months; screenshots in `test-results/reports-range-filter/`).
+
+- **Delete a recorded payment — per-row trash, confirm, tombstone**
+  (2026-10-13, owner feedback; shared strings
+  `booking.payment.delete{,_confirm_title,_confirm_body,ed}` @ d8146b0; web +
+  Android in parallel). Interpretations:
+  1. *Surface.* Every row of the card's payment history (`data-testid`
+     `payment-row`) gets a trash `IconButton` (`aria-label` + Tooltip =
+     `booking.payment.delete`, error tone). Gate = `booking.record_payment`
+     (owners resolve to true via `OWNER_PERMISSIONS`) AND the booking is not
+     cancelled (a cancelled card's financials are frozen — no record/invoice
+     either) AND the host wired `onDeletePayment`. Without the gate the button
+     is ABSENT — hide, never grey (permission-sweep rule).
+  2. *Flow.* Tap → `Dialog` titled `booking.payment.delete_confirm_title`,
+     body `booking.payment.delete_confirm_body` with `{amount}` (Indian
+     grouping; masked `₹•••` when `view_amounts` is false — the dialog is a
+     financial figure too) and `{date}` (card date format); confirm button is
+     `color="error"` labelled `booking.payment.delete`; Cancel never deletes.
+     Confirm → `deletePayment` → snackbar `booking.payment.deleted` →
+     `reloadBoth()`; the due is NEVER stored, so it recomputes from the
+     remaining live payments on reload (`computeDue` filters `deleted_at`).
+  3. *Write path.* `repo.deletePayment` = `updateWithOutbox` on
+     `booking_payments` with `{deleted_at, updated_at}` (soft delete, never a
+     hard delete; outbox op `delete`; `baseUpdatedAt: null` — the client type
+     carries no `updated_at`, so replay applies the tombstone blindly, which
+     is the right LWW outcome for a removal). Guest mode lands in Dexie via
+     the local client's `update().eq('id')`. Reports
+     (`fetchBookingsWithPayments`, `fetchPaymentsInRange`), the month summary
+     and `buildInvoiceData` already filter `deleted_at IS NULL` — deleted
+     payments vanish from totals, PDFs and CSVs with no further change.
+  4. **RLS finding (server, shared `002_rls.sql`).** `booking_payments_update`
+     is `using/with check has_perm(business_id,'booking','edit')` while INSERT
+     is `record_payment`. A member holding `record_payment` WITHOUT `edit`
+     therefore passes the UI gate but gets the UPDATE rejected (the outbox
+     surfaces it as an `error` item). Owners and `edit` holders are
+     unaffected. The Android track owns shared migration **013** aligning the
+     UPDATE policy to `record_payment OR edit`; this repo does not duplicate
+     it — deploy 013 before relying on member deletes.
+  5. *Tests.* `booking-payment-delete` (gating matrix: owner / record_payment
+     member / edit+delete member hidden / cancelled hidden / no handler / no
+     payments; dialog title + interpolated amount & date + error confirm +
+     correct payment passed + dismiss + masked amount; due recomputation;
+     online repo tombstone by id, never `.delete()`; guest Dexie end-to-end
+     with `fetchPaymentsByBooking` and due 50k → 70k; offline outbox `delete`
+     op). Playwright `booking-payment-delete.spec.ts` at a 360 px phone
+     viewport in guest mode (advance 30k on a 1L booking → trash → dialog
+     quotes 30,000 → cancel keeps → confirm → row gone, "No payments", due
+     1,00,000, snackbar; survives reload; screenshots in
+     `test-results/booking-payment-delete/`).

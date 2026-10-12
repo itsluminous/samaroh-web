@@ -363,6 +363,30 @@ export async function recordPayment(
   });
 }
 
+/**
+ * Deletes a recorded payment = soft-delete tombstone (shared convention:
+ * never hard-delete). Every payment read and every due/report/invoice sum
+ * filters `deleted_at IS NULL`, so the due recomputes on the next load.
+ * Goes through the offline-aware data layer like every other write (guest
+ * mode lands in Dexie, offline queues an outbox `delete` op).
+ *
+ * Server gate: `booking_payments_update` RLS (002_rls.sql) currently requires
+ * `booking.edit`; the UI gate is `booking.record_payment` (owners always) —
+ * see docs/decisions.md (migration 013 aligns the policy).
+ */
+export async function deletePayment(db: SupabaseClient, booking: Booking, payment: BookingPayment): Promise<void> {
+  const now = new Date().toISOString();
+  await updateWithOutbox(db, {
+    module: 'booking',
+    table: 'booking_payments',
+    entityId: payment.id,
+    patch: { deleted_at: now, updated_at: now },
+    // booking_payments carries no updated_at in the client type — replay applies the tombstone blindly.
+    baseUpdatedAt: null,
+    label: booking.customer_name,
+  });
+}
+
 export async function createDateBlock(
   db: SupabaseClient,
   businessId: string,

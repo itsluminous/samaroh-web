@@ -145,8 +145,11 @@ describe('payment delete confirmation dialog', () => {
     expect(body.textContent).not.toContain('{amount}');
     expect(onDeletePayment).not.toHaveBeenCalled();
 
-    const confirm = within(dialog).getByRole('button', { name: DELETE_LABEL });
+    // Confirm reads "Delete" (common.action.delete) — Android parity; the row
+    // tooltip "Delete payment" never appears inside the dialog.
+    const confirm = within(dialog).getByRole('button', { name: en.common.action.delete });
     expect(confirm).toHaveClass('MuiButton-colorError');
+    expect(within(dialog).queryByRole('button', { name: DELETE_LABEL })).toBeNull();
     fireEvent.click(confirm);
     expect(onDeletePayment).toHaveBeenCalledTimes(1);
     expect(onDeletePayment.mock.calls[0]?.[0]?.id).toBe('pay-b');

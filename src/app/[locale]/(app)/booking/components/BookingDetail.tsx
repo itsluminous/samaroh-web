@@ -393,7 +393,8 @@ export default function BookingDetail({
 
         {/* Payment delete confirmation: amount + date in the body (masked amount
             when view_amounts is off — the dialog is a financial figure too),
-            destructive (error) confirm. */}
+            destructive (error) confirm labelled common.action.delete — the same
+            words as the Android AlertDialog (ADR-105), not the row's tooltip. */}
         <Dialog open={deletingPayment !== null} onClose={() => setDeletingPayment(null)}>
           <DialogTitle>{t('booking.payment.delete_confirm_title')}</DialogTitle>
           <DialogContent>
@@ -418,7 +419,7 @@ export default function BookingDetail({
                 }
               }}
             >
-              {t('booking.payment.delete')}
+              {t('common.action.delete')}
             </Button>
           </DialogActions>
         </Dialog>

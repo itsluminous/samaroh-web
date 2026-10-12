@@ -61,7 +61,7 @@ test('guest (phone): record → delete → confirm → payment gone, due recompu
 
   // Confirm: row gone, due back to the full total, snackbar.
   await trash.click();
-  await dialog.getByRole('button', { name: msg('en', 'booking.payment.delete') }).click();
+  await dialog.getByRole('button', { name: msg('en', 'common.action.delete'), exact: true }).click();
   await expect(page.getByText(msg('en', 'booking.payment.deleted'))).toBeVisible();
   await expect(rows).toHaveCount(0);
   await expect(drawer.getByText(msg('en', 'booking.card.no_payments'))).toBeVisible();

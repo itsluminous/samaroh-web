@@ -1373,7 +1373,9 @@ repo interprets it where the spec leaves web-specific latitude.)
      body `booking.payment.delete_confirm_body` with `{amount}` (Indian
      grouping; masked `₹•••` when `view_amounts` is false — the dialog is a
      financial figure too) and `{date}` (card date format); confirm button is
-     `color="error"` labelled `booking.payment.delete`; Cancel never deletes.
+     `color="error"` labelled `common.action.delete` ("Delete" — the same words
+     as the Android AlertDialog, ADR-105; the row tooltip `booking.payment.delete`
+     stays on the trash icon only); Cancel never deletes.
      Confirm → `deletePayment` → snackbar `booking.payment.deleted` →
      `reloadBoth()`; the due is NEVER stored, so it recomputes from the
      remaining live payments on reload (`computeDue` filters `deleted_at`).
@@ -1393,7 +1395,10 @@ repo interprets it where the spec leaves web-specific latitude.)
      surfaces it as an `error` item). Owners and `edit` holders are
      unaffected. The Android track owns shared migration **013** aligning the
      UPDATE policy to `record_payment OR edit`; this repo does not duplicate
-     it — deploy 013 before relying on member deletes.
+     it — deploy 013 before relying on member deletes. *(Reconcile 2026-10-13:
+     shared `477822f` ships `013_payment_tombstone_by_recorder.sql` — one
+     additive permissive UPDATE policy scoped to the live → tombstoned
+     transition for `record_payment` holders; the submodule is bumped to it.)*
   5. *Tests.* `booking-payment-delete` (gating matrix: owner / record_payment
      member / edit+delete member hidden / cancelled hidden / no handler / no
      payments; dialog title + interpolated amount & date + error confirm +

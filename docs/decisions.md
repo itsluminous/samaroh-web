@@ -1177,9 +1177,14 @@ repo interprets it where the spec leaves web-specific latitude.)
   3. *Header.* `InvoiceData.businessType` is REMOVED (not just unrendered) so
      no renderer can print it by accident; `businesses.business_type` is
      untouched in the schema/profile. Address/owner lines are skipped when
-     blank. The logo (56×56, 8 pt radius, flush with left+top margins, text
-     12 pt to its right; no logo → text at the margin) was already drawn so;
-     tests now pin the geometry.
+     blank. The logo (56×56, flush with left+top margins, text 12 pt to its
+     right; no logo → text at the margin) was already drawn so; tests pin the
+     geometry. **Correction (2026-10-13 reconcile):** the 8 pt corner radius
+     the spec requires was NOT applied on web (Android clips with a rounded
+     path; web drew the square PNG). `renderInvoicePdf` now wraps `drawImage`
+     in `q … Q` with a rounded-rect clip (`roundedRectClip`, cubic-Bézier
+     corners, `W n`) so both PDFs show the identical tile; tests assert the
+     clip operators and their order around the image.
   4. *Display number.* ONE pure helper `displayInvoiceNumber(stored, prefix)`
      (`src/lib/invoice/number.ts`): `^[0-9]+$` → `{prefix}-{n:04d}`
      (`88` → `INV-0088`, `0088` → `INV-0088`, `12345` → `INV-12345`), else

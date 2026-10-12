@@ -3,10 +3,10 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PDFDocument, PDFPage } from 'pdf-lib';
+import { PDFDocument, PDFPage, type PDFOperator } from 'pdf-lib';
 import hi from '../messages/hi.json';
 import en from '../messages/en.json';
-import { renderInvoicePdf, stripEmoji, wrapText } from '@/lib/invoice/pdf';
+import { renderInvoicePdf, roundedRectClip, stripEmoji, wrapText } from '@/lib/invoice/pdf';
 import type { InvoiceData, InvoiceLabels } from '@/lib/invoice/types';
 
 const fonts = {
@@ -229,6 +229,7 @@ describe('invoice layout 2026-10-12 change set', () => {
     const png = readFileSync(join(process.cwd(), 'public/icons/icon-192.png'));
     const imgSpy = jest.spyOn(PDFPage.prototype, 'drawImage');
     const textSpy = jest.spyOn(PDFPage.prototype, 'drawText');
+    const opsSpy = jest.spyOn(PDFPage.prototype, 'pushOperators');
     try {
       await renderInvoicePdf({ ...data, logoPng: new Uint8Array(png) }, labelsFrom(en), 'en', fonts);
       expect(imgSpy).toHaveBeenCalledTimes(1);
@@ -236,9 +237,46 @@ describe('invoice layout 2026-10-12 change set', () => {
       expect(opts).toMatchObject({ x: 40, y: 842 - 40 - 56, width: 56, height: 56 });
       const name = textSpy.mock.calls.find((c) => c[0] === 'Shree Ganesh Hall');
       expect((name?.[1] as { x: number }).x).toBe(40 + 56 + 12);
+      // Rounded 8 pt corners (layout-spec): the image is drawn inside a saved
+      // graphics state whose clip is the 56×56 rounded rect at the logo's
+      // position — the same tile Android's renderer clips to.
+      const serialise = (ops: PDFOperator[]) => ops.map((o) => o.toString()).join('\n');
+      const pushed = opsSpy.mock.calls.map((c) => serialise(c as PDFOperator[]));
+      const expectedClip = serialise(roundedRectClip(40, 842 - 40 - 56, 56, 56, 8));
+      const clipCall = pushed.findIndex((s) => s.startsWith('q\n') && s.endsWith(expectedClip));
+      expect(clipCall).toBeGreaterThanOrEqual(0);
+      expect(pushed[clipCall + 1]).toBe('Q');
+      // The clip is in effect while the image is drawn (operator order: clip, image, restore).
+      const order = [...imgSpy.mock.invocationCallOrder, ...opsSpy.mock.invocationCallOrder].sort((a, b) => a - b);
+      const clipAt = opsSpy.mock.invocationCallOrder[clipCall] ?? -1;
+      const restoreAt = opsSpy.mock.invocationCallOrder[clipCall + 1] ?? -1;
+      const imageAt = imgSpy.mock.invocationCallOrder[0] ?? -1;
+      expect(order.indexOf(clipAt)).toBeLessThan(order.indexOf(imageAt));
+      expect(order.indexOf(imageAt)).toBeLessThan(order.indexOf(restoreAt));
     } finally {
       imgSpy.mockRestore();
       textSpy.mockRestore();
+      opsSpy.mockRestore();
+    }
+  }, 30000);
+
+  it('roundedRectClip traces a closed rounded rectangle and ends with a clip (W n)', () => {
+    const ops = roundedRectClip(40, 746, 56, 56, 8).map((o) => o.toString());
+    expect(ops[0]).toBe('48 746 m'); // starts after the first corner radius
+    expect(ops.filter((o) => o.endsWith(' c'))).toHaveLength(4); // four quarter-circle corners
+    expect(ops.slice(-3)).toEqual(['h', 'W', 'n']);
+  });
+
+  it('without a logo nothing is clipped and no image is drawn', async () => {
+    const imgSpy = jest.spyOn(PDFPage.prototype, 'drawImage');
+    const opsSpy = jest.spyOn(PDFPage.prototype, 'pushOperators');
+    try {
+      await renderInvoicePdf(data, labelsFrom(en), 'en', fonts);
+      expect(imgSpy).not.toHaveBeenCalled();
+      expect(opsSpy.mock.calls.some((c) => (c as PDFOperator[]).some((o) => o.toString() === 'W'))).toBe(false);
+    } finally {
+      imgSpy.mockRestore();
+      opsSpy.mockRestore();
     }
   }, 30000);
 

@@ -8,7 +8,22 @@
 // browser bundle — import it before fontkit is used.
 import 'regenerator-runtime/runtime';
 import fontkit from '@pdf-lib/fontkit';
-import { PDFDocument, PDFFont, PDFPage, rgb, type RGB } from 'pdf-lib';
+import {
+  PDFDocument,
+  PDFFont,
+  PDFPage,
+  appendBezierCurve,
+  clip,
+  closePath,
+  endPath,
+  lineTo,
+  moveTo,
+  popGraphicsState,
+  pushGraphicsState,
+  rgb,
+  type PDFOperator,
+  type RGB,
+} from 'pdf-lib';
 import { formatDate, formatDateRange, formatTime } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { InvoiceData, InvoiceLabels } from './types';
@@ -67,6 +82,35 @@ function roundedRectPath(w: number, h: number, r: number): string {
     `Q 0,0 ${r},0`,
     'Z',
   ].join(' ');
+}
+
+// Header logo tile (layout-spec § Header band): 56 × 56 pt, 8 pt corner radius.
+const LOGO_SIZE = 56;
+const LOGO_RADIUS = 8;
+
+/**
+ * Content-stream operators that clip subsequent drawing to a rounded rectangle
+ * in PDF user space (origin bottom-left, `y` grows upward). Wrap in
+ * `pushGraphicsState()` … `popGraphicsState()` so the clip does not leak.
+ * Exported for the layout tests; the quarter circles use the standard cubic
+ * Bézier approximation (κ ≈ 0.5523).
+ */
+export function roundedRectClip(x: number, y: number, w: number, h: number, r: number): PDFOperator[] {
+  const k = 0.5523 * r;
+  return [
+    moveTo(x + r, y),
+    lineTo(x + w - r, y),
+    appendBezierCurve(x + w - r + k, y, x + w, y + r - k, x + w, y + r),
+    lineTo(x + w, y + h - r),
+    appendBezierCurve(x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h),
+    lineTo(x + r, y + h),
+    appendBezierCurve(x + r - k, y + h, x, y + h - r + k, x, y + h - r),
+    lineTo(x, y + r),
+    appendBezierCurve(x, y + r - k, x + r - k, y, x + r, y),
+    closePath(),
+    clip(),
+    endPath(),
+  ];
 }
 
 interface Ctx {
@@ -183,8 +227,12 @@ export async function renderInvoicePdf(
   let textX = MARGIN;
   if (data.logoPng) {
     const logo = await doc.embedPng(data.logoPng);
-    page.drawImage(logo, { x: MARGIN, y: PAGE_H - MARGIN - 56, width: 56, height: 56 });
-    textX = MARGIN + 56 + 12;
+    // Rounded 8 pt corners (layout-spec § Header band) — same clip Android's
+    // PdfInvoiceRenderer applies, so both PDFs show the identical logo tile.
+    page.pushOperators(pushGraphicsState(), ...roundedRectClip(MARGIN, PAGE_H - MARGIN - LOGO_SIZE, LOGO_SIZE, LOGO_SIZE, LOGO_RADIUS));
+    page.drawImage(logo, { x: MARGIN, y: PAGE_H - MARGIN - LOGO_SIZE, width: LOGO_SIZE, height: LOGO_SIZE });
+    page.pushOperators(popGraphicsState());
+    textX = MARGIN + LOGO_SIZE + 12;
   }
   drawText(ctx, data.businessName, { x: textX, size: 20, bold: true });
   let leftY = ctx.y + 26;
@@ -205,7 +253,7 @@ export async function renderInvoicePdf(
     color: GREY,
     rightAlignAt: RIGHT,
   });
-  const bandBottom = Math.max(leftY, ctx.y + 49, data.logoPng ? MARGIN + 56 : 0) + 8;
+  const bandBottom = Math.max(leftY, ctx.y + 49, data.logoPng ? MARGIN + LOGO_SIZE : 0) + 8;
   drawRule(ctx, bandBottom);
   ctx.y = bandBottom + 16;
 

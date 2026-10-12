@@ -3,6 +3,7 @@
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import EditIcon from '@mui/icons-material/Edit';
+import EventIcon from '@mui/icons-material/Event';
 import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -18,18 +19,22 @@ import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { chipLabelFromNotes, eventChipLabel } from '@/lib/expenses/bookingExpense';
 import { computeLedger, computeNetBalance, type ExpenseDirection } from '@/lib/expenses/ledger';
+import { eventTypeLabel } from '@/lib/invoice/client';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import MetadataText from '@/components/MetadataText';
 import { formatAmount } from '@/lib/format/amount';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
 import {
+  fetchLinkedBookings,
   fetchParty,
   fetchPartyExpenses,
   PARTY_DELETED_NOTICE_KEY,
   updatePartyBusinessRelated,
   type ExpenseRecord,
+  type LinkedBooking,
   type PartyRecord,
 } from '../_lib/queries';
 import BusinessRelatedPill from './BusinessRelatedPill';
@@ -43,6 +48,7 @@ import EntryDialog from './EntryDialog';
 export default function PartyLedger({ partyId }: { partyId: string }) {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
+  const tRoot = useTranslations();
   const format = useFormatter();
   const router = useRouter();
   const {
@@ -64,9 +70,13 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   // expenses.view_amounts (absent = true): false masks the net balance,
   // running-balance chips and entry amounts as ₹•••.
   const showAmounts = isOwner || permissions.expenses.view_amounts;
+  // booking.view gates the event chip's TAP (the chip itself always shows).
+  const canViewBooking = isOwner || permissions.booking.view;
 
   const [party, setParty] = useState<PartyRecord | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  // Live bookings behind the entries' booking_id links (event chips).
+  const [linkedBookings, setLinkedBookings] = useState<Record<string, LinkedBooking>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [dialogDirection, setDialogDirection] = useState<ExpenseDirection>('paid');
@@ -86,6 +96,12 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
       ]);
       setParty(partyRow);
       setExpenses(expenseRows);
+      setLinkedBookings(
+        await fetchLinkedBookings(
+          supabase,
+          expenseRows.map((e) => e.booking_id).filter((id): id is string => id !== null),
+        ),
+      );
     } catch {
       setLoadError(true);
     } finally {
@@ -139,6 +155,26 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
     setDialogDirection(record.direction);
     setDialogEntry(record);
     setDialogOpen(true);
+  };
+
+  /**
+   * Event chip label (contract §3): `{firstName} · {eventType}` from the
+   * resolved booking; unresolvable booking → the first segment of the notes
+   * if they still carry the default shape; else no chip. Never a raw id.
+   */
+  const eventChip = (record: ExpenseRecord): { label: string; bookingId: string | null } | null => {
+    if (!record.booking_id) {
+      return null;
+    }
+    const booking = linkedBookings[record.booking_id];
+    if (booking) {
+      return {
+        label: eventChipLabel(booking, eventTypeLabel(booking, tRoot)),
+        bookingId: booking.id,
+      };
+    }
+    const fallback = chipLabelFromNotes(record.notes);
+    return fallback ? { label: fallback, bookingId: null } : null;
   };
 
   if (businessLoading || loading) {
@@ -217,6 +253,8 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
       ) : (
         <List disablePadding>
           {ledgerRows.map(({ record, balanceAfter }) => {
+            const chip = eventChip(record);
+            const chipClickable = chip !== null && chip.bookingId !== null && canViewBooking;
             const rowContent = (
               <>
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -230,6 +268,31 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                     {record.notes}
                   </Typography>
                 )}
+                {chip ? (
+                  // Content chip (NOT MetadataText): links the entry to its event.
+                  // Tap opens the booking's detail on the Booking page (booking.view);
+                  // without the permission or a resolvable booking it is inert.
+                  <Box sx={{ mt: 0.5 }}>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                      icon={<EventIcon />}
+                      data-event-chip
+                      label={t('ledger.event_chip', { label: chip.label })}
+                      clickable={chipClickable}
+                      onClick={
+                        chipClickable
+                          ? (event) => {
+                              // The row itself is the edit affordance.
+                              event.stopPropagation();
+                              router.push(`/booking?open=${chip.bookingId}`);
+                            }
+                          : undefined
+                      }
+                    />
+                  </Box>
+                ) : null}
                 {record.expense_attachments.length > 0 && (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                     {record.expense_attachments.map((attachment) =>

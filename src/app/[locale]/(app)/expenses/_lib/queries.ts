@@ -5,6 +5,12 @@
  * server trigger. RLS scopes every query to the caller's business membership.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Booking } from '@/lib/booking/types';
+import {
+  matchLiveParty,
+  newPartyFromBooking,
+  PartyCreateForbiddenError,
+} from '@/lib/expenses/bookingExpense';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
 import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
 
@@ -47,8 +53,22 @@ export interface ExpenseRecord {
   amount: number;
   expense_date: string;
   notes: string | null;
+  /**
+   * Linked booking when the entry was recorded against an event (shared
+   * migration 012, `on delete set null`); null for plain ledger entries and
+   * for rows read from a server that lags the migration.
+   */
+  booking_id: string | null;
   created_at: string;
   expense_attachments: ExpenseAttachmentRecord[];
+}
+
+/** Explicit expense column list — keep in lockstep with ExpenseRecord. */
+const EXPENSE_COLUMNS = 'id, party_id, direction, amount, expense_date, notes, booking_id, created_at';
+
+/** Coalesces an absent booking_id (pre-012 server / older guest rows) to null. */
+function normalizeExpense<T extends { booking_id?: string | null }>(row: T): T & { booking_id: string | null } {
+  return { ...row, booking_id: row.booking_id ?? null };
 }
 
 /**
@@ -100,14 +120,14 @@ export async function fetchBusinessExpenses(
 ): Promise<ExpenseRecord[]> {
   const { data, error } = await supabase
     .from('expenses')
-    .select('id, party_id, direction, amount, expense_date, notes, created_at')
+    .select(EXPENSE_COLUMNS)
     .eq('business_id', businessId)
     .is('deleted_at', null);
   if (error) {
     throw new Error(error.message);
   }
   return ((data ?? []) as Omit<ExpenseRecord, 'expense_attachments'>[]).map((row) => ({
-    ...row,
+    ...normalizeExpense(row),
     expense_attachments: [],
   }));
 }
@@ -120,7 +140,7 @@ export async function fetchPartyExpenses(
   const { data, error } = await supabase
     .from('expenses')
     .select(
-      'id, party_id, direction, amount, expense_date, notes, created_at, expense_attachments(id, expense_id, drive_file_id, mime_type, file_name, deleted_at)',
+      `${EXPENSE_COLUMNS}, expense_attachments(id, expense_id, drive_file_id, mime_type, file_name, deleted_at)`,
     )
     .eq('party_id', partyId)
     .is('deleted_at', null);
@@ -128,9 +148,71 @@ export async function fetchPartyExpenses(
     throw new Error(error.message);
   }
   return ((data ?? []) as ExpenseRecord[]).map((row) => ({
-    ...row,
+    ...normalizeExpense(row),
     expense_attachments: (row.expense_attachments ?? []).filter((a) => a.deleted_at === null),
   }));
+}
+
+/** The booking fields the party-ledger event chip needs. */
+export type LinkedBooking = Pick<
+  Booking,
+  'id' | 'customer_name' | 'event_type' | 'event_icon' | 'status' | 'start_date' | 'end_date' | 'deleted_at'
+>;
+
+/**
+ * Live bookings behind the ledger's `booking_id` links, keyed by id. Missing
+ * ids (tombstoned, not pulled yet) are simply absent — the chip then falls
+ * back to the notes label (contract §3). Never throws: a failed lookup must
+ * not break the ledger, so it degrades to "no bookings resolved".
+ */
+export async function fetchLinkedBookings(
+  supabase: SupabaseClient,
+  bookingIds: readonly string[],
+): Promise<Record<string, LinkedBooking>> {
+  const ids = Array.from(new Set(bookingIds));
+  if (ids.length === 0) {
+    return {};
+  }
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, customer_name, event_type, event_icon, status, start_date, end_date, deleted_at')
+    .in('id', ids)
+    .is('deleted_at', null);
+  if (error) {
+    return {};
+  }
+  const out: Record<string, LinkedBooking> = {};
+  for (const row of (data ?? []) as LinkedBooking[]) {
+    out[row.id] = row;
+  }
+  return out;
+}
+
+/**
+ * Contract §2 — the booking's customer as a party, resolved at SAVE time:
+ * 1. a LIVE party whose `lower(trim(name))` equals the customer name
+ *    (several → earliest created_at);
+ * 2. else CREATE `{name, phone, business_related = false}` — requires
+ *    `expenses.manage_parties`; without it throws
+ *    {@link PartyCreateForbiddenError} BEFORE any insert.
+ * Phone is never back-filled onto an existing party.
+ */
+export async function resolveBookingParty(
+  supabase: SupabaseClient,
+  businessId: string,
+  booking: Pick<Booking, 'customer_name' | 'customer_phone'>,
+  canManageParties: boolean,
+): Promise<PartyRecord> {
+  const live = await fetchParties(supabase, businessId);
+  const existing = matchLiveParty(live, booking.customer_name);
+  if (existing) {
+    return existing;
+  }
+  const fresh = newPartyFromBooking(booking);
+  if (!canManageParties) {
+    throw new PartyCreateForbiddenError(fresh.name);
+  }
+  return createParty(supabase, businessId, fresh.name, fresh.phone, fresh.businessRelated);
 }
 
 export async function createParty(
@@ -261,6 +343,8 @@ export interface ExpenseInput {
   amount: number;
   expenseDate: string;
   notes: string | null;
+  /** Event link (migration 012). Absent/undefined = plain ledger entry (null on the wire). */
+  bookingId?: string | null;
 }
 
 // NOTE: no attachment-create path on web. Bill files are uploaded to Google
@@ -289,6 +373,9 @@ export async function createExpense(
       amount: input.amount,
       expense_date: input.expenseDate,
       notes: input.notes,
+      // Always on the wire (null for plain entries) — the server column must
+      // exist first (owner applies shared migration 012 before this build ships).
+      booking_id: input.bookingId ?? null,
       created_by: userId,
     },
     // The ledger entry itself is the label (amount is formatted at display time).

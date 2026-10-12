@@ -10,23 +10,45 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
+import type { Booking } from '@/lib/booking/types';
+import { PartyCreateForbiddenError } from '@/lib/expenses/bookingExpense';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
 import { parseAmount } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import {
   createExpense,
   deleteExpense,
+  resolveBookingParty,
   updateExpense,
   type ExpenseRecord,
 } from '../_lib/queries';
 
+/**
+ * "Record expense against an event" pre-fill (shared
+ * docs/expense-against-event.md §1): the party is the booking's customer,
+ * resolved or created on SAVE (never on open), the notes default to
+ * `{eventType} · {dates}` and the row carries `booking_id`.
+ */
+export interface BookingPrefill {
+  booking: Booking;
+  /** Already-localized `expenses.entry.booking_notes_default` value. */
+  notesDefault: string;
+  /** expenses.manage_parties — creating a missing party needs it (RLS parties_insert). */
+  canManageParties: boolean;
+}
+
 interface EntryDialogProps {
   open: boolean;
-  partyId: string;
+  /** Ledger party; null ONLY in booking-prefill mode (resolved on save). */
+  partyId: string | null;
   direction: ExpenseDirection;
+  /** Present when opened from a booking card — see {@link BookingPrefill}. */
+  bookingPrefill?: BookingPrefill | null;
   /** Present when editing an existing entry. */
   entry: ExpenseRecord | null;
   /** expenses.delete — hides the tombstone-delete affordance when absent. */
@@ -54,7 +76,8 @@ function todayIsoDate(): string {
 export default function EntryDialog({
   open,
   partyId,
-  direction,
+  direction: initialDirection,
+  bookingPrefill = null,
   entry,
   canDelete,
   onClose,
@@ -62,14 +85,19 @@ export default function EntryDialog({
 }: EntryDialogProps) {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
+  const tRoot = useTranslations();
   const { supabase, businessId, userId } = useBusiness();
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayIsoDate());
   const [notes, setNotes] = useState('');
+  // Booking mode keeps the direction editable (contract: "the switch stays
+  // editable"); the plain ledger dialog is opened per direction and keeps it.
+  const [direction, setDirection] = useState<ExpenseDirection>(initialDirection);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState(false);
+  const [partyError, setPartyError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -79,13 +107,15 @@ export default function EntryDialog({
     }
     setAmount(entry ? String(entry.amount) : '');
     setDate(entry ? entry.expense_date : todayIsoDate());
-    setNotes(entry?.notes ?? '');
+    setNotes(entry ? (entry.notes ?? '') : (bookingPrefill?.notesDefault ?? ''));
+    setDirection(initialDirection);
     setRemovedAttachmentIds([]);
     setAmountError(null);
     setSaveError(false);
+    setPartyError(null);
     setSaving(false);
     setConfirmDelete(false);
-  }, [open, entry]);
+  }, [open, entry, bookingPrefill, initialDirection]);
 
   const existingAttachments = (entry?.expense_attachments ?? []).filter(
     (a) => !removedAttachmentIds.includes(a.id),
@@ -103,21 +133,37 @@ export default function EntryDialog({
     }
     setSaving(true);
     setSaveError(false);
+    setPartyError(null);
     try {
       const input = {
         direction,
         amount: parsed,
         expenseDate: date,
         notes: notes.trim() || null,
+        bookingId: bookingPrefill?.booking.id ?? null,
       };
       if (entry) {
         await updateExpense(supabase, entry.id, input, removedAttachmentIds);
       } else {
-        await createExpense(supabase, businessId, partyId, userId, input);
+        // Booking mode: the customer's party is resolved/created NOW (contract
+        // §2) — a forbidden create fails fast here, before any insert.
+        const targetPartyId = bookingPrefill
+          ? (await resolveBookingParty(supabase, businessId, bookingPrefill.booking, bookingPrefill.canManageParties)).id
+          : partyId;
+        if (!targetPartyId) {
+          setSaveError(true);
+          setSaving(false);
+          return;
+        }
+        await createExpense(supabase, businessId, targetPartyId, userId, input);
       }
       onSaved();
-    } catch {
-      setSaveError(true);
+    } catch (error) {
+      if (error instanceof PartyCreateForbiddenError) {
+        setPartyError(t('entry.party_create_forbidden', { name: error.partyName }));
+      } else {
+        setSaveError(true);
+      }
       setSaving(false);
     }
   };
@@ -140,9 +186,11 @@ export default function EntryDialog({
 
   const title = entry
     ? t('entry.edit_title')
-    : direction === 'paid'
-      ? t('home.you_gave')
-      : t('home.you_got');
+    : bookingPrefill
+      ? tRoot('booking.card.action_record_expense')
+      : direction === 'paid'
+        ? t('home.you_gave')
+        : t('home.you_got');
 
   return (
     <>
@@ -153,6 +201,33 @@ export default function EntryDialog({
           {title}
         </DialogTitle>
         <DialogContent>
+          {bookingPrefill && !entry ? (
+            <>
+              {/* Who the entry is against: the booking's customer (party resolved on save). */}
+              <Typography variant="body2" color="text.secondary" data-testid="entry-party-name">
+                {bookingPrefill.booking.customer_name}
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                fullWidth
+                size="small"
+                value={direction}
+                sx={{ mt: 1.5 }}
+                onChange={(_event, next: ExpenseDirection | null) => {
+                  if (next) {
+                    setDirection(next);
+                  }
+                }}
+              >
+                <ToggleButton value="paid" color="error">
+                  {t('home.you_gave')}
+                </ToggleButton>
+                <ToggleButton value="received" color="success">
+                  {t('home.you_got')}
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </>
+          ) : null}
           <TextField
             autoFocus
             fullWidth
@@ -216,6 +291,11 @@ export default function EntryDialog({
           <Typography variant="body2" color="text.secondary">
             {t('entry.attachments_mobile_hint')}
           </Typography>
+          {partyError && (
+            <Typography variant="body2" color="error" sx={{ mt: 1 }} role="alert">
+              {partyError}
+            </Typography>
+          )}
           {saveError && (
             <Typography variant="body2" color="error" sx={{ mt: 1 }}>
               {t('error.save_failed')}

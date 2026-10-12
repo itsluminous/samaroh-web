@@ -9,6 +9,7 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import EditIcon from '@mui/icons-material/Edit';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import PrintIcon from '@mui/icons-material/Print';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import RestoreIcon from '@mui/icons-material/Restore';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import Box from '@mui/material/Box';
@@ -63,6 +64,8 @@ export default function BookingDetail({
   onClose,
   onEdit,
   onRecordPayment,
+  onRecordExpense,
+  canRecordExpense = false,
   onCancelBooking,
   onRestoreBooking,
   onDeleteBooking,
@@ -80,6 +83,10 @@ export default function BookingDetail({
   onClose: () => void;
   onEdit: () => void;
   onRecordPayment: () => void;
+  /** "Record expense" against this event (shared docs/expense-against-event.md §1). */
+  onRecordExpense?: () => void;
+  /** expenses.create (owners always) — the action is HIDDEN without it. */
+  canRecordExpense?: boolean;
   onCancelBooking: () => void;
   /** Cancelled bookings only: puts the booking back on the calendar as Confirmed. */
   onRestoreBooking: () => void;
@@ -243,6 +250,12 @@ export default function BookingDetail({
           {permissions.record_payment && !cancelled && !marker ? (
             <Button variant="contained" startIcon={<PaymentsIcon />} onClick={onRecordPayment}>
               {t('booking.card.action_record_payment')}
+            </Button>
+          ) : null}
+          {/* Record an expense against this event — expenses.create gate; never on markers/cancelled. */}
+          {canRecordExpense && onRecordExpense && !cancelled && !marker ? (
+            <Button variant="outlined" startIcon={<ReceiptLongIcon />} onClick={onRecordExpense}>
+              {t('booking.card.action_record_expense')}
             </Button>
           ) : null}
           {/* An invoice is a live financial document — none on cancelled bookings (Android parity). */}

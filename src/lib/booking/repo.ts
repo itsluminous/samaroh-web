@@ -19,11 +19,21 @@ import type {
 } from './types';
 import { OWNER_PERMISSIONS } from './types';
 
+/** The expenses-module actions the booking card needs (record expense against an event). */
+export interface ExpensePermissionsForBooking {
+  /** expenses.create — shows the "Record expense" action. */
+  create: boolean;
+  /** expenses.manage_parties — may create the customer's party on save. */
+  manage_parties: boolean;
+}
+
 export interface BusinessContext {
   business: Business;
   userId: string;
   isOwner: boolean;
   permissions: BookingPermissions;
+  /** Owners: all true; members: from their permissions blob (absent = false). */
+  expensePermissions: ExpensePermissionsForBooking;
   /** user_id → display name, for the audit line. */
   memberNames: Record<string, string>;
 }
@@ -66,6 +76,7 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
     .is('deleted_at', null);
 
   const memberNames: Record<string, string> = {};
+  let expensePermissions: ExpensePermissionsForBooking = { create: isOwner, manage_parties: isOwner };
   let permissions: BookingPermissions = isOwner
     ? OWNER_PERMISSIONS
     : {
@@ -93,10 +104,29 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
         generate_invoice: p.generate_invoice === true || m.is_owner === true,
         view_amounts: p.view_amounts !== false || m.is_owner === true,
       };
+      const e = (m.permissions?.expenses ?? {}) as Partial<ExpensePermissionsForBooking>;
+      expensePermissions = {
+        create: e.create === true || m.is_owner === true,
+        manage_parties: e.manage_parties === true || m.is_owner === true,
+      };
     }
   }
   memberNames[business.owner_user_id] ??= business.owner_name;
-  return { business, userId, isOwner, permissions, memberNames };
+  return { business, userId, isOwner, permissions, expensePermissions, memberNames };
+}
+
+/** One live booking by id (deep links such as the ledger's event chip); null when absent/tombstoned. */
+export async function fetchBookingById(db: SupabaseClient, bookingId: string): Promise<Booking | null> {
+  const { data, error } = await db
+    .from('bookings')
+    .select(BOOKING_COLUMNS)
+    .eq('id', bookingId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error || !data) {
+    return null;
+  }
+  return normalizeBooking(data as Record<string, unknown>);
 }
 
 export interface MonthData {

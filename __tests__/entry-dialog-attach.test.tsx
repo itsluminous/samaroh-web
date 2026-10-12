@@ -48,6 +48,7 @@ function entryWith(attachments: ExpenseRecord['expense_attachments']): ExpenseRe
     amount: 500,
     expense_date: '2026-09-01',
     notes: null,
+    booking_id: null,
     created_by: 'u1',
     created_at: '2026-09-01T00:00:00Z',
     expense_attachments: attachments,

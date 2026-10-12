@@ -25,13 +25,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingsOnDate, dayTapAction, monthRange, todayIso } from '@/lib/booking/calendar';
 import { findBlockingBlocks, findConflicts } from '@/lib/booking/conflicts';
 import { computeDue, monthMoneySummary } from '@/lib/booking/due';
-import { formatMonthName } from '@/lib/booking/dates';
+import { formatDateRange, formatMonthName } from '@/lib/booking/dates';
 import {
   cancelBooking,
   createBooking,
   createDateBlock,
   deleteBooking,
   ensureInvoiceNumber,
+  fetchBookingById,
   fetchBusinessContext,
   fetchMonthData,
   fetchOverlaps,
@@ -61,6 +62,8 @@ import {
 } from '@/lib/invoice/client';
 import { invoiceFileName } from '@/lib/invoice/number';
 import { buildTextReceipt } from '@/lib/invoice/receipt';
+import { eventTypeLabel } from '@/lib/invoice/client';
+import EntryDialog from '@/app/[locale]/(app)/expenses/_components/EntryDialog';
 import AgendaList from './AgendaList';
 import BlockDatesDialog from './BlockDatesDialog';
 import BookingDetail from './BookingDetail';
@@ -114,6 +117,9 @@ export default function BookingScreen() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [payFor, setPayFor] = useState<Booking | null>(null);
+  // "Record expense" against an event: the EXISTING expenses entry dialog,
+  // pre-filled (party resolved on save, notes default, booking_id).
+  const [expenseFor, setExpenseFor] = useState<Booking | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
@@ -192,6 +198,39 @@ export default function BookingScreen() {
       reload();
     }
   }, [ctxLoaded, reload]);
+
+  // Deep link `?open=<bookingId>` (the party ledger's event chip): jump the
+  // calendar to the booking's start month and open its detail drawer. Read
+  // once from window.location (client-only; NOT useSearchParams — that would
+  // force a CSR bailout on the prerendered page, see useHighlightParam).
+  useEffect(() => {
+    if (!db || !ctx) {
+      return;
+    }
+    const openId = new URLSearchParams(window.location.search).get('open');
+    if (!openId) {
+      return;
+    }
+    let active = true;
+    fetchBookingById(db, openId)
+      .then((booking) => {
+        if (!active || !booking) {
+          return;
+        }
+        setView('month');
+        setYear(Number(booking.start_date.slice(0, 4)));
+        setMonth0(Number(booking.start_date.slice(5, 7)) - 1);
+        setDetailId(booking.id);
+      })
+      .catch(() => {
+        // Unresolvable link (tombstoned / unreadable) — just show the calendar.
+      });
+    return () => {
+      active = false;
+    };
+    // Runs once the business context is available; the param only changes
+    // with navigation, which remounts the screen.
+  }, [db, ctx]);
 
   useEffect(() => {
     let active = true;
@@ -545,6 +584,8 @@ export default function BookingScreen() {
           onClose={() => setDetailId(null)}
           onEdit={() => setForm({ mode: 'edit', booking: detailBooking, initialDate: null })}
           onRecordPayment={() => setPayFor(detailBooking)}
+          canRecordExpense={ctx.expensePermissions.create}
+          onRecordExpense={() => setExpenseFor(detailBooking)}
           onCancelBooking={handleCancelBooking}
           onRestoreBooking={handleRestoreBooking}
           onDeleteBooking={handleDeleteBooking}
@@ -593,6 +634,28 @@ export default function BookingScreen() {
           due={Math.max(computeDue(payFor.total_amount, data.paymentsByBooking[payFor.id] ?? []), 0)}
           onSave={handleRecordPayment}
           onClose={() => setPayFor(null)}
+        />
+      ) : null}
+
+      {expenseFor ? (
+        <EntryDialog
+          open
+          partyId={null}
+          direction="paid"
+          entry={null}
+          canDelete={false}
+          bookingPrefill={{
+            booking: expenseFor,
+            // `{eventType} · {dates}` — localized type label (no emoji) + the
+            // booking's dates formatted exactly like the card's dates line.
+            notesDefault: t('expenses.entry.booking_notes_default', {
+              eventType: eventTypeLabel(expenseFor, t),
+              dates: formatDateRange(expenseFor.start_date, expenseFor.end_date, locale),
+            }),
+            canManageParties: ctx.expensePermissions.manage_parties,
+          }}
+          onClose={() => setExpenseFor(null)}
+          onSaved={() => setExpenseFor(null)}
         />
       ) : null}
 

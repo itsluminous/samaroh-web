@@ -1202,3 +1202,72 @@ repo interprets it where the spec leaves web-specific latitude.)
      viewport in guest mode (manual `88` → detail shows `INV-0088`, download
      `suggestedFilename` = `INV-0088.pdf`; screenshot in
      `test-results/invoice-download/`).
+
+- **Record expense against an event (`expenses.booking_id`, shared migration
+  012)** (2026-10-12, owner feedback; shared `docs/expense-against-event.md`
+  @ a2ab612; web + Android in parallel). Interpretations:
+  1. *Entry point.* `BookingDetail` gets an outlined "Record expense" button
+     (`booking.card.action_record_expense`, ReceiptLong icon) right after
+     Record payment. Gate = `expenses.create` (there is no `expenses.add` in
+     the permission schema) — `fetchBusinessContext` now also derives
+     `expensePermissions {create, manage_parties}` from the member's blob
+     (owners: all true). HIDDEN, never greyed; never on cancelled or
+     marker-kind bookings; tentative bookings keep it.
+  2. *Dialog.* The EXISTING `EntryDialog` grows an optional `bookingPrefill`
+     prop (`partyId` becomes nullable — null only in that mode): title =
+     the action label, the customer's name shown, a You gave / You got
+     `ToggleButtonGroup` (direction defaults to `paid` and stays editable —
+     the plain ledger dialog has no toggle because it is opened per
+     direction), amount empty, date = device-local today, notes =
+     `expenses.entry.booking_notes_default` with the localized type label
+     (`eventTypeLabel`, no emoji) and the card's `formatDateRange` text. The
+     dialog runs on `useBusiness()` as before, so it works unchanged inside
+     the Booking screen (same guarded client / guest local client).
+  3. *Party at SAVE time only.* `resolveBookingParty` (expenses `_lib/queries`)
+     loads the business's LIVE parties and matches `lower(trim(name))`
+     client-side (`matchLiveParty`, earliest `created_at` among twins — the
+     guest local client has no `ilike`, and the party list is small); else
+     creates `{name trimmed, phone or null, business_related=false}` via
+     `createParty`. Without `expenses.manage_parties` and no live party it
+     throws `PartyCreateForbiddenError` BEFORE any insert; the dialog shows
+     `expenses.entry.party_create_forbidden` ({name}) as a `role="alert"`.
+     Phone is never back-filled. Nothing is written on open.
+  4. *Write path.* `ExpenseInput.bookingId` (optional) → `createExpense`
+     puts `booking_id` on EVERY insert (null for plain entries) through the
+     normal `insertWithOutbox`; `updateExpense` never touches the link.
+     `ExpenseRecord.booking_id` is read via one `EXPENSE_COLUMNS` list used
+     by both explicit selects and coalesced to null (`normalizeExpense`) for
+     pre-012 servers / older guest rows. Guest mode: the Dexie store is
+     schemaless, so the column needs no local migration. The server column
+     MUST exist before this build ships (PGRST204 otherwise) — owner handoff
+     `~/.luminous/handoff/shared-012-owner-ddl.md`.
+  5. *Chip.* Party ledger rows with `booking_id` render a small outlined
+     primary MUI `Chip` (Event icon, `data-event-chip`) =
+     `expenses.ledger.event_chip` with `{firstName · EventType}`
+     (`eventChipLabel`; first name per the `pillLabel` convention) — content,
+     NOT `MetadataText`. Bookings are resolved by `fetchLinkedBookings`
+     (`.in('id', …)`, live only, never throws). Tap (stopPropagation — the
+     row is the edit affordance) → `router.push('/booking?open=<id>')`,
+     gated by `booking.view` (without it: `clickable=false`, no handler).
+     Unresolvable booking → `chipLabelFromNotes` (first ` · ` segment of
+     the notes) else no chip; a raw id is never rendered. The Expenses home
+     lists parties, not entries, so it has no chip.
+  6. *Deep link.* `BookingScreen` reads `?open=<bookingId>` once from
+     `window.location` (same client-only pattern as `useHighlightParam` —
+     no `useSearchParams` CSR bailout), fetches it (`fetchBookingById`),
+     switches to the month view at the booking's start month and opens the
+     detail drawer. Unresolvable → plain calendar.
+  7. *Out of scope (per contract).* Booking card does not list its
+     expenses; reports unchanged; no saved-snackbar (no shared key — the
+     dialog closing is the confirmation, as for ledger entries today).
+  8. *Tests.* `expense-against-event-logic` (match/twins/tombstone/no
+     back-fill, create flags, forbidden writes nothing, `booking_id` on
+     every insert + read back, `fetchLinkedBookings`), 
+     `record-expense-against-event` (button matrix: perm/cancelled/marker/
+     tentative; dialog pre-fill, editable toggle, save creates party + ONE
+     linked row, nothing on open, forbidden alert, existing-party save
+     without manage_parties), `party-ledger-event-chip` (label, push to
+     `/booking?open=`, inert without booking.view, notes fallback, omitted,
+     no raw id); Playwright `record-expense-against-event.spec.ts` at a
+     360 px phone viewport in guest mode (card → prefilled dialog → save →
+     ledger chip → back to the booking detail; four screenshots).

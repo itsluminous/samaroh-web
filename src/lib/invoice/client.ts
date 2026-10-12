@@ -37,7 +37,7 @@ export function resolveInvoiceLabels(t: Translate): InvoiceLabels {
   };
 }
 
-export function eventTypeLabel(booking: Booking, t: Translate): string {
+export function eventTypeLabel(booking: Pick<Booking, 'event_type'>, t: Translate): string {
   if (isBuiltInEventType(booking.event_type)) {
     const def = findEventType(booking.event_type);
     if (def) {

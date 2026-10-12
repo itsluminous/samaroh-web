@@ -73,3 +73,54 @@ export function pillPaint(
   const def = effectiveBookingColor(booking, presets);
   return def ? { kind: 'custom', bg: def.hex, fg: def.on_hex } : { kind: 'themed' };
 }
+
+/** Palette severity index (shared/docs/calendar-day-color.md rule 4): booking-colors.json order is contractual. */
+export function paletteIndex(key: string): number {
+  const idx = BOOKING_COLORS.findIndex((c) => c.key === key);
+  // Unknown keys (newer contract) rank after every known colour but before null.
+  return idx === -1 ? BOOKING_COLORS.length : idx;
+}
+
+/**
+ * ONE colour for a calendar day (shared/docs/calendar-day-color.md — the
+ * rule both platforms share; Android's `CalendarMonthMapper` uses it for
+ * the cell fill, web keeps per-booking pills and uses it for any aggregated
+ * per-day indicator):
+ *
+ *   firm    = covering bookings that are not tentative (cancelled/tombstoned
+ *             rows and markers that lost the ADR-041 rule must already be
+ *             filtered out by the caller — `visibleCalendarBookings`)
+ *   colours = firm.map(effectiveColourKey)              // key | null
+ *   firm.isEmpty            → null  (no fill; tentative-only days keep the
+ *                                   amber outline, which is not a fill)
+ *   colours.allEqual        → colours[0]  (two reds → red; all null →
+ *                                         undefined = themed default)
+ *   else                    → the non-null key with the lowest palette index
+ *
+ * Never blends, never a "multiple" colour; status does not rank among firm
+ * bookings. Returns the colour DEF (hex + on_hex) so the caller paints the
+ * fill and the date number's on-colour together: `null` = no fill,
+ * `undefined` = themed default fill.
+ */
+export function dayFillColor(
+  covering: readonly Pick<Booking, 'status' | 'color' | 'event_type'>[],
+  presets?: EventTypePreset[] | null,
+): BookingColorDef | null | undefined {
+  const firm = covering.filter((b) => b.status !== 'tentative');
+  if (firm.length === 0) {
+    return null;
+  }
+  const colours = firm.map((b) => effectiveBookingColor(b, presets)?.key ?? null);
+  const first = colours[0] ?? null;
+  if (colours.every((c) => c === first)) {
+    return first === null ? undefined : findBookingColor(first);
+  }
+  let winner: string | null = null;
+  for (const key of colours) {
+    if (key !== null && (winner === null || paletteIndex(key) < paletteIndex(winner))) {
+      winner = key;
+    }
+  }
+  // Mixed ⇒ at least one non-null key exists.
+  return winner === null ? undefined : findBookingColor(winner);
+}

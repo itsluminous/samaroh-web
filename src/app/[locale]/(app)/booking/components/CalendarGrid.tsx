@@ -136,6 +136,7 @@ export default function CalendarGrid({
                 return (
                   <ButtonBase
                     key={`${seg.booking.id}-${seg.startCol}`}
+                    data-booking-pill={paint.kind}
                     onClick={() => onBookingClick(seg.booking)}
                     sx={{
                       pointerEvents: 'auto',

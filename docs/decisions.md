@@ -1271,3 +1271,30 @@ repo interprets it where the spec leaves web-specific latitude.)
      no raw id); Playwright `record-expense-against-event.spec.ts` at a
      360 px phone viewport in guest mode (card → prefilled dialog → save →
      ledger chip → back to the booking detail; four screenshots).
+
+- **Calendar day colour — one shared rule, no blending** (2026-10-12,
+  owner feedback "two red bookings showed purple"; shared
+  `docs/calendar-day-color.md` @ a2ab612; web + Android in parallel).
+  Interpretations:
+  1. *Web was not affected.* The month grid paints one pill per booking
+     (`CalendarGrid` lane layer) and has no per-day fill, so two red
+     bookings already render as two tomato pills; the "purple" was
+     Android's `singleOrNull()` fallback to `tertiaryContainer`. Pills stay
+     per-booking (contract).
+  2. *The rule now exists on web too* — `dayFillColor(covering, presets)`
+     in `src/lib/booking/bookingColors.ts` + `paletteIndex(key)`: tentative
+     never fills; all firm colours equal → that colour (all null → themed
+     default, returned as `undefined`); mixed → lowest `booking-colors.json`
+     index (order is contractual: tomato … graphite; unknown keys rank after
+     the palette, null last); status does not rank; `null` return = no
+     fill. Callers pass `bookingsOnDate(iso, visibleCalendarBookings(…))` so
+     cancelled rows and ADR-041-losing markers are already excluded. Any
+     future aggregated per-day indicator (compact month, dots) MUST use it.
+  3. *Tests.* `src/lib/booking/__tests__/dayFillColor.test.ts` carries the
+     contract table verbatim (one red, two red, red+sage, sage+graphite,
+     sage+null, null+null, red+tentative, tentative only, marker red + real
+     sage) plus no-blend/on-colour, status-agnostic, empty and cancelled
+     cases; Playwright `calendar-day-color.spec.ts` at a 360 px phone
+     viewport in guest mode (two tomato bookings on today → both grid pills
+     computed `#C62828`; pills carry `data-booking-pill={paint.kind}` for
+     the locator; screenshot in `test-results/calendar-day-color/`).

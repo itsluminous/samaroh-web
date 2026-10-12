@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { todayIso } from '@/lib/booking/calendar';
 import { findEventType, isBuiltInEventType } from '@/lib/booking/eventTypes';
 import type { Booking, BookingPayment, Business } from '@/lib/booking/types';
+import { displayInvoiceNumber } from '@/lib/invoice/number';
 import type { InvoiceData, InvoiceLabels } from '@/lib/invoice/types';
 
 /** next-intl translator shape we need (t(key) and t(key, values)). */
@@ -20,6 +21,7 @@ export function resolveInvoiceLabels(t: Translate): InvoiceLabels {
     issueDateLabel: t('invoice.issue_date_label'),
     billedTo: t('invoice.billed_to'),
     eventLabel: t('invoice.event_label'),
+    notesTitle: t('invoice.notes_title'),
     totalAmount: t('invoice.total_amount'),
     securityDeposit: t('invoice.security_deposit'),
     paymentHistory: t('invoice.payment_history'),
@@ -45,6 +47,11 @@ export function eventTypeLabel(booking: Booking, t: Translate): string {
   return booking.event_type; // custom bookings store the free-text label itself
 }
 
+/**
+ * @param invoiceNumber the STORED `bookings.invoice_number`; it is converted
+ *   to the display form here (`88` → `INV-0088`, auto numbers verbatim) so
+ *   every renderer shows the same number as the booking detail line.
+ */
 export function buildInvoiceData(
   booking: Booking,
   payments: BookingPayment[],
@@ -54,10 +61,9 @@ export function buildInvoiceData(
 ): InvoiceData {
   return {
     businessName: business.name,
-    businessType: business.business_type,
     address: business.address,
     ownerName: business.owner_name,
-    invoiceNumber,
+    invoiceNumber: displayInvoiceNumber(invoiceNumber, business.invoice_prefix),
     issueDate: todayIso(),
     customerName: booking.customer_name,
     customerPhone: booking.customer_phone,
@@ -67,6 +73,9 @@ export function buildInvoiceData(
     endDate: booking.end_date,
     startTime: booking.start_time,
     endTime: booking.end_time,
+    // The booking's OWN notes — never booking_payments.notes (those stay in
+    // the payment table's Notes column).
+    notes: booking.notes,
     totalAmount: booking.total_amount,
     securityDeposit: booking.security_deposit,
     payments: payments

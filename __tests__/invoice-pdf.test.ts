@@ -3,10 +3,10 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PDFPage } from 'pdf-lib';
+import { PDFDocument, PDFPage } from 'pdf-lib';
 import hi from '../messages/hi.json';
 import en from '../messages/en.json';
-import { renderInvoicePdf, stripEmoji } from '@/lib/invoice/pdf';
+import { renderInvoicePdf, stripEmoji, wrapText } from '@/lib/invoice/pdf';
 import type { InvoiceData, InvoiceLabels } from '@/lib/invoice/types';
 
 const fonts = {
@@ -24,6 +24,7 @@ function labelsFrom(catalog: Catalog): InvoiceLabels {
     issueDateLabel: inv.issue_date_label,
     billedTo: inv.billed_to,
     eventLabel: inv.event_label,
+    notesTitle: inv.notes_title,
     totalAmount: inv.total_amount,
     securityDeposit: inv.security_deposit,
     paymentHistory: inv.payment_history,
@@ -41,7 +42,6 @@ function labelsFrom(catalog: Catalog): InvoiceLabels {
 
 const data: InvoiceData = {
   businessName: 'Shree Ganesh Hall',
-  businessType: 'Marriage Hall',
   address: 'Station Road, Gorakhpur',
   ownerName: 'Suresh Gupta',
   invoiceNumber: 'SGH-2026-0042',
@@ -54,6 +54,7 @@ const data: InvoiceData = {
   endDate: '2026-07-12',
   startTime: '18:00',
   endTime: '23:00',
+  notes: null,
   totalAmount: 106511,
   securityDeposit: 5000,
   payments: [
@@ -140,4 +141,115 @@ describe('emoji-free PDF contract', () => {
     expect(stripEmoji('\u0936\u093E\u0926\u0940 \u{1F549}\u{FE0F}')).toBe('\u0936\u093E\u0926\u0940');
     expect(stripEmoji('\u20B91,06,51,161 due 10 Jul 2026')).toBe('\u20B91,06,51,161 due 10 Jul 2026');
   });
+});
+
+// 2026-10-12 layout change set (shared/docs/invoice-layout.md): no
+// business-type line, logo top-left, Notes block from bookings.notes
+// verbatim, display-form invoice number.
+describe('invoice layout 2026-10-12 change set', () => {
+  async function drawnRuns(d: InvoiceData): Promise<string[]> {
+    const spy = jest.spyOn(PDFPage.prototype, 'drawText');
+    try {
+      await renderInvoicePdf(d, labelsFrom(en), 'en', fonts);
+      return spy.mock.calls.map((c) => c[0] as string);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('header prints name, address and owner — and NO business-type line', async () => {
+    const drawn = await drawnRuns(data);
+    expect(drawn).toContain('Shree Ganesh Hall');
+    expect(drawn).toContain('Station Road, Gorakhpur');
+    expect(drawn).toContain('Suresh Gupta');
+    expect(drawn).not.toContain('Marriage Hall');
+    // InvoiceData has no business-type field at all any more.
+    expect('businessType' in data).toBe(false);
+  }, 30000);
+
+  it('skips blank header lines instead of printing them empty', async () => {
+    const drawn = await drawnRuns({ ...data, address: '   ' });
+    expect(drawn.filter((r) => r.trim() === '')).toHaveLength(0);
+  }, 30000);
+
+  it('prints no Notes block when bookings.notes is null or blank', async () => {
+    // (The payment table's "Notes" COLUMN header is a different run, after Total amount.)
+    for (const notes of [null, '  \n ']) {
+      const drawn = await drawnRuns({ ...data, notes });
+      const beforeAmounts = drawn.slice(0, drawn.indexOf(en.invoice.total_amount));
+      expect(beforeAmounts).not.toContain(en.invoice.notes_title);
+    }
+  }, 30000);
+
+  it('prints the Notes block after the event line: title + bookings.notes verbatim, newlines kept', async () => {
+    const drawn = await drawnRuns({
+      ...data,
+      notes: '  Stage on the north side\nDJ till 11 pm \u{1F389}\nNo outside caterers  ',
+    });
+    const title = drawn.indexOf(en.invoice.notes_title);
+    expect(title).toBeGreaterThan(drawn.indexOf('Event: Wedding'));
+    expect(title).toBeLessThan(drawn.indexOf(en.invoice.total_amount));
+    expect(drawn.slice(title + 1, title + 4)).toEqual([
+      'Stage on the north side',
+      'DJ till 11 pm', // emoji stripped like every other PDF run
+      'No outside caterers',
+    ]);
+  }, 30000);
+
+  it('wraps a long note to the content width without truncating a single word', async () => {
+    const long = Array.from({ length: 60 }, (_, i) => `word${i}`).join(' ');
+    const drawn = await drawnRuns({ ...data, notes: long });
+    const title = drawn.indexOf(en.invoice.notes_title);
+    const until = drawn.indexOf(en.invoice.total_amount);
+    const lines = drawn.slice(title + 1, until);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.join(' ')).toBe(long);
+    for (const line of lines) {
+      expect(line.endsWith('\u2026')).toBe(false);
+    }
+  }, 30000);
+
+  it('a very long note pushes later sections onto a second page instead of clipping', async () => {
+    const long = Array.from({ length: 120 }, (_, i) => `line ${i} of the agreement`).join('\n');
+    const bytes = await renderInvoicePdf({ ...data, notes: long }, labelsFrom(en), 'en', fonts);
+    const loaded = await PDFDocument.load(bytes);
+    expect(loaded.getPageCount()).toBeGreaterThanOrEqual(2);
+    // …and the one-page case stays one page.
+    const short = await PDFDocument.load(await renderInvoicePdf(data, labelsFrom(en), 'en', fonts));
+    expect(short.getPageCount()).toBe(1);
+  }, 30000);
+
+  it('wrapText keeps author line breaks (incl. blank lines) and hard-breaks over-long words', () => {
+    const font = { widthOfTextAtSize: (t: string) => t.length * 10 } as unknown as import('pdf-lib').PDFFont;
+    expect(wrapText(font, 'aa bb cc\n\ndd', 10, 55)).toEqual(['aa bb', 'cc', '', 'dd']);
+    expect(wrapText(font, 'abcdefghij', 10, 45)).toEqual(['abcd', 'efgh', 'ij']);
+  });
+
+  it('draws the logo top-left, flush with the margins, and starts the text 12pt right of it', async () => {
+    const png = readFileSync(join(process.cwd(), 'public/icons/icon-192.png'));
+    const imgSpy = jest.spyOn(PDFPage.prototype, 'drawImage');
+    const textSpy = jest.spyOn(PDFPage.prototype, 'drawText');
+    try {
+      await renderInvoicePdf({ ...data, logoPng: new Uint8Array(png) }, labelsFrom(en), 'en', fonts);
+      expect(imgSpy).toHaveBeenCalledTimes(1);
+      const opts = imgSpy.mock.calls[0]?.[1] as { x: number; y: number; width: number; height: number };
+      expect(opts).toMatchObject({ x: 40, y: 842 - 40 - 56, width: 56, height: 56 });
+      const name = textSpy.mock.calls.find((c) => c[0] === 'Shree Ganesh Hall');
+      expect((name?.[1] as { x: number }).x).toBe(40 + 56 + 12);
+    } finally {
+      imgSpy.mockRestore();
+      textSpy.mockRestore();
+    }
+  }, 30000);
+
+  it('without a logo the header text starts at the margin (no placeholder gap)', async () => {
+    const textSpy = jest.spyOn(PDFPage.prototype, 'drawText');
+    try {
+      await renderInvoicePdf(data, labelsFrom(en), 'en', fonts);
+      const name = textSpy.mock.calls.find((c) => c[0] === 'Shree Ganesh Hall');
+      expect((name?.[1] as { x: number }).x).toBe(40);
+    } finally {
+      textSpy.mockRestore();
+    }
+  }, 30000);
 });

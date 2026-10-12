@@ -59,6 +59,7 @@ import {
   fetchLogoPng,
   resolveInvoiceLabels,
 } from '@/lib/invoice/client';
+import { invoiceFileName } from '@/lib/invoice/number';
 import { buildTextReceipt } from '@/lib/invoice/receipt';
 import AgendaList from './AgendaList';
 import BlockDatesDialog from './BlockDatesDialog';
@@ -380,7 +381,8 @@ export default function BookingScreen() {
         const [fonts, logoPng] = await Promise.all([fetchInvoiceFonts(), fetchLogoPng(db, ctx.business)]);
         const { renderInvoicePdf } = await import('@/lib/invoice/pdf');
         const bytes = await renderInvoicePdf({ ...invoiceData, logoPng }, labels, locale, fonts);
-        downloadPdf(bytes, `${number}.pdf`);
+        // File name = display form of the number (`INV-0088.pdf`, never `88.pdf`).
+        downloadPdf(bytes, invoiceFileName(number, ctx.business.invoice_prefix));
       } else {
         const text = buildTextReceipt(invoiceData, labels, locale);
         await navigator.clipboard.writeText(text);

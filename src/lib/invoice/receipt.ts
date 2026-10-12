@@ -1,7 +1,8 @@
 // "Share as text" receipt (shared/invoice/layout-spec.md, Text variant):
-// mirrors the PDF order — business name, invoice number, customer,
-// event + dates, total / deposit / paid / due, then one line per payment —
-// with the same localized labels and the same ₹ formatting.
+// mirrors the PDF order — business name, invoice number (display form),
+// customer, event + dates, notes (when non-blank), total / deposit / paid /
+// due, then one line per payment — with the same localized labels and the
+// same ₹ formatting. No business-type line (layout-spec 2026-10-12).
 
 import { formatDate, formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
@@ -22,6 +23,11 @@ export function buildTextReceipt(data: InvoiceData, labels: InvoiceLabels, local
   lines.push(
     `${data.eventIcon} ${data.eventLabel}${SEPARATOR}${formatDateRange(data.startDate, data.endDate, locale)}`,
   );
+  // bookings.notes verbatim, right after the event line (layout-spec Text variant).
+  const notes = data.notes?.trim() ?? '';
+  if (notes) {
+    lines.push(`${labels.notesTitle}: ${notes}`);
+  }
   lines.push('');
   lines.push(`${labels.totalAmount}: ${formatRupees(data.totalAmount)}`);
   if (data.securityDeposit > 0) {

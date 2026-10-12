@@ -16,6 +16,7 @@ function labelsFrom(catalog: Catalog): InvoiceLabels {
     issueDateLabel: inv.issue_date_label,
     billedTo: inv.billed_to,
     eventLabel: inv.event_label,
+    notesTitle: inv.notes_title,
     totalAmount: inv.total_amount,
     securityDeposit: inv.security_deposit,
     paymentHistory: inv.payment_history,
@@ -34,8 +35,7 @@ function labelsFrom(catalog: Catalog): InvoiceLabels {
 function sampleData(catalog: Catalog): InvoiceData {
   return {
     businessName: 'Shree Ganesh Hall',
-    businessType: 'Marriage Hall',
-    address: null,
+      address: null,
     ownerName: 'Suresh Gupta',
     invoiceNumber: 'SGH-2026-0042',
     issueDate: '2026-07-15',
@@ -47,6 +47,7 @@ function sampleData(catalog: Catalog): InvoiceData {
     endDate: '2026-07-12',
     startTime: null,
     endTime: null,
+    notes: null,
     totalAmount: 106511,
     securityDeposit: 5000,
     payments: [
@@ -89,6 +90,22 @@ describe('buildTextReceipt (en)', () => {
     const paidReceipt = buildTextReceipt(data, labelsFrom(en), 'en');
     expect(paidReceipt).toContain(en.invoice.fully_paid);
     expect(paidReceipt).toContain('Balance due: \u20B90');
+  });
+
+  it('has no business-type line (layout-spec 2026-10-12)', () => {
+    expect(receipt).not.toContain('Marriage Hall');
+  });
+
+  it('prints bookings.notes verbatim right after the event line, only when non-blank', () => {
+    expect(receipt).not.toContain(`${en.invoice.notes_title}:`);
+    const data = sampleData(en);
+    data.notes = '  Stage on the north side  ';
+    const lines = buildTextReceipt(data, labelsFrom(en), 'en').split('\n');
+    const eventLine = lines.findIndex((l) => l.includes(en.booking.event_type.wedding));
+    expect(lines[eventLine + 1]).toBe(`${en.invoice.notes_title}: Stage on the north side`);
+    expect(lines.indexOf(`${en.invoice.notes_title}: Stage on the north side`)).toBeLessThan(
+      lines.findIndex((l) => l.startsWith(en.invoice.total_amount)),
+    );
   });
 
   it('omits the security deposit line when the deposit is zero', () => {

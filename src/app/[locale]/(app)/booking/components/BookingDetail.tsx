@@ -38,6 +38,7 @@ import { presetKindForType, type EventTypePreset } from '@/lib/booking/eventType
 import { formatDate, formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment, BookingPermissions, Business } from '@/lib/booking/types';
+import { displayInvoiceNumber } from '@/lib/invoice/number';
 import { buildWhatsAppLink } from '@/lib/booking/whatsapp';
 import { formatBookingTitle } from './format';
 
@@ -121,8 +122,9 @@ export default function BookingDetail({
   });
   const waLink = buildWhatsAppLink(booking.customer_phone, waText);
   const telHref = booking.customer_phone ? `tel:${booking.customer_phone}` : null;
+  // Display form of the stored number (layout-spec: `88` → `INV-0088`).
   const invoiceNumberLine = booking.invoice_number
-    ? `${t('invoice.number_label')} ${booking.invoice_number}`
+    ? `${t('invoice.number_label')} ${displayInvoiceNumber(booking.invoice_number, business.invoice_prefix)}`
     : null;
   const datesLine = `${t('booking.card.dates_label')}: ${formatDateRange(booking.start_date, booking.end_date, locale)}`;
   const paymentLine = (p: BookingPayment) =>

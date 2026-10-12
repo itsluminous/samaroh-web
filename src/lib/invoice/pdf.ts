@@ -70,10 +70,77 @@ function roundedRectPath(w: number, h: number, r: number): string {
 }
 
 interface Ctx {
+  doc: PDFDocument;
   page: PDFPage;
   regular: PDFFont;
   bold: PDFFont;
   y: number; // distance from the TOP of the page
+}
+
+/**
+ * Greedy word wrap at `maxWidth` for `font`/`size`, preserving the author's
+ * own line breaks (`\n`). Words wider than the line are hard-broken by
+ * character so nothing ever overflows the content width. Operates on the
+ * emoji-stripped text — that is what drawText actually draws. Exported for
+ * the Notes-block contract tests.
+ */
+export function wrapText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
+  const out: string[] = [];
+  // Split on the author's line breaks FIRST — stripEmoji collapses runs of
+  // whitespace (incl. newlines), so it runs per paragraph.
+  for (const rawParagraph of text.split(/\r?\n/)) {
+    const words = stripEmoji(rawParagraph).split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      out.push('');
+      continue;
+    }
+    let line = '';
+    const push = (word: string) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        line = candidate;
+        return;
+      }
+      if (line) {
+        out.push(line);
+        line = '';
+      }
+      // Single word wider than the line: break it by character.
+      let chunk = '';
+      for (const ch of word) {
+        if (font.widthOfTextAtSize(chunk + ch, size) > maxWidth && chunk) {
+          out.push(chunk);
+          chunk = '';
+        }
+        chunk += ch;
+      }
+      line = chunk;
+    };
+    words.forEach(push);
+    out.push(line);
+  }
+  return out;
+}
+
+/**
+ * Page-overflow guard: when the next `needed` points would cross the bottom
+ * margin, continues on a fresh A4 page (layout-spec §3a: a long note may push
+ * later sections onto page 2). The Y cursor restarts at the top margin.
+ */
+function ensureSpace(ctx: Ctx, needed: number): void {
+  if (ctx.y + needed > PAGE_H - MARGIN) {
+    ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H]);
+    ctx.y = MARGIN;
+  }
+}
+
+function drawRule(ctx: Ctx, y: number): void {
+  ctx.page.drawLine({
+    start: { x: MARGIN, y: PAGE_H - y },
+    end: { x: RIGHT, y: PAGE_H - y },
+    thickness: 1,
+    color: ACCENT,
+  });
 }
 
 function drawText(
@@ -107,9 +174,12 @@ export async function renderInvoicePdf(
   const regular = await doc.embedFont(fonts.regular, { subset: true });
   const bold = await doc.embedFont(fonts.bold, { subset: true });
   const page = doc.addPage([PAGE_W, PAGE_H]);
-  const ctx: Ctx = { page, regular, bold, y: MARGIN };
+  const ctx: Ctx = { doc, page, regular, bold, y: MARGIN };
 
   // ---- 1. Header band -------------------------------------------------
+  // Logo top-LEFT (56×56, flush with the left + top margins) only when the
+  // business has one; the text column starts 12 pt to its right. No logo →
+  // text at the margin, no placeholder gap (layout-spec § Header band).
   let textX = MARGIN;
   if (data.logoPng) {
     const logo = await doc.embedPng(data.logoPng);
@@ -118,8 +188,10 @@ export async function renderInvoicePdf(
   }
   drawText(ctx, data.businessName, { x: textX, size: 20, bold: true });
   let leftY = ctx.y + 26;
-  for (const line of [data.businessType, data.address, data.ownerName]) {
-    if (line) {
+  // Address + owner name ONLY — the business-type line was removed from the
+  // contract (2026-10-12). Blank lines are skipped, never printed empty.
+  for (const line of [data.address, data.ownerName]) {
+    if (line && line.trim()) {
       drawText({ ...ctx, y: leftY }, line, { x: textX, size: 11, color: GREY });
       leftY += 15;
     }
@@ -134,12 +206,7 @@ export async function renderInvoicePdf(
     rightAlignAt: RIGHT,
   });
   const bandBottom = Math.max(leftY, ctx.y + 49, data.logoPng ? MARGIN + 56 : 0) + 8;
-  page.drawLine({
-    start: { x: MARGIN, y: PAGE_H - bandBottom },
-    end: { x: RIGHT, y: PAGE_H - bandBottom },
-    thickness: 1,
-    color: ACCENT,
-  });
+  drawRule(ctx, bandBottom);
   ctx.y = bandBottom + 16;
 
   // ---- 2. Customer block ----------------------------------------------
@@ -163,7 +230,27 @@ export async function renderInvoicePdf(
   drawText(ctx, when, { x: MARGIN, size: 11 });
   ctx.y += 25;
 
+  // ---- 3a. Notes block ----------------------------------------------------
+  // Only when bookings.notes is non-blank: the booking's OWN notes verbatim
+  // (trimmed, line breaks kept, wrapped to the content width, never
+  // truncated). NOT booking_payments.notes — those stay in the table below.
+  const notes = data.notes?.trim() ?? '';
+  if (notes) {
+    ensureSpace(ctx, 22 + 15);
+    drawText(ctx, labels.notesTitle, { x: MARGIN, size: 13, bold: true, color: ACCENT });
+    ctx.y += 22;
+    for (const line of wrapText(ctx.regular, notes, 11, RIGHT - MARGIN)) {
+      ensureSpace(ctx, 15);
+      if (line) {
+        drawText(ctx, line, { x: MARGIN, size: 11 });
+      }
+      ctx.y += 15;
+    }
+    ctx.y += 10;
+  }
+
   // ---- 4. Amounts block -------------------------------------------------
+  ensureSpace(ctx, 16 + 16 + 10);
   drawText(ctx, labels.totalAmount, { x: MARGIN, size: 11 });
   drawText(ctx, formatRupees(data.totalAmount), { x: 0, size: 11, rightAlignAt: RIGHT });
   ctx.y += 16;
@@ -175,6 +262,7 @@ export async function renderInvoicePdf(
   ctx.y += 10;
 
   // ---- 5. Payment history table ------------------------------------------
+  ensureSpace(ctx, 22 + 15 + 6 + 16);
   drawText(ctx, labels.paymentHistory, { x: MARGIN, size: 13, bold: true });
   ctx.y += 22;
   const colMethodX = 170;
@@ -184,12 +272,7 @@ export async function renderInvoicePdf(
   drawText(ctx, labels.tableNotes, { x: colNotesX, size: 11, bold: true });
   drawText(ctx, labels.tableAmount, { x: 0, size: 11, bold: true, rightAlignAt: RIGHT });
   ctx.y += 15;
-  page.drawLine({
-    start: { x: MARGIN, y: PAGE_H - ctx.y },
-    end: { x: RIGHT, y: PAGE_H - ctx.y },
-    thickness: 1,
-    color: ACCENT,
-  });
+  drawRule(ctx, ctx.y);
   ctx.y += 6;
 
   let paidPaise = 0;
@@ -199,6 +282,7 @@ export async function renderInvoicePdf(
   }
   for (const p of data.payments) {
     paidPaise += Math.round(p.amount * 100);
+    ensureSpace(ctx, 16);
     drawText(ctx, formatDate(p.paidOn, locale), { x: MARGIN, size: 11 });
     drawText(ctx, p.methodLabel, { x: colMethodX, size: 11 });
     if (p.notes) {
@@ -219,6 +303,7 @@ export async function renderInvoicePdf(
     ctx.y += 16;
   }
   ctx.y += 4;
+  ensureSpace(ctx, 16 + 26);
   drawText(ctx, labels.totalPaid, { x: MARGIN, size: 11, bold: true });
   drawText(ctx, formatRupees(paidPaise / 100), { x: 0, size: 11, bold: true, rightAlignAt: RIGHT });
   ctx.y += 26;
@@ -226,7 +311,8 @@ export async function renderInvoicePdf(
   // ---- 6. Balance due band ----------------------------------------------
   const duePaise = Math.round(data.totalAmount * 100) - paidPaise;
   const bandH = 32;
-  page.drawSvgPath(roundedRectPath(RIGHT - MARGIN, bandH, 8), {
+  ensureSpace(ctx, bandH + 16);
+  ctx.page.drawSvgPath(roundedRectPath(RIGHT - MARGIN, bandH, 8), {
     x: MARGIN,
     y: PAGE_H - ctx.y,
     color: BAND,
@@ -259,7 +345,7 @@ export async function renderInvoicePdf(
   // ---- 7. Footer ----------------------------------------------------------
   const footer = `${labels.footer} \u00B7 ${formatDate(data.issueDate, locale)}`;
   const footerW = ctx.regular.widthOfTextAtSize(stripEmoji(footer), 9);
-  page.drawText(stripEmoji(footer), {
+  ctx.page.drawText(stripEmoji(footer), {
     x: (PAGE_W - footerW) / 2,
     y: MARGIN - 9,
     size: 9,

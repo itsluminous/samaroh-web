@@ -1154,3 +1154,51 @@ repo interprets it where the spec leaves web-specific latitude.)
      in guest mode (seeded Lagan + Tilak badged, no others; hint + hidden
      amounts on selection; Hindi; screenshots in
      `test-results/booking-form-marker-badge/`).
+
+- **Invoice: notes block, no business-type line, logo top-left, display
+  invoice number + file name** (2026-10-12, owner feedback; shared
+  `docs/invoice-layout.md` + `invoice/layout-spec.md` @ a2ab612; web + Android
+  in parallel). Interpretations:
+  1. *Notes source.* The new Notes block (§3a, after the Event block) prints
+     `bookings.notes` verbatim — trimmed, author line breaks kept, word-wrapped
+     to the 515 pt content width (`wrapText`, exported from
+     `src/lib/invoice/pdf.ts`), 11 pt body, emoji stripped per run, never
+     truncated. `InvoiceData.notes` is the booking's OWN notes; the "Imported
+     — …" text the owner saw was `booking_payments.notes` in the payment
+     table's Notes column, which keeps printing genuine payment notes — the
+     owner clears the import markers once with the shared
+     `scripts/clear-import-payment-notes.sql`. Text receipt: `Notes: …` line
+     right after the event line, same non-blank rule.
+  2. *Page overflow.* The renderer was single-page with a fixed Y cursor. A
+     long note may now push later sections down, so every section start, each
+     payment row, the total row and the balance band pass an `ensureSpace`
+     guard that continues on a fresh A4 page (Y restarts at the top margin;
+     the footer is drawn on the last page). One-page invoices are unchanged.
+  3. *Header.* `InvoiceData.businessType` is REMOVED (not just unrendered) so
+     no renderer can print it by accident; `businesses.business_type` is
+     untouched in the schema/profile. Address/owner lines are skipped when
+     blank. The logo (56×56, 8 pt radius, flush with left+top margins, text
+     12 pt to its right; no logo → text at the margin) was already drawn so;
+     tests now pin the geometry.
+  4. *Display number.* ONE pure helper `displayInvoiceNumber(stored, prefix)`
+     (`src/lib/invoice/number.ts`): `^[0-9]+$` → `{prefix}-{n:04d}`
+     (`88` → `INV-0088`, `0088` → `INV-0088`, `12345` → `INV-12345`), else
+     verbatim. Applied in `buildInvoiceData` (so PDF header and text receipt
+     share it) and in the detail drawer's "Invoice no." line. The stored
+     value never changes (uniqueness check + paper-register mapping stay on
+     the raw string). Web has no Google Calendar description line — nothing
+     to update there.
+  5. *File name.* `invoiceFileName(stored, prefix)` = display form + `.pdf`,
+     chars outside `[A-Za-z0-9._-]` → `-`; `BookingScreen` passes it to
+     `downloadPdf` (previously `${invoice_number}.pdf` → `88.pdf`).
+  6. *Tests.* `invoice-number` (the shared six-row display table + file-name
+     sanitising), `invoice-pdf` (no business-type run, blank header lines
+     skipped, Notes block absent/present/verbatim/newlines/emoji-stripped,
+     long note wraps without truncation, 2-page overflow via
+     `PDFDocument.load`, `wrapText` unit cases, logo geometry with/without
+     logo), `invoice-receipt` (notes line placement, no business type),
+     `booking-detail-invoice-number` (display form on the card line, stored
+     untouched); Playwright `invoice-download.spec.ts` at a 360 px phone
+     viewport in guest mode (manual `88` → detail shows `INV-0088`, download
+     `suggestedFilename` = `INV-0088.pdf`; screenshot in
+     `test-results/invoice-download/`).

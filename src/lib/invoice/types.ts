@@ -11,11 +11,13 @@ export interface InvoicePaymentLine {
 
 export interface InvoiceData {
   businessName: string;
-  businessType: string;
+  // No businessType: the header's business-type line was REMOVED from the
+  // layout contract on 2026-10-12 (it told the customer nothing).
   address: string | null;
   ownerName: string;
   /** PNG bytes for the header logo; omitted → text-only header. */
   logoPng?: Uint8Array;
+  /** DISPLAY form of the stored number (displayInvoiceNumber) — never the raw manual digits. */
   invoiceNumber: string;
   issueDate: string; // ISO date
   customerName: string;
@@ -26,6 +28,11 @@ export interface InvoiceData {
   endDate: string;
   startTime: string | null;
   endTime: string | null;
+  /**
+   * `bookings.notes` verbatim (the booking's OWN notes — never
+   * booking_payments.notes). Blank/null → the Notes block is not printed.
+   */
+  notes: string | null;
   totalAmount: number;
   securityDeposit: number;
   payments: InvoicePaymentLine[];
@@ -37,6 +44,8 @@ export interface InvoiceLabels {
   issueDateLabel: string;
   billedTo: string;
   eventLabel: string;
+  /** Title of the Notes block (layout-spec §3a). */
+  notesTitle: string;
   totalAmount: string;
   securityDeposit: string;
   paymentHistory: string;

@@ -60,7 +60,7 @@ import { isMoneyReport } from '@/lib/reports/types';
 import type { DateRange, ReportKey } from '@/lib/reports/types';
 import { BarChart, HBarList, LineChart, type BarDatum, type HBarRow, type LineSeries } from './charts';
 import AutoShrinkText, { isNumericCellText } from './AutoShrinkText';
-import DateRangeFilter, { presetRange, type RangePreset } from './DateRangeFilter';
+import DateRangeFilter, { DEFAULT_RANGE_PRESET, presetRange, type RangePreset } from './DateRangeFilter';
 
 /**
  * Table cell content: number/amount cells render through the per-cell
@@ -529,8 +529,9 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
   const theme = useTheme();
   const { supabase, business, isOwner, permissions, loading: memberLoading } = useMembership();
 
-  const [preset, setPreset] = useState<RangePreset>('last_12_months');
-  const [range, setRange] = useState<DateRange>(() => presetRange('last_12_months'));
+  // Default −12 months ending TODAY (shared docs/reports-range-filter.md).
+  const [preset, setPreset] = useState<RangePreset>(DEFAULT_RANGE_PRESET);
+  const [range, setRange] = useState<DateRange>(() => presetRange(DEFAULT_RANGE_PRESET));
   const [model, setModel] = useState<ReportModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

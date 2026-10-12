@@ -1,8 +1,12 @@
 'use client';
 
 /**
- * Date-range filter shared by all report pages (§4.4): quick presets
- * (this month / 3 months / 12 months) plus a custom from–to picker.
+ * Date-range quick filter shared by ALL report pages (§4.4; shared
+ * docs/reports-range-filter.md, 2026-10-12): −12 months · −3 months · This
+ * month · +3 months · +12 months · Custom, in that order, in a horizontally
+ * scrolling ChipRow (never wraps, labels never shrink), plus the from–to
+ * picker for Custom. Range math lives in `src/lib/reports/range.ts`
+ * (device-local today, month arithmetic clamped to month end).
  */
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -11,26 +15,10 @@ import TextField from '@mui/material/TextField';
 import ChipRow from '@/components/ChipRow';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
+import { presetRange, RANGE_PRESETS, type RangePreset } from '@/lib/reports/range';
 import type { DateRange } from '@/lib/reports/types';
 
-export type RangePreset = 'this_month' | 'last_3_months' | 'last_12_months' | 'custom';
-
-function iso(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-export function presetRange(preset: Exclude<RangePreset, 'custom'>, today = new Date()): DateRange {
-  const end = iso(today);
-  const y = today.getUTCFullYear();
-  const m = today.getUTCMonth();
-  if (preset === 'this_month') {
-    return { start: iso(new Date(Date.UTC(y, m, 1))), end };
-  }
-  if (preset === 'last_3_months') {
-    return { start: iso(new Date(Date.UTC(y, m - 2, 1))), end };
-  }
-  return { start: iso(new Date(Date.UTC(y, m - 11, 1))), end };
-}
+export { DEFAULT_RANGE_PRESET, presetRange, type RangePreset } from '@/lib/reports/range';
 
 export default function DateRangeFilter({
   range,
@@ -44,17 +32,16 @@ export default function DateRangeFilter({
   const t = useTranslations('reports.range');
   const [custom, setCustom] = useState<DateRange>(range);
 
-  const presets: Exclude<RangePreset, 'custom'>[] = ['this_month', 'last_3_months', 'last_12_months'];
-
   return (
     <Box>
-      <ChipRow>
-        {presets.map((p) => (
+      <ChipRow role="group" aria-label={t('picker_title')} data-testid="report-range-chips">
+        {RANGE_PRESETS.map((p) => (
           <Chip
             key={p}
             label={t(p)}
             color={preset === p ? 'primary' : 'default'}
             variant={preset === p ? 'filled' : 'outlined'}
+            aria-pressed={preset === p}
             onClick={() => onChange(presetRange(p), p)}
           />
         ))}
@@ -62,6 +49,7 @@ export default function DateRangeFilter({
           label={t('custom')}
           color={preset === 'custom' ? 'primary' : 'default'}
           variant={preset === 'custom' ? 'filled' : 'outlined'}
+          aria-pressed={preset === 'custom'}
           onClick={() => onChange(custom, 'custom')}
         />
       </ChipRow>

@@ -1317,3 +1317,38 @@ repo interprets it where the spec leaves web-specific latitude.)
      at a 320 px phone viewport in guest mode (₹9,99,99,999 pending: one
      line, no horizontal overflow, font ≥ 9 px; screenshot in
      `test-results/booking-summary-one-line/`).
+
+- **Reports quick filter — −12m · −3m · This month · +3m · +12m · Custom**
+  (2026-10-12, owner feedback; shared `docs/reports-range-filter.md` @
+  a2ab612; web + Android in parallel). Interpretations:
+  1. *One component already.* Every report page is `ReportScreen`, which
+     renders the single `DateRangeFilter` — nothing to consolidate; the
+     component was rewritten on the contract and its range math moved to a
+     pure module `src/lib/reports/range.ts` (`RANGE_PRESETS` in contract
+     order, `presetRange(preset, todayIso)`, `addMonthsClamped`,
+     `monthBounds`, `localTodayIso`, `DEFAULT_RANGE_PRESET = 'minus_12m'`).
+  2. *Math.* `minus_N` = `today − N months … today`; `plus_N` = `today …
+     today + N months`; `this_month` = whole calendar month; inclusive ends.
+     "Today" is the DEVICE-LOCAL date from `Date` getters (ADR-091 rule — the
+     old helper used `toISOString()` + UTC months, so an IST evening computed
+     tomorrow's range). Month arithmetic is integer math on the ISO parts
+     clamped to the target month's last day (Jan 31 → Feb 28/29), never
+     `Date` month overflow. The default stays the trailing 12 months, ending
+     today — identical to Android (which moved its end from end-of-month to
+     today).
+  3. *Preset ids* `minus_12m | minus_3m | this_month | plus_3m | plus_12m |
+     custom`; the deprecated `last_3_months`/`last_12_months` keys are no
+     longer referenced (the integrator deletes them from the shared catalog
+     once Android has switched). Nothing is persisted on web (unchanged).
+  4. *Row.* `ChipRow` (`role="group"`, `aria-label` =
+     `reports.range.picker_title`, `data-testid="report-range-chips"`),
+     horizontal scroll, never wraps, labels never shrink; chips carry
+     `aria-pressed`. Labels use U+2212 from the catalog.
+  5. *Tests.* `reports-range` (order/default, the five-preset table on a
+     fixed today, today-ends/starts rule, February bounds, clamp table incl.
+     leap years and year roll-overs, local-not-UTC today),
+     `reports-range-filter` (six chips in order en + hi, deprecated labels
+     absent, active state + emitted range/id, Custom pickers, nowrap row);
+     Playwright `reports-range-filter.spec.ts` at a 360 px phone viewport in
+     guest mode (order, single line, −12 months pressed by default, tap +3
+     months; screenshots in `test-results/reports-range-filter/`).

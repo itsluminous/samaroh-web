@@ -33,8 +33,15 @@ test('guest (phone): two red bookings on one day stay red', async ({ page }) => 
     await page.getByRole('button', { name: msg('en', 'booking.color.tomato') }).click();
     await page.getByRole('button', { name: msg('en', 'common.action.save') }).click();
     // The hall may host two events on one day: a conflict dialog is advisory.
+    // `isVisible()` does not wait (its timeout is ignored), so WAIT for the
+    // dialog briefly — the overlap check is async and the second booking's
+    // dialog may not have mounted yet when the save button releases.
     const proceed = page.getByRole('button', { name: msg('en', 'booking.form.conflict_save_anyway') });
-    if (await proceed.isVisible({ timeout: 1500 }).catch(() => false)) {
+    const conflictShown = await proceed
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (conflictShown) {
       await proceed.click();
     }
     await expect(page.getByText(name).first()).toBeVisible();

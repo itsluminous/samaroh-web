@@ -173,19 +173,23 @@ export async function fetchLinkedBookings(
   if (ids.length === 0) {
     return {};
   }
-  const { data, error } = await supabase
-    .from('bookings')
-    .select('id, customer_name, event_type, event_icon, status, start_date, end_date, deleted_at')
-    .in('id', ids)
-    .is('deleted_at', null);
-  if (error) {
+  try {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('id, customer_name, event_type, event_icon, status, start_date, end_date, deleted_at')
+      .in('id', ids)
+      .is('deleted_at', null);
+    if (error) {
+      return {};
+    }
+    const out: Record<string, LinkedBooking> = {};
+    for (const row of (data ?? []) as LinkedBooking[]) {
+      out[row.id] = row;
+    }
+    return out;
+  } catch {
     return {};
   }
-  const out: Record<string, LinkedBooking> = {};
-  for (const row of (data ?? []) as LinkedBooking[]) {
-    out[row.id] = row;
-  }
-  return out;
 }
 
 /**

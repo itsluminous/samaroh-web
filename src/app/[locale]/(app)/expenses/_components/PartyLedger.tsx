@@ -99,7 +99,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
       setLinkedBookings(
         await fetchLinkedBookings(
           supabase,
-          expenseRows.map((e) => e.booking_id).filter((id): id is string => id !== null),
+          expenseRows.map((e) => e.booking_id).filter((id): id is string => typeof id === 'string'),
         ),
       );
     } catch {

@@ -1298,3 +1298,22 @@ repo interprets it where the spec leaves web-specific latitude.)
      viewport in guest mode (two tomato bookings on today → both grid pills
      computed `#C62828`; pills carry `data-booking-pill={paint.kind}` for
      the locator; screenshot in `test-results/calendar-day-color/`).
+
+- **Booking tab summary — one line, autoshrink, never wrap** (2026-10-12,
+  owner feedback: crore-scale totals wrapped the "Received / Pending" row on
+  phones; Android parity via `AutoShrinkText`). Interpretations:
+  1. `SummaryCard` renders each figure through the reports' `AutoShrinkText`
+     (imported from `menu/_components`, not moved — shared components change
+     via the integrator) inside a `subtitle1` half that owns `flex: 1 1 0;
+     min-width: 0` of a single flex row (`data-testid` `booking-summary-row`,
+     `summary-received`, `summary-pending`). The span is `nowrap` +
+     `overflow: hidden` and shrinks its font to fit (floor 9 px); it never
+     wraps and never ellipsises before the floor.
+  2. Masking (`booking.view_amounts=false` → `₹•••`) and the success/error
+     colours are unchanged; the string keys are the existing
+     `booking.summary.*`.
+  3. *Tests.* `booking-summary-autoshrink` (flex halves, single-line span
+     styles, colours, masking); Playwright `booking-summary-one-line.spec.ts`
+     at a 320 px phone viewport in guest mode (₹9,99,99,999 pending: one
+     line, no horizontal overflow, font ≥ 9 px; screenshot in
+     `test-results/booking-summary-one-line/`).

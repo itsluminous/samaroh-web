@@ -50,10 +50,15 @@ export function eventPartyDate(isoDate: string): string {
  * (a preset label snapshot — user data, kept verbatim even when Hindi), EXCEPT
  * a legacy built-in KEY (`wedding`, `room_booking`, …), which resolves to that
  * preset's ENGLISH catalog label. Never the emoji.
+ *
+ * Key matching follows the contract's normalize rule (Android
+ * `EventTypeKinds.normalize`: trim, lower-case, spaces → underscores) so both
+ * platforms mint the SAME party name for `Room booking` / `WEDDING` — a
+ * case-only difference would otherwise split the ledger across devices.
  */
 export function eventPartyTypeLabel(eventType: string): string {
   const trimmed = eventType.trim();
-  const def = findEventType(trimmed);
+  const def = findEventType(trimmed.toLowerCase().replace(/ /g, '_'));
   if (def) {
     const entry = (englishCatalog as Record<string, { value: string } | undefined>)[def.label_key];
     if (entry?.value) {

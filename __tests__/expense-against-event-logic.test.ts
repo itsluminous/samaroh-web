@@ -47,6 +47,13 @@ describe('event party name (§2.1) — English, deterministic, device-independen
     expect(eventPartyTypeLabel(' Reception ')).toBe('Reception');
     expect(eventPartyTypeLabel('\u0936\u093E\u0926\u0940')).toBe('\u0936\u093E\u0926\u0940'); // शादी — user data
     expect(eventPartyTypeLabel('Wedding')).toBe('Wedding'); // label snapshot of the seeded preset
+    // Normalize rule (Android `EventTypeKinds.normalize` parity): case and
+    // space/underscore differences still hit the built-in key → ONE English
+    // label on every device, never a casing-split ledger.
+    expect(eventPartyTypeLabel('Room booking')).toBe('Room Booking');
+    expect(eventPartyTypeLabel('WEDDING')).toBe('Wedding');
+    expect(eventPartyTypeLabel(' muh dikhayi ')).toBe('Muh Dikhayi');
+    expect(eventPartyTypeLabel('Reception party')).toBe('Reception party'); // not a built-in: verbatim
     expect(eventPartyTypeLabel('wedding')).not.toMatch(/\u{1F492}/u); // never the emoji
   });
 

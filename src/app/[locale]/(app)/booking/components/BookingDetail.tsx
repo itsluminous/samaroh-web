@@ -40,6 +40,7 @@ import { presetKindForType, type EventTypePreset } from '@/lib/booking/eventType
 import { formatDate, formatDateRange } from '@/lib/booking/dates';
 import { formatRupees } from '@/lib/booking/money';
 import type { Booking, BookingPayment, BookingPermissions, Business } from '@/lib/booking/types';
+import { expensesHistoryTotal, type BookingExpenseRow } from '@/lib/expenses/bookingExpense';
 import { displayInvoiceNumber } from '@/lib/invoice/number';
 import { buildWhatsAppLink } from '@/lib/booking/whatsapp';
 import { formatBookingTitle } from './format';
@@ -68,6 +69,9 @@ export default function BookingDetail({
   onDeletePayment,
   onRecordExpense,
   canRecordExpense = false,
+  expenses = [],
+  canViewExpenses = false,
+  showExpenseAmounts = true,
   onCancelBooking,
   onRestoreBooking,
   onDeleteBooking,
@@ -95,6 +99,16 @@ export default function BookingDetail({
   onRecordExpense?: () => void;
   /** expenses.create (owners always) — the action is HIDDEN without it. */
   canRecordExpense?: boolean;
+  /**
+   * Live expenses linked to this booking (`expenses.booking_id`), newest
+   * first — the "Expenses history" section (contract §3b). The section does
+   * not exist when empty.
+   */
+  expenses?: BookingExpenseRow[];
+  /** expenses.view (owners always) — without it the section does not exist. */
+  canViewExpenses?: boolean;
+  /** expenses.view_amounts (absent = true) — false masks the section's amounts. */
+  showExpenseAmounts?: boolean;
   onCancelBooking: () => void;
   /** Cancelled bookings only: puts the booking back on the calendar as Confirmed. */
   onRestoreBooking: () => void;
@@ -150,6 +164,14 @@ export default function BookingDetail({
   const datesLine = `${t('booking.card.dates_label')}: ${formatDateRange(booking.start_date, booking.end_date, locale)}`;
   const paymentLine = (p: BookingPayment) =>
     `${formatDate(p.paid_on, locale)} \u00B7 ${t(`booking.payment.method_${p.method}`)}${p.notes ? ` \u00B7 ${p.notes}` : ''}`;
+  // Expenses history (contract §3b): expenses.view gate (owners always), and
+  // ENTIRELY hidden — no heading, no empty state, no divider — when the
+  // booking has no live linked expense. Amounts follow expenses.view_amounts.
+  const expenseRows = canViewExpenses ? expenses : [];
+  const expenseRupees = (value: number): ReactNode =>
+    showExpenseAmounts ? formatRupees(value) : <MaskedAmount />;
+  const expenseLine = (e: BookingExpenseRow) =>
+    `${formatDate(e.expense_date, locale)}${e.notes ? ` \u00B7 ${e.notes}` : ''}`;
 
   return (
     <Drawer anchor="bottom" open onClose={onClose} PaperProps={{ sx: { maxHeight: '88vh', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxWidth: 640, mx: 'auto' } }}>
@@ -264,6 +286,38 @@ export default function BookingDetail({
             )}
           </>
         )}
+
+        {expenseRows.length > 0 ? (
+          <Box data-testid="expenses-history">
+            <Divider sx={{ my: 1.5 }} />
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              {t('booking.card.expenses_history')}
+            </Typography>
+            {expenseRows.map((e) => (
+              // Read-only rows (no tap, no delete) styled like a payment-history
+              // row; a `received` row carries the ledger's received (green) tone.
+              <Box
+                key={e.id}
+                data-testid="expense-row"
+                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.25 }}
+              >
+                <Typography variant="body2" color="text.secondary" noWrap sx={{ flexGrow: 1, minWidth: 0 }}>
+                  {expenseLine(e)}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  fontWeight={500}
+                  color={e.direction === 'received' ? 'success.main' : undefined}
+                  sx={{ whiteSpace: 'nowrap' }}
+                >
+                  {expenseRupees(e.amount)}
+                </Typography>
+              </Box>
+            ))}
+            {/* Σ paid − Σ received: informational only — NEVER subtracted from Due. */}
+            <AmountRow label={t('booking.card.expenses_total')} value={expenseRupees(expensesHistoryTotal(expenseRows))} />
+          </Box>
+        ) : null}
 
         <MetadataText component="div" sx={{ mt: 1.5 }}>
           {t('booking.card.audit_added', {

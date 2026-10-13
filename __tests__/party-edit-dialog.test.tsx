@@ -33,6 +33,7 @@ const PARTY: PartyRecord = {
   name: 'Tent House',
   phone: '9876543210',
   business_related: true,
+  booking_id: null,
   created_at: '2026-01-01T00:00:00Z',
 };
 

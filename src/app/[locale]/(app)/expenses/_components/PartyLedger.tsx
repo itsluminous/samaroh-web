@@ -19,9 +19,7 @@ import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
-import { chipLabelFromNotes, eventChipLabel } from '@/lib/expenses/bookingExpense';
 import { computeLedger, computeNetBalance, type ExpenseDirection } from '@/lib/expenses/ledger';
-import { eventTypeLabel } from '@/lib/invoice/client';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import MetadataText from '@/components/MetadataText';
 import { formatAmount } from '@/lib/format/amount';
@@ -48,7 +46,6 @@ import EntryDialog from './EntryDialog';
 export default function PartyLedger({ partyId }: { partyId: string }) {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
-  const tRoot = useTranslations();
   const format = useFormatter();
   const router = useRouter();
   const {
@@ -70,12 +67,13 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   // expenses.view_amounts (absent = true): false masks the net balance,
   // running-balance chips and entry amounts as ₹•••.
   const showAmounts = isOwner || permissions.expenses.view_amounts;
-  // booking.view gates the event chip's TAP (the chip itself always shows).
+  // booking.view gates "Show event" (contract §3): without it the control is
+  // NOT rendered — an action a member cannot take is hidden, not disabled.
   const canViewBooking = isOwner || permissions.booking.view;
 
   const [party, setParty] = useState<PartyRecord | null>(null);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
-  // Live bookings behind the entries' booking_id links (event chips).
+  // Live bookings behind the booking_id links (entries + the event party's own).
   const [linkedBookings, setLinkedBookings] = useState<Record<string, LinkedBooking>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -99,7 +97,9 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
       setLinkedBookings(
         await fetchLinkedBookings(
           supabase,
-          expenseRows.map((e) => e.booking_id).filter((id): id is string => typeof id === 'string'),
+          [partyRow?.booking_id ?? null, ...expenseRows.map((e) => e.booking_id)].filter(
+            (id): id is string => typeof id === 'string',
+          ),
         ),
       );
     } catch {
@@ -158,24 +158,38 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   };
 
   /**
-   * Event chip label (contract §3): `{firstName} · {eventType}` from the
-   * resolved booking; unresolvable booking → the first segment of the notes
-   * if they still carry the default shape; else no chip. Never a raw id.
+   * "Show event" (contract §3): the live booking behind a `booking_id`, or
+   * null when the member lacks booking.view / the booking is unresolvable
+   * (tombstoned, not pulled yet) — the control is then omitted. Never a raw id.
    */
-  const eventChip = (record: ExpenseRecord): { label: string; bookingId: string | null } | null => {
-    if (!record.booking_id) {
+  const showEventTarget = (bookingId: string | null): string | null => {
+    if (!bookingId || !canViewBooking) {
       return null;
     }
-    const booking = linkedBookings[record.booking_id];
-    if (booking) {
-      return {
-        label: eventChipLabel(booking, eventTypeLabel(booking, tRoot)),
-        bookingId: booking.id,
-      };
-    }
-    const fallback = chipLabelFromNotes(record.notes);
-    return fallback ? { label: fallback, bookingId: null } : null;
+    return linkedBookings[bookingId]?.id ?? null;
   };
+
+  /** Opens the booking's detail drawer on the Booking page (calendar jumps to its month). */
+  const openBooking = (bookingId: string) => router.push(`/booking?open=${bookingId}`);
+
+  const showEventChip = (bookingId: string, testId: string) => (
+    // An ACTION chip (small, outlined), not MetadataText — ui-conventions §1.
+    <Chip
+      size="small"
+      variant="outlined"
+      color="primary"
+      icon={<EventIcon />}
+      data-testid={testId}
+      data-show-event
+      clickable
+      label={t('ledger.show_event')}
+      onClick={(event) => {
+        // The row itself is the edit affordance.
+        event.stopPropagation();
+        openBooking(bookingId);
+      }}
+    />
+  );
 
   if (businessLoading || loading) {
     return (
@@ -192,6 +206,8 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
   if (loadError || !party) {
     return <Alert severity="error">{t('error.load_failed')}</Alert>;
   }
+
+  const partyEventTarget = showEventTarget(party.booking_id);
 
   return (
     <Box sx={{ pb: 12 }}>
@@ -237,6 +253,13 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
         ) : null}
       </Box>
 
+      {/* Event party (parties.booking_id, contract §3): "Show event" once in the
+          header, on its own line under the name so a phone-width header never
+          truncates the action label. */}
+      {partyEventTarget ? (
+        <Box sx={{ mb: 1, ml: 7 }}>{showEventChip(partyEventTarget, 'party-show-event')}</Box>
+      ) : null}
+
       <Box sx={{ mb: 2, ml: 7 }}>
         <BusinessRelatedPill
           value={party.business_related}
@@ -253,8 +276,7 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
       ) : (
         <List disablePadding>
           {ledgerRows.map(({ record, balanceAfter }) => {
-            const chip = eventChip(record);
-            const chipClickable = chip !== null && chip.bookingId !== null && canViewBooking;
+            const eventTarget = showEventTarget(record.booking_id);
             const rowContent = (
               <>
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -268,30 +290,8 @@ export default function PartyLedger({ partyId }: { partyId: string }) {
                     {record.notes}
                   </Typography>
                 )}
-                {chip ? (
-                  // Content chip (NOT MetadataText): links the entry to its event.
-                  // Tap opens the booking's detail on the Booking page (booking.view);
-                  // without the permission or a resolvable booking it is inert.
-                  <Box sx={{ mt: 0.5 }}>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color="primary"
-                      icon={<EventIcon />}
-                      data-event-chip
-                      label={t('ledger.event_chip', { label: chip.label })}
-                      clickable={chipClickable}
-                      onClick={
-                        chipClickable
-                          ? (event) => {
-                              // The row itself is the edit affordance.
-                              event.stopPropagation();
-                              router.push(`/booking?open=${chip.bookingId}`);
-                            }
-                          : undefined
-                      }
-                    />
-                  </Box>
+                {eventTarget ? (
+                  <Box sx={{ mt: 0.5 }}>{showEventChip(eventTarget, 'entry-show-event')}</Box>
                 ) : null}
                 {record.expense_attachments.length > 0 && (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>

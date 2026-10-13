@@ -7,9 +7,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Booking } from '@/lib/booking/types';
 import {
+  matchLinkedParty,
   matchLiveParty,
   newPartyFromBooking,
   PartyCreateForbiddenError,
+  sortExpensesNewestFirst,
+  type BookingExpenseRow,
 } from '@/lib/expenses/bookingExpense';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
 import { insertWithOutbox, updateWithOutbox } from '@/lib/outbox/mutate';
@@ -24,7 +27,25 @@ export interface PartyRecord {
    * migration 004 — apply it before deploying this app version.
    */
   business_related: boolean;
+  /**
+   * The booking this party REPRESENTS (an "event party", shared migration
+   * 014, `on delete set null`); null for ordinary parties and for rows read
+   * from a server that lags the migration.
+   */
+  booking_id: string | null;
   created_at: string;
+}
+
+/** Explicit party column list — keep in lockstep with PartyRecord. */
+const PARTY_COLUMNS = 'id, name, phone, business_related, booking_id, created_at';
+
+/** Coalesces schema-lag gaps (pre-004 flag, pre-014 link, older guest rows). */
+function normalizeParty(row: PartyRecord): PartyRecord {
+  return {
+    ...row,
+    business_related: normalizeBusinessRelated(row.business_related),
+    booking_id: row.booking_id ?? null,
+  };
 }
 
 /**
@@ -83,17 +104,14 @@ export async function fetchParties(
 ): Promise<PartyRecord[]> {
   const { data, error } = await supabase
     .from('parties')
-    .select('id, name, phone, business_related, created_at')
+    .select(PARTY_COLUMNS)
     .eq('business_id', businessId)
     .is('deleted_at', null)
     .order('name', { ascending: true });
   if (error) {
     throw new Error(error.message);
   }
-  return ((data ?? []) as PartyRecord[]).map((row) => ({
-    ...row,
-    business_related: normalizeBusinessRelated(row.business_related),
-  }));
+  return ((data ?? []) as PartyRecord[]).map(normalizeParty);
 }
 
 export async function fetchParty(
@@ -102,7 +120,7 @@ export async function fetchParty(
 ): Promise<PartyRecord | null> {
   const { data, error } = await supabase
     .from('parties')
-    .select('id, name, phone, business_related, created_at')
+    .select(PARTY_COLUMNS)
     .eq('id', partyId)
     .is('deleted_at', null)
     .maybeSingle();
@@ -110,7 +128,7 @@ export async function fetchParty(
     throw new Error(error.message);
   }
   const row = data as PartyRecord | null;
-  return row ? { ...row, business_related: normalizeBusinessRelated(row.business_related) } : null;
+  return row ? normalizeParty(row) : null;
 }
 
 /** All live expenses of the business (party aggregation happens client-side). */
@@ -153,17 +171,44 @@ export async function fetchPartyExpenses(
   }));
 }
 
-/** The booking fields the party-ledger event chip needs. */
+/**
+ * Contract §3b — the booking card's Expenses history: LIVE expenses linked to
+ * this booking (`expenses.booking_id`, strictly — plain-ledger entries against
+ * the event party are not listed), newest first. Never throws: a failed read
+ * (e.g. a server lagging migration 012) hides the section instead of breaking
+ * the card.
+ */
+export async function fetchBookingExpenses(
+  supabase: SupabaseClient,
+  bookingId: string,
+): Promise<BookingExpenseRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('id, direction, amount, expense_date, notes, created_at')
+      .eq('booking_id', bookingId)
+      .is('deleted_at', null);
+    if (error) {
+      return [];
+    }
+    return sortExpensesNewestFirst((data ?? []) as BookingExpenseRow[]);
+  } catch {
+    return [];
+  }
+}
+
+/** The booking fields the party-ledger "Show event" control needs. */
 export type LinkedBooking = Pick<
   Booking,
   'id' | 'customer_name' | 'event_type' | 'event_icon' | 'status' | 'start_date' | 'end_date' | 'deleted_at'
 >;
 
 /**
- * Live bookings behind the ledger's `booking_id` links, keyed by id. Missing
- * ids (tombstoned, not pulled yet) are simply absent — the chip then falls
- * back to the notes label (contract §3). Never throws: a failed lookup must
- * not break the ledger, so it degrades to "no bookings resolved".
+ * Live bookings behind the ledger's `booking_id` links (entries AND the event
+ * party's own link), keyed by id. Missing ids (tombstoned, not pulled yet)
+ * are simply absent — the "Show event" control is then omitted (contract
+ * §3). Never throws: a failed lookup must not break the ledger, so it
+ * degrades to "no bookings resolved".
  */
 export async function fetchLinkedBookings(
   supabase: SupabaseClient,
@@ -192,31 +237,61 @@ export async function fetchLinkedBookings(
   }
 }
 
+/** The booking fields the event-party resolution reads. */
+export type EventPartySource = Pick<
+  Booking,
+  'id' | 'event_type' | 'start_date' | 'customer_name' | 'customer_phone'
+>;
+
+/** PostgREST surfaces `uq_parties_biz_name` as a 23505 "duplicate key" message. */
+function isUniqueViolation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /23505|duplicate key/i.test(message);
+}
+
+/** Contract §2.2 steps 1–2 against the business's live parties (no writes). */
+function findEventParty(live: readonly PartyRecord[], booking: EventPartySource, name: string): PartyRecord | null {
+  return matchLinkedParty(live, booking.id) ?? matchLiveParty(live, name);
+}
+
 /**
- * Contract §2 — the booking's customer as a party, resolved at SAVE time:
- * 1. a LIVE party whose `lower(trim(name))` equals the customer name
- *    (several → earliest created_at);
- * 2. else CREATE `{name, phone, business_related = false}` — requires
- *    `expenses.manage_parties`; without it throws
+ * Contract §2.2 — the booking's EVENT PARTY, resolved at SAVE time, in order:
+ * 1. BY LINK: a LIVE party with `booking_id = booking.id` (whatever its name;
+ *    several → earliest created_at);
+ * 2. BY NAME: a LIVE party whose `lower(trim(name))` equals the §2.1 event
+ *    party name (`booking_id` is NOT back-filled — no silent edits);
+ * 3. else CREATE `{name = §2.1, phone, business_related = true, booking_id}`
+ *    — requires `expenses.manage_parties`; without it throws
  *    {@link PartyCreateForbiddenError} BEFORE any insert.
- * Phone is never back-filled onto an existing party.
+ * Phone is never back-filled. A 23505 on the create (another device won the
+ * race on `uq_parties_biz_name`) re-resolves from step 1 once (step 5).
  */
 export async function resolveBookingParty(
   supabase: SupabaseClient,
   businessId: string,
-  booking: Pick<Booking, 'customer_name' | 'customer_phone'>,
+  booking: EventPartySource,
   canManageParties: boolean,
 ): Promise<PartyRecord> {
-  const live = await fetchParties(supabase, businessId);
-  const existing = matchLiveParty(live, booking.customer_name);
+  const fresh = newPartyFromBooking(booking);
+  const existing = findEventParty(await fetchParties(supabase, businessId), booking, fresh.name);
   if (existing) {
     return existing;
   }
-  const fresh = newPartyFromBooking(booking);
   if (!canManageParties) {
     throw new PartyCreateForbiddenError(fresh.name);
   }
-  return createParty(supabase, businessId, fresh.name, fresh.phone, fresh.businessRelated);
+  try {
+    return await createParty(supabase, businessId, fresh.name, fresh.phone, fresh.businessRelated, fresh.bookingId);
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    const winner = findEventParty(await fetchParties(supabase, businessId), booking, fresh.name);
+    if (winner) {
+      return winner;
+    }
+    throw error;
+  }
 }
 
 export async function createParty(
@@ -225,6 +300,8 @@ export async function createParty(
   name: string,
   phone: string | null,
   businessRelated: boolean,
+  /** Event link (migration 014) — set only for an event party created from a booking card. */
+  bookingId: string | null = null,
 ): Promise<PartyRecord> {
   const record = {
     id: crypto.randomUUID(),
@@ -232,6 +309,9 @@ export async function createParty(
     name: name.trim(),
     phone: phone?.trim() || null,
     business_related: businessRelated,
+    // Always on the wire (null for ordinary parties) — the server column must
+    // exist first (owner applies shared migration 014 before this build ships).
+    booking_id: bookingId,
   };
   await insertWithOutbox(supabase, { module: 'expenses', table: 'parties', row: record, label: record.name });
   return {
@@ -239,6 +319,7 @@ export async function createParty(
     name: record.name,
     phone: record.phone,
     business_related: record.business_related,
+    booking_id: record.booking_id,
     created_at: new Date().toISOString(),
   };
 }

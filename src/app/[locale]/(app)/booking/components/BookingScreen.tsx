@@ -65,6 +65,8 @@ import { invoiceFileName } from '@/lib/invoice/number';
 import { buildTextReceipt } from '@/lib/invoice/receipt';
 import { eventTypeLabel } from '@/lib/invoice/client';
 import EntryDialog from '@/app/[locale]/(app)/expenses/_components/EntryDialog';
+import { fetchBookingExpenses } from '@/app/[locale]/(app)/expenses/_lib/queries';
+import type { BookingExpenseRow } from '@/lib/expenses/bookingExpense';
 import AgendaList from './AgendaList';
 import BlockDatesDialog from './BlockDatesDialog';
 import BookingDetail from './BookingDetail';
@@ -121,6 +123,9 @@ export default function BookingScreen() {
   // "Record expense" against an event: the EXISTING expenses entry dialog,
   // pre-filled (party resolved on save, notes default, booking_id).
   const [expenseFor, setExpenseFor] = useState<Booking | null>(null);
+  // The open card's linked expenses ("Expenses history", contract §3b) —
+  // fetched per detail booking, only when the member holds expenses.view.
+  const [detailExpenses, setDetailExpenses] = useState<BookingExpenseRow[]>([]);
   const [blockOpen, setBlockOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
@@ -200,7 +205,7 @@ export default function BookingScreen() {
     }
   }, [ctxLoaded, reload]);
 
-  // Deep link `?open=<bookingId>` (the party ledger's event chip): jump the
+  // Deep link `?open=<bookingId>` (the party ledger's "Show event"): jump the
   // calendar to the booking's start month and open its detail drawer. Read
   // once from window.location (client-only; NOT useSearchParams — that would
   // force a CSR bailout on the prerendered page, see useHighlightParam).
@@ -247,6 +252,28 @@ export default function BookingScreen() {
       active = false;
     };
   }, [db, ctx]);
+
+  const canViewExpenses = ctx?.expensePermissions.view ?? false;
+  const loadDetailExpenses = useCallback(
+    (bookingId: string | null) => {
+      if (!db || !bookingId || !canViewExpenses) {
+        setDetailExpenses([]);
+        return () => {};
+      }
+      let active = true;
+      fetchBookingExpenses(db, bookingId).then((rows) => {
+        if (active) {
+          setDetailExpenses(rows);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    },
+    [db, canViewExpenses],
+  );
+
+  useEffect(() => loadDetailExpenses(detailId), [detailId, loadDetailExpenses]);
 
   // The detail drawer resolves its booking from whichever view supplied it.
   const detailBooking = detailId
@@ -601,6 +628,9 @@ export default function BookingScreen() {
           onDeletePayment={handleDeletePayment}
           canRecordExpense={ctx.expensePermissions.create}
           onRecordExpense={() => setExpenseFor(detailBooking)}
+          expenses={detailExpenses}
+          canViewExpenses={canViewExpenses}
+          showExpenseAmounts={ctx.expensePermissions.view_amounts}
           onCancelBooking={handleCancelBooking}
           onRestoreBooking={handleRestoreBooking}
           onDeleteBooking={handleDeleteBooking}
@@ -670,7 +700,11 @@ export default function BookingScreen() {
             canManageParties: ctx.expensePermissions.manage_parties,
           }}
           onClose={() => setExpenseFor(null)}
-          onSaved={() => setExpenseFor(null)}
+          onSaved={() => {
+            setExpenseFor(null);
+            // The card lists the new entry right away.
+            loadDetailExpenses(detailId);
+          }}
         />
       ) : null}
 

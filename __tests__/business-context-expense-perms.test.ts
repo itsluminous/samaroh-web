@@ -56,7 +56,7 @@ describe('fetchBusinessContext().expensePermissions', () => {
     await guestDb.businesses.add(business(GUEST_USER_ID));
     const ctx = await fetchBusinessContext(db);
     expect(ctx?.isOwner).toBe(true);
-    expect(ctx?.expensePermissions).toEqual({ create: true, manage_parties: true });
+    expect(ctx?.expensePermissions).toEqual({ view: true, view_amounts: true, create: true, manage_parties: true });
   });
 
   it('member with expenses.create only: the action shows, party creation is forbidden', async () => {
@@ -66,32 +66,33 @@ describe('fetchBusinessContext().expensePermissions', () => {
     );
     const ctx = await fetchBusinessContext(db);
     expect(ctx?.isOwner).toBe(false);
-    expect(ctx?.expensePermissions).toEqual({ create: true, manage_parties: false });
+    expect(ctx?.expensePermissions).toEqual({ view: true, view_amounts: true, create: true, manage_parties: false });
   });
 
   it('member with create + manage_parties: both true', async () => {
     await guestDb.businesses.add(business('owner-user'));
     await guestDb.business_members.add(
-      member({ booking: { view: true }, expenses: { create: true, manage_parties: true } }),
+      member({ booking: { view: true }, expenses: { create: true, manage_parties: true, view_amounts: false } }),
     );
     const ctx = await fetchBusinessContext(db);
-    expect(ctx?.expensePermissions).toEqual({ create: true, manage_parties: true });
+    // view absent = false (section hidden); view_amounts explicit false = masked.
+    expect(ctx?.expensePermissions).toEqual({ view: false, view_amounts: false, create: true, manage_parties: true });
   });
 
   it('member without an expenses blob (or with a stale `add` key): absent = false — the action is hidden', async () => {
     await guestDb.businesses.add(business('owner-user'));
     await guestDb.business_members.add(member({ booking: { view: true }, expenses: { add: true } }));
     const ctx = await fetchBusinessContext(db);
-    expect(ctx?.expensePermissions).toEqual({ create: false, manage_parties: false });
+    expect(ctx?.expensePermissions).toEqual({ view: false, view_amounts: true, create: false, manage_parties: false });
 
     await guestDb.business_members.clear();
     await guestDb.business_members.add(member(null));
     const bare = await fetchBusinessContext(db);
-    expect(bare?.expensePermissions).toEqual({ create: false, manage_parties: false });
+    expect(bare?.expensePermissions).toEqual({ view: false, view_amounts: true, create: false, manage_parties: false });
   });
 });
 
-describe('fetchBookingById (event-chip deep link)', () => {
+describe('fetchBookingById ("Show event" deep link)', () => {
   it('returns the live booking (colour normalised to null when absent)', async () => {
     const row: Record<string, unknown> = { ...makeBooking({ id: 'bk-live' }) };
     delete row.color; // pre-005 row shape

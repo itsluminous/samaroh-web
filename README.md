@@ -10,8 +10,8 @@ Supabase project with the Android app, so data is live-identical across both cli
 
 | Section | Highlights | Status |
 |---|---|---|
-| 📅 Booking | calendar-first booking management, payments & dues, date blocks, invoice PDF (shared layout contract: notes block, logo top-left, `INV-0088` display number + file name), **Record expense** against an event | ✅ |
-| 📒 Expenses | party ledger ("You gave / You got"), business/personal party flag, party edit + cascade delete, scrollable filter chips, **Event chip** on entries linked to a booking (`expenses.booking_id`, shared migration 012) | ✅ |
+| 📅 Booking | calendar-first booking management, payments & dues, date blocks, invoice PDF (shared layout contract: notes block, logo top-left, `INV-0088` display number + file name), **Record expense** against an event (booked to the event party `{Type} - {dd-MMM-yyyy} - {Customer}`) + **Expenses history** on the card | ✅ |
+| 📒 Expenses | party ledger ("You gave / You got"), business/personal party flag, party edit + cascade delete, scrollable filter chips, **Show event** on entries linked to a booking and on an event party's ledger header (`expenses.booking_id` / `parties.booking_id`, shared migrations 012 + 014) | ✅ |
 | 📦 Inventory | stock, transactions, masterlist with fuzzy duplicate chips, per-item detail page with history + permission-gated edit/delete, Drive-backed item photos with in-app lightbox | ✅ |
 | 📝 Notes | checklists + free-text notes with tags, fine-grained `notes.*` permissions (shared 007) | ✅ |
 | 📁 Files | Drive-indexed file storage (shared 009/010): folders, uploads via the browser-side Google Drive client, global search, restricted folders (owner allow-lists), **rename** files + folders, **move** files + folders through a lazy destination-folder picker (root folders first, expand chevrons, **New folder**) | ✅ |
@@ -50,8 +50,9 @@ npm run dev
 The app builds and runs without Supabase env vars (auth is disabled until they are set).
 Database schema and seed data live in `shared/supabase/`. Apply every migration in
 `shared/supabase/migrations/` before deploying a build that needs it — the current build
-requires `012_expense_booking_link.sql` (`expenses.booking_id`); without it saving an
-expense from a booking card fails with PGRST204.
+requires `012_expense_booking_link.sql` (`expenses.booking_id`) and
+`014_party_booking_link.sql` (`parties.booking_id`); without them saving an expense from a
+booking card (and, after 014, adding any party) fails with PGRST204.
 
 ## Development
 

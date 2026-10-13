@@ -2,11 +2,12 @@
  * "Record expense" on the booking card + the pre-filled entry dialog
  * (shared/docs/expense-against-event.md §1): action HIDDEN (not greyed)
  * without expenses.create, never on markers or cancelled bookings; the
- * EXISTING EntryDialog opens pre-filled (customer shown, direction "You
- * gave" but editable, notes = `{eventType} · {dates}`, amount empty) and on
- * save writes ONE expenses row with booking_id — the party being resolved or
- * created at save time; a forbidden create shows the blocking message and
- * writes nothing.
+ * EXISTING EntryDialog opens pre-filled (the ENGLISH event party name shown
+ * read-only, direction "You gave" but editable, notes = `{eventType} ·
+ * {dates}`, amount empty) and on save writes ONE expenses row with
+ * booking_id — the EVENT party (`{Type} - {dd-MMM-yyyy} - {Customer}`,
+ * business_related=true, booking_id) being resolved or created at save time;
+ * a forbidden create shows the blocking message and writes nothing.
  */
 import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -119,12 +120,14 @@ describe('BookingDetail — Record expense action', () => {
 describe('EntryDialog — booking pre-fill mode', () => {
   const booking = makeBooking({
     id: 'bk-7',
+    event_type: 'wedding',
     customer_name: 'Priya Sharma',
     customer_phone: '9876543210',
     start_date: '2026-07-10',
     end_date: '2026-07-12',
   });
   const notesDefault = 'Wedding \u00B7 Jul 10, 2026 \u2013 Jul 12, 2026';
+  const EVENT_PARTY = 'Wedding - 10-Jul-2026 - Priya Sharma';
 
   beforeEach(async () => {
     await Promise.all([guestDb.parties.clear(), guestDb.expenses.clear()]);
@@ -148,10 +151,11 @@ describe('EntryDialog — booking pre-fill mode', () => {
     return onSaved;
   }
 
-  it('pre-fills: title, customer, direction "You gave" (editable), notes default, empty amount', () => {
+  it('pre-fills: title, EVENT PARTY name (read-only), direction "You gave" (editable), notes default, empty amount', () => {
     openDialog(true);
     expect(screen.getByRole('heading', { name: actionLabel })).toBeInTheDocument();
-    expect(screen.getByTestId('entry-party-name')).toHaveTextContent('Priya Sharma');
+    expect(screen.getByTestId('entry-party-name')).toHaveTextContent(EVENT_PARTY);
+    expect(screen.getByTestId('entry-party-name').querySelector('input')).toBeNull();
     const gave = screen.getByRole('button', { name: en.expenses.home.you_gave });
     const got = screen.getByRole('button', { name: en.expenses.home.you_got });
     expect(gave).toHaveAttribute('aria-pressed', 'true');
@@ -162,7 +166,7 @@ describe('EntryDialog — booking pre-fill mode', () => {
     expect(got).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('saving resolves/creates the customer party and writes ONE expense row with booking_id', async () => {
+  it('saving resolves/creates the EVENT party (business_related=true, booking_id) and writes ONE expense row with booking_id', async () => {
     const onSaved = openDialog(true);
     fireEvent.change(screen.getByLabelText(en.expenses.entry.amount_label), { target: { value: '2500' } });
     fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
@@ -170,7 +174,7 @@ describe('EntryDialog — booking pre-fill mode', () => {
 
     const parties = await guestDb.parties.toArray();
     expect(parties).toHaveLength(1);
-    expect(parties[0]).toMatchObject({ name: 'Priya Sharma', phone: '9876543210', business_related: false });
+    expect(parties[0]).toMatchObject({ name: EVENT_PARTY, phone: '9876543210', business_related: true, booking_id: 'bk-7' });
     const expenses = await guestDb.expenses.toArray();
     expect(expenses).toHaveLength(1);
     expect(expenses[0]).toMatchObject({
@@ -195,18 +199,18 @@ describe('EntryDialog — booking pre-fill mode', () => {
     const onSaved = openDialog(false);
     fireEvent.change(screen.getByLabelText(en.expenses.entry.amount_label), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
-    const expected = en.expenses.entry.party_create_forbidden.replace('{name}', 'Priya Sharma');
+    const expected = en.expenses.entry.party_create_forbidden.replace('{name}', EVENT_PARTY);
     expect(await screen.findByRole('alert')).toHaveTextContent(expected);
     expect(onSaved).not.toHaveBeenCalled();
     expect(await guestDb.parties.count()).toBe(0);
     expect(await guestDb.expenses.count()).toBe(0);
   });
 
-  it('member without manage_parties CAN save when the customer already exists as a live party', async () => {
+  it('member without manage_parties CAN save when the event party already exists (by name) as a live party', async () => {
     await guestDb.parties.add({
       id: 'p-priya',
       business_id: 'biz-1',
-      name: 'priya sharma',
+      name: EVENT_PARTY.toLowerCase(),
       phone: null,
       business_related: true,
       created_at: '2026-01-01T00:00:00Z',
@@ -218,6 +222,26 @@ describe('EntryDialog — booking pre-fill mode', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     const expenses = await guestDb.expenses.toArray();
     expect(expenses[0]).toMatchObject({ party_id: 'p-priya', booking_id: 'bk-7' });
+    expect(await guestDb.parties.count()).toBe(1);
+  });
+
+  it('member without manage_parties CAN save when a LINKED event party exists under any name', async () => {
+    await guestDb.parties.add({
+      id: 'p-linked',
+      business_id: 'biz-1',
+      name: 'Priya wedding (renamed by owner)',
+      phone: null,
+      business_related: true,
+      booking_id: 'bk-7',
+      created_at: '2026-01-01T00:00:00Z',
+      deleted_at: null,
+    });
+    const onSaved = openDialog(false);
+    fireEvent.change(screen.getByLabelText(en.expenses.entry.amount_label), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: en.common.action.save }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    const expenses = await guestDb.expenses.toArray();
+    expect(expenses[0]).toMatchObject({ party_id: 'p-linked', booking_id: 'bk-7' });
     expect(await guestDb.parties.count()).toBe(1);
   });
 });

@@ -24,7 +24,7 @@ import {
 } from '@/app/[locale]/(app)/expenses/_lib/queries';
 
 function party(id: string, name: string): PartyRecord {
-  return { id, name, phone: null, business_related: true, created_at: '2026-01-01T00:00:00Z' };
+  return { id, name, phone: null, business_related: true, booking_id: null, created_at: '2026-01-01T00:00:00Z' };
 }
 
 /** Non-null local table accessor — all names here are registered tables. */

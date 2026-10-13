@@ -1410,3 +1410,121 @@ repo interprets it where the spec leaves web-specific latitude.)
      quotes 30,000 → cancel keeps → confirm → row gone, "No payments", due
      1,00,000, snackbar; survives reload; screenshots in
      `test-results/booking-payment-delete/`).
+
+- **Expense against an event — revision 2: the EVENT party, "Show event",
+  Expenses history on the card** (2026-10-13, owner feedback on the rev-1
+  entry above; shared `docs/expense-against-event.md` rev 2 + migration 014
+  `parties.booking_id` @ 8c7e7a0; web + Android in parallel). The expense is
+  the EVENT's, not the customer's. Interpretations:
+  1. *Event party name (§2.1) — ENGLISH, always.* `eventPartyName()`
+     (`src/lib/expenses/bookingExpense.ts`) builds
+     `{EventTypeLabel} - {dd-MMM-yyyy} - {CustomerName}` with ` - ` (U+002D)
+     separators. The type label is `bookings.event_type` trimmed as stored
+     (a preset label snapshot — a Hindi custom label stays Hindi, it is user
+     data), EXCEPT a legacy built-in KEY (`findEventType` match) which maps to
+     the preset's English label read from the BASE catalog
+     `shared/strings/catalog.en.json` (41 frozen keys, imported statically —
+     NOT the generated `messages/`, NOT `t()`: the name is stored data shared
+     by every device and a locale-built name would mint two parties for one
+     event). The date is pure string slicing of `start_date` with a fixed
+     English month table (no `Date`/`Intl` → no timezone shift, no Devanagari
+     digits); the customer name is trimmed with whitespace runs collapsed.
+     The dialog shows this name read-only (`entry-party-name`) instead of
+     the customer.
+  2. *Resolution at SAVE (§2.2).* `resolveBookingParty` loads the business's
+     LIVE parties once and runs, in order: `matchLinkedParty` (by
+     `booking_id`, whatever the name — a rename or a customer-name edit
+     follows the booking; earliest `created_at` among offline-race twins) →
+     `matchLiveParty` (by `lower(trim(name))`; `booking_id` NOT back-filled)
+     → `createParty(name, phone, business_related = TRUE, booking_id)`. The
+     create needs `expenses.manage_parties`; without it
+     `PartyCreateForbiddenError` carries the EVENT party name (shown in
+     `expenses.entry.party_create_forbidden`) and nothing is written. Phone
+     is never back-filled. **Step 5 (23505):** `insertWithOutbox` surfaces the
+     server's `duplicate key … uq_parties_biz_name` as an `Error`;
+     `resolveBookingParty` catches a unique-violation message, re-pulls and
+     re-resolves from step 1 once, and only rethrows when the winner is still
+     not visible. *Known limit:* an OFFLINE party create that later collides
+     on replay is treated by the outbox as "already applied" (its existing
+     23505 rule), so the dependent expense can land as an outbox error
+     against a party id that never existed server-side — same posture as
+     every other offline insert race today; not solved here.
+  3. *`parties.booking_id` on the wire.* `PartyRecord.booking_id` is read via
+     one `PARTY_COLUMNS` list (both party selects), coalesced to null
+     (`normalizeParty`) for pre-014 servers / older guest rows, and PUT ON
+     EVERY party insert (null for ordinary parties — `createParty` from the
+     add-person dialog too), mirroring `expenses.booking_id` (rev 1 §4). The
+     server column MUST exist before this build ships (PGRST204 on any party
+     add otherwise) — owner handoff `~/.luminous/handoff/shared-014-owner-ddl.md`;
+     README/AGENTS now say "through 014". Guest mode: Dexie stores are
+     schemaless → no local migration. Reports' `fetchPartyNames` is left
+     alone (`ReportParty` has no link; neither booking_id is a reporting
+     dimension, §4).
+  4. *"Show event" (§3) replaces the event chip.* Party-ledger rows with
+     `booking_id` render a small outlined primary `Chip` (Event icon,
+     `data-show-event`, `data-testid` `entry-show-event`) labelled
+     `expenses.ledger.show_event` — an ACTION (ui-conventions §1), not
+     MetadataText, not the retired `event_chip` text. The ledger HEADER of an
+     event party (`party.booking_id`) shows the same control once, next to
+     the name (`party-show-event`); `fetchLinkedBookings` now receives the
+     party's link too. Gate = `booking.view` (owners always): without it the
+     control is NOT rendered (rev 1 showed an inert chip — hide, never grey);
+     an unresolvable booking (tombstoned / not pulled) omits it; a raw id is
+     never shown. Tap (`stopPropagation` — the row is the edit affordance) →
+     `router.push('/booking?open=<id>')`, the rev-1 deep link that switches
+     to the month view at the booking's start month and opens the detail
+     drawer ("navigates to the calendar on that date and opens the detail").
+     `eventChipLabel`/`chipLabelFromNotes`/`customerFirstName` are deleted;
+     `expenses.ledger.event_chip` is no longer referenced (the key stays in
+     the catalog as deprecated per the contract and is removed one shared
+     release later).
+  5. *Expenses history (§3b).* `BookingDetail` gains `expenses`
+     (`BookingExpenseRow[]`), `canViewExpenses`, `showExpenseAmounts`. The
+     section (`data-testid` `expenses-history`) sits directly below Payment
+     history, same `subtitle2` heading + `body2` rows: `date · notes` left
+     (card date format, notes verbatim, single line, ellipsised), amount
+     right at weight 500 like a payment row; a `received` row's amount takes
+     the ledger's received tone (`success.main`). Footer `AmountRow`
+     `booking.card.expenses_total` = `expensesHistoryTotal` (Σ paid −
+     Σ received), same emphasis as *Paid*, INFORMATIONAL — `computeDue` is
+     untouched. ENTIRELY hidden (no heading, divider or empty state) when
+     there is no live linked expense or without `expenses.view`; amounts
+     masked per `expenses.view_amounts` (`MaskedAmount`), dates/notes
+     visible; rows are read-only (no button, no tap). Strictly
+     `expenses.booking_id`-based (`fetchBookingExpenses`, live rows, sorted
+     `expense_date desc, created_at desc` client-side by
+     `sortExpensesNewestFirst` — the guest client's multi-column order is not
+     relied on). The section is rendered after the marker guard so even a
+     marker with a stray link would list it (markers cannot record one).
+  6. *Wiring.* `fetchBusinessContext().expensePermissions` grows `view` and
+     `view_amounts` (absent = true, owners always); `BookingScreen` fetches
+     the open card's expenses per `detailId` (only with `expenses.view`;
+     `fetchBookingExpenses` never throws — a lagging server just hides the
+     section) and re-fetches after "Record expense" saves so the card lists
+     the new entry immediately.
+  7. *Tests.* `expense-against-event-logic` rewritten (English name builder:
+     legacy keys → English label, Hindi/stored labels verbatim, no emoji,
+     dd-MMM-yyyy incl. no Devanagari digits, whitespace collapse; link/name
+     matchers with twins; `newPartyFromBooking` flags; newest-first sort +
+     total; guest-store resolution by link after rename, by name without
+     back-fill, create with `business_related=true` + `booking_id`, second
+     save reuses, forbidden writes nothing with `{name}` = event party, 23505
+     race re-resolves to the winner, `booking_id` on every party/expense
+     insert, `fetchBookingExpenses` filters live + linked + sorted,
+     `fetchLinkedBookings`); `party-ledger-show-event` replaces
+     `party-ledger-event-chip` (row control + push, retired text absent, no
+     control on plain rows, NOT rendered without booking.view, header control
+     once on an event party with the party link in the lookup, unresolvable →
+     omitted + no raw id, masked amounts); `record-expense-against-event`
+     (event party name shown read-only, create flags, forbidden `{name}`,
+     reuse by name and by LINK under a renamed party);
+     `booking-expenses-history` (order + notes + amounts below Payment
+     history, read-only, total 3,700 with Due unchanged at 70,000, hidden when
+     empty, absent without `expenses.view`, masked rows + total);
+     `business-context-expense-perms` extended with `view`/`view_amounts`.
+     Playwright `record-expense-against-event.spec.ts` (360 px, guest): card
+     without the section → prefilled dialog with the `… - dd-MMM-yyyy - Priya
+     Sharma` name → save → Expenses history (1 row, total) → event party
+     ledger with header + row "Show event", retired text absent → tap → back
+     on the booking detail with the section; five screenshots in
+     `test-results/record-expense-against-event/`.

@@ -16,7 +16,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import type { Booking } from '@/lib/booking/types';
-import { PartyCreateForbiddenError } from '@/lib/expenses/bookingExpense';
+import { eventPartyName, PartyCreateForbiddenError } from '@/lib/expenses/bookingExpense';
 import type { ExpenseDirection } from '@/lib/expenses/ledger';
 import { parseAmount } from '@/lib/format/amount';
 import { useBusiness } from '@/lib/hooks/useBusiness';
@@ -30,9 +30,11 @@ import {
 
 /**
  * "Record expense against an event" pre-fill (shared
- * docs/expense-against-event.md §1): the party is the booking's customer,
- * resolved or created on SAVE (never on open), the notes default to
- * `{eventType} · {dates}` and the row carries `booking_id`.
+ * docs/expense-against-event.md §1–§2): the party is the booking's EVENT
+ * PARTY (`{EventType} - {dd-MMM-yyyy} - {Customer}`, English, shown
+ * read-only), resolved (by link, then by name) or created on SAVE — never on
+ * open; the notes default to `{eventType} · {dates}` and the row carries
+ * `booking_id`.
  */
 export interface BookingPrefill {
   booking: Booking;
@@ -145,8 +147,8 @@ export default function EntryDialog({
       if (entry) {
         await updateExpense(supabase, entry.id, input, removedAttachmentIds);
       } else {
-        // Booking mode: the customer's party is resolved/created NOW (contract
-        // §2) — a forbidden create fails fast here, before any insert.
+        // Booking mode: the event party is resolved/created NOW (contract
+        // §2.2) — a forbidden create fails fast here, before any insert.
         const targetPartyId = bookingPrefill
           ? (await resolveBookingParty(supabase, businessId, bookingPrefill.booking, bookingPrefill.canManageParties)).id
           : partyId;
@@ -203,9 +205,10 @@ export default function EntryDialog({
         <DialogContent>
           {bookingPrefill && !entry ? (
             <>
-              {/* Who the entry is against: the booking's customer (party resolved on save). */}
+              {/* Who the entry is against: the booking's EVENT PARTY name (read-only;
+                  the party row is resolved/created on save, contract §2). */}
               <Typography variant="body2" color="text.secondary" data-testid="entry-party-name">
-                {bookingPrefill.booking.customer_name}
+                {eventPartyName(bookingPrefill.booking)}
               </Typography>
               <ToggleButtonGroup
                 exclusive

@@ -67,8 +67,9 @@ Full local gate (same as CI):
 Copy `.env.local.example` → `.env.local` and fill `NEXT_PUBLIC_SUPABASE_URL` /
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the Supabase project (schema lives in
 `shared/supabase/migrations`; the build on `main` needs migrations through
-`012_expense_booking_link.sql` — `expenses.booking_id` is selected and written by the
-expenses write path, so deploy the migration before the app). `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (Files uploads to
+`014_party_booking_link.sql` — `expenses.booking_id` (012) and `parties.booking_id` (014)
+are selected and written by the expenses write path, so deploy the migrations before the
+app). `NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID` (Files uploads to
 Drive) is optional too — `src/lib/google/drive.ts` degrades to the not-configured
 message without it. **The app must always build and run without these** —
 client creation is guarded (`src/lib/supabase/env.ts` returns null → auth features

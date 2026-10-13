@@ -19,11 +19,15 @@ import type {
 } from './types';
 import { OWNER_PERMISSIONS } from './types';
 
-/** The expenses-module actions the booking card needs (record expense against an event). */
+/** The expenses-module permissions the booking card needs (expense against an event). */
 export interface ExpensePermissionsForBooking {
+  /** expenses.view — shows the card's "Expenses history" section (contract §3b). */
+  view: boolean;
+  /** expenses.view_amounts (absent = true) — false masks the section's amounts as ₹•••. */
+  view_amounts: boolean;
   /** expenses.create — shows the "Record expense" action. */
   create: boolean;
-  /** expenses.manage_parties — may create the customer's party on save. */
+  /** expenses.manage_parties — may create the booking's event party on save. */
   manage_parties: boolean;
 }
 
@@ -76,7 +80,12 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
     .is('deleted_at', null);
 
   const memberNames: Record<string, string> = {};
-  let expensePermissions: ExpensePermissionsForBooking = { create: isOwner, manage_parties: isOwner };
+  let expensePermissions: ExpensePermissionsForBooking = {
+    view: isOwner,
+    view_amounts: true,
+    create: isOwner,
+    manage_parties: isOwner,
+  };
   let permissions: BookingPermissions = isOwner
     ? OWNER_PERMISSIONS
     : {
@@ -106,6 +115,9 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
       };
       const e = (m.permissions?.expenses ?? {}) as Partial<ExpensePermissionsForBooking>;
       expensePermissions = {
+        view: e.view === true || m.is_owner === true,
+        // Absent defaults to TRUE (schema contract) — masking only on explicit false.
+        view_amounts: e.view_amounts !== false || m.is_owner === true,
         create: e.create === true || m.is_owner === true,
         manage_parties: e.manage_parties === true || m.is_owner === true,
       };
@@ -115,7 +127,7 @@ export async function fetchBusinessContext(db: SupabaseClient): Promise<Business
   return { business, userId, isOwner, permissions, expensePermissions, memberNames };
 }
 
-/** One live booking by id (deep links such as the ledger's event chip); null when absent/tombstoned. */
+/** One live booking by id (deep links such as the ledger's "Show event"); null when absent/tombstoned. */
 export async function fetchBookingById(db: SupabaseClient, bookingId: string): Promise<Booking | null> {
   const { data, error } = await db
     .from('bookings')

@@ -326,7 +326,33 @@ export default function BookingDetail({
           })}
         </MetadataText>
 
-        <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}>
+        {/* Action row = STICKY footer of the drawer (Android ADR-107 parity): the Drawer
+            paper is the scroll container (overflowY auto, maxHeight 88vh), so with long
+            notes + payment history + expenses history the body scrolls while Record payment
+            / Record expense / Invoice / Share stay on screen without scrolling. Negative
+            margins stretch the opaque strip across the body padding so scrolled rows never
+            peek through. */}
+        <Stack
+          direction="row"
+          spacing={1}
+          data-testid="booking-detail-actions"
+          sx={{
+            flexWrap: 'wrap',
+            rowGap: 1,
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 1,
+            mt: 2,
+            mx: -2.5,
+            mb: -3,
+            px: 2.5,
+            pt: 1.5,
+            pb: 3,
+            bgcolor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
           {permissions.edit && !cancelled ? (
             <Button variant="outlined" startIcon={<EditIcon />} onClick={onEdit}>
               {t('common.action.edit')}

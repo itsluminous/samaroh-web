@@ -4,6 +4,34 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-10-14 — Booking card: action row is a sticky footer of the drawer (Android ADR-107 parity)
+
+- **Bug.** `BookingDetail` is a bottom `Drawer` whose paper (`maxHeight: 88vh`,
+  `overflowY: auto`) is the scroll container. With long `bookings.notes` plus a
+  payment history plus an expenses history the action `Stack` (Edit, Record
+  payment, Record expense, Invoice, Share, Cancel booking) sat at the very end
+  of the body, so on a phone the primary actions were below the fold until the
+  user scrolled the whole card. Android had the same defect in its M3 sheet
+  (actions *unreachable*, not merely below the fold) and fixed it with a
+  scrolling-body / pinned-footer scaffold (ADR-107).
+- **Decision.** The action `Stack` becomes `position: sticky; bottom: 0` inside
+  the drawer paper (`data-testid="booking-detail-actions"`): the body scrolls,
+  the action row stays at the bottom edge and is tappable without scrolling.
+  Negative horizontal/bottom margins + matching padding stretch the opaque
+  `background.paper` strip (with a `divider` top border) across the body's own
+  `p: 2.5 / pb: 3` padding so scrolled rows never peek through beneath it. DOM
+  order is unchanged (footer still last), so keyboard/tab order and screen
+  readers see the same sequence as before; `zIndex: 1` keeps it over content.
+  The cancelled card's Restore/Delete pair lives in the same sticky strip.
+- **Tests.** Jest `__tests__/booking-detail-sticky-actions.test.tsx` (sticky +
+  bottom 0, every primary action inside the strip, 6 payment rows + 5 expense
+  rows rendered, footer after the histories in DOM order); Playwright
+  `e2e/booking-detail-long.spec.ts` (360×640 guest mode, 18 notes lines: Record
+  payment in viewport before any scroll while the audit line is not, still in
+  viewport after scrolling the body to its end, bottom edge inside the viewport,
+  and the pinned button opens the Record-payment dialog; screenshots under
+  `test-results/booking-detail-long/`).
+
 ## 2026-09-25 — Tombstoned names never block re-creation (shared migration 008)
 
 - **Bug.** Deleting a party (or master item) and adding one with the same

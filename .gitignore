@@ -9,6 +9,9 @@ next-env.d.ts
 # generated i18n messages (run `npm run gen:i18n`)
 messages/
 
+# generated help guide copied from shared/help (run `npm run gen:help`)
+src/generated/
+
 # env files (never commit real keys)
 .env
 .env.*

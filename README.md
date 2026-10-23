@@ -57,7 +57,9 @@ booking card (and, after 014, adding any party) fails with PGRST204.
 ## Development
 
 ```bash
-npm run gen:i18n     # regenerate messages/ from shared/strings (auto-runs pre dev/build/test)
+npm run gen:i18n     # regenerate messages/ from shared/strings
+npm run gen:help     # validate + copy shared/help/guide.json into src/generated/help (in-app Help)
+npm run gen          # both (auto-runs pre dev/build/test)
 npm run lint         # ESLint — react/jsx-no-literals is an error (zero hardcoded strings)
 npm run type-check   # tsc --noEmit
 npm test             # unit tests (Jest + RTL)

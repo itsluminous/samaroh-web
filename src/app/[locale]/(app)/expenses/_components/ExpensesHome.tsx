@@ -20,6 +20,7 @@ import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { useActionParam } from '@/lib/hooks/useActionParam';
 import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
 import {
   SUMMARY_PERIODS,
@@ -80,6 +81,13 @@ export default function ExpensesHome() {
     readListSort(PARTY_LIST_SORT_STORAGE_KEY),
   );
   const [addOpen, setAddOpen] = useState(false);
+  // Help → "Show me" (Add party): open the dialog once membership resolved;
+  // ignored without manage_parties (the FAB is hidden for them too).
+  useActionParam('add_party', !businessLoading, () => {
+    if (canManageParties) {
+      setAddOpen(true);
+    }
+  });
   const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
   // Summary period for the totals card (default THIS MONTH), persisted per device.
   const [period, setPeriod] = useState<SummaryPeriod>(() => readSummaryPeriod());

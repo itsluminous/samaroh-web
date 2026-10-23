@@ -50,7 +50,9 @@ in `docs/decisions.md`.
 ## Commands
 | Command | Purpose |
 |---|---|
-| `npm run gen:i18n` | Generate `messages/{en,hi}.json` from the shared catalog (auto-runs before dev/build/test) |
+| `npm run gen:i18n` | Generate `messages/{en,hi}.json` from the shared catalog |
+| `npm run gen:help` | Validate `shared/help/guide.json` (shared validator) and copy it + `routes.json` into the git-ignored `src/generated/help/` |
+| `npm run gen` | Both of the above (auto-runs before dev/build/test) |
 | `npm run dev` | Dev server |
 | `npm run lint` | ESLint (includes the no-literals i18n gate) |
 | `npm run type-check` | `tsc --noEmit` (strict) |
@@ -61,7 +63,7 @@ in `docs/decisions.md`.
 | `node scripts/gen-icons.mjs` | Regenerate ALL web icons (favicon.ico, icon.svg, PWA 192/512 + maskable, apple-touch) from `shared/brand/app-icon.svg` — the Android launcher icon artwork; outputs are committed |
 
 Full local gate (same as CI):
-`npm run gen:i18n && npm run lint && npm run type-check && npm test && npm run build && npm run legal-check`
+`npm run gen && npm run lint && npm run type-check && npm test && npm run build && npm run legal-check`
 
 ## Supabase env setup
 Copy `.env.local.example` → `.env.local` and fill `NEXT_PUBLIC_SUPABASE_URL` /
@@ -82,6 +84,10 @@ degrade gracefully, middleware skips protection). Never remove that guard.
   guest cookie passes through).
 - `src/lib/supabase/` — guarded browser/server client factories (guest mode swaps in the
   local client).
+- `src/lib/help/guide.ts` — in-app Help: filtering (web platform + hide-not-grey permissions),
+  search, deepLink → web route (`{arg}` dropped), `?action=` Show-me targets, route → screen
+  id, public GitHub Pages URLs. Data comes from `src/generated/help/` (never edit — `gen:help`).
+  Help text is NEVER written in this repo: edit `shared/help/guide.json` and bump.
 - `src/lib/` — domain logic: `booking/`, `expenses/`, `inventory/` (FIFO), `reports/`,
   `invoice/` (pdf-lib renderer), `outbox/` (Dexie offline outbox: `mutate.ts`,
   `outbox.ts` with `isReplaying()` + sync-state events, `useOutbox.ts`), `guest/`
@@ -99,7 +105,9 @@ degrade gracefully, middleware skips protection). Never remove that guard.
   `MaskedAmount` (view_amounts masking), `SectionGuard` (route permission
   guard), `SignInForm`, `ServiceWorkerRegistrar`.
 - `src/app/[locale]/(app)/{booking,expenses,inventory,notes,files,menu}/` — the
-  sections (inventory includes the per-item detail page with permission-gated
+  sections (`menu/help` is the in-app user guide; the title bar's `?` button is
+  "Help for this screen" → `/menu/help?hl=<screenId>`, and `HelpLink` emits
+  `<link rel="help">` to the public guide page per screen) (inventory includes the per-item detail page with permission-gated
   edit/delete via the shared `MasterItemDialog`; `files/[[...folder]]` is the
   Drive-indexed Files tab — shared design `shared/docs/files-tab-design.md`).
 - `src/app/auth/sign-out/` — non-localized sign-out POST route.

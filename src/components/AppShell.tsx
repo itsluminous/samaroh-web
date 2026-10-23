@@ -1,5 +1,6 @@
 'use client';
 
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import MenuIcon from '@mui/icons-material/Menu';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AppBar from '@mui/material/AppBar';
@@ -19,9 +20,11 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
+import HelpLink from '@/components/HelpLink';
 import { resolveNavLayout } from '@/components/navSections';
 import SyncIndicator from '@/components/SyncIndicator';
 import { Link, usePathname } from '@/i18n/navigation';
+import { helpRouteFor, screenIdForPath } from '@/lib/help/guide';
 import { useFitText } from '@/lib/hooks/useFitText';
 import { useMembership } from '@/lib/permissions/useMembership';
 
@@ -57,9 +60,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
   // truncating hard; past the floor the ellipsis takes over.
   const titleRef = useFitText<HTMLHeadingElement>(title);
   const menuLabel = t(MENU_SECTION.labelKey);
+  // Contextual help (Android parity: the kebab's "Help for this screen"
+  // entry). The web kebab is a direct link to Menu by owner decision, so the
+  // entry is its own ? button right beside it, on every width; it opens the
+  // Help page scrolled to the current screen's section (index when the route
+  // has none). Hidden on the Help page itself.
+  const helpScreenId = screenIdForPath(pathname);
+  const onHelpPage = pathname === '/menu/help' || pathname.startsWith('/menu/help/');
+  const helpLabel = t('menu.help.for_this_screen');
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      <HelpLink />
       <AppBar
         position="fixed"
         color="default"
@@ -83,6 +95,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {title}
           </Typography>
           <SyncIndicator />
+          {onHelpPage ? null : (
+            <Tooltip title={helpLabel}>
+              <IconButton component={Link} href={helpRouteFor(helpScreenId)} aria-label={helpLabel} color="default">
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           {/* No language switcher and NO sign-out here (Android parity): the
               language picker lives at Menu → Settings → Language, sign-out on
               the Menu identity row (guest mode: its Sign in action) — both

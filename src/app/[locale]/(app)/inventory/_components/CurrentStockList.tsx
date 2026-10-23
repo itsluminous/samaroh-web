@@ -19,6 +19,7 @@ import Typography from '@mui/material/Typography';
 import { useFormatter, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { useActionParam } from '@/lib/hooks/useActionParam';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import MetadataText from '@/components/MetadataText';
 import SortMenuButton from '@/components/SortMenuButton';
@@ -78,6 +79,13 @@ export default function CurrentStockList() {
     readListSort(STOCK_LIST_SORT_STORAGE_KEY),
   );
   const [txnOpen, setTxnOpen] = useState(false);
+  // Help → "Show me" (Update stock): open the record dialog once membership
+  // resolved; ignored without inventory.create (FAB hidden for them too).
+  useActionParam('update_stock', !businessLoading && businessId !== null, () => {
+    if (canRecord) {
+      setTxnOpen(true);
+    }
+  });
   const [snack, setSnack] = useState<string | null>(null);
 
   const changeSort = useCallback((order: ListSortOrder) => {

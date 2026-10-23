@@ -2,8 +2,9 @@
 
 /**
  * Menu tab home (§4.4): identity row (who is signed in) followed by the
- * section list — Settings, Reports, Members (owner only), About. Members is
- * hidden (not just disabled) for employees.
+ * section list — Settings, Reports, Members (owner only), Help, About. Members
+ * is hidden (not just disabled) for employees. Help (Android parity) opens the
+ * in-app user guide; its title is the shared `common.menu.help` key.
  *
  * A search bar on top filters a static localized index of EVERY destination
  * nested under the Menu tab (settings rows, About items, the 10 reports,
@@ -22,6 +23,7 @@
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import GroupIcon from '@mui/icons-material/Group';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import InsightsIcon from '@mui/icons-material/Insights';
 import SearchIcon from '@mui/icons-material/Search';
@@ -81,10 +83,11 @@ export default function MenuHome({ title }: { title: string }) {
   const results = useMemo(() => filterMenuSearchEntries(query, index), [query, index]);
 
   const rows = [
-    { key: 'settings', href: '/menu/settings', icon: <SettingsIcon />, show: true },
-    { key: 'reports', href: '/menu/reports', icon: <InsightsIcon />, show: true },
-    { key: 'members', href: '/menu/members', icon: <GroupIcon />, show: isOwner },
-    { key: 'about', href: '/menu/about', icon: <InfoOutlinedIcon />, show: true },
+    { key: 'settings', href: '/menu/settings', icon: <SettingsIcon />, show: true, title: tSection('settings'), subtitle: tSection('settings_subtitle') },
+    { key: 'reports', href: '/menu/reports', icon: <InsightsIcon />, show: true, title: tSection('reports'), subtitle: tSection('reports_subtitle') },
+    { key: 'members', href: '/menu/members', icon: <GroupIcon />, show: isOwner, title: tSection('members'), subtitle: tSection('members_subtitle') },
+    { key: 'help', href: '/menu/help', icon: <HelpOutlineIcon />, show: true, title: t('common.menu.help'), subtitle: t('menu.help.subtitle') },
+    { key: 'about', href: '/menu/about', icon: <InfoOutlinedIcon />, show: true, title: tSection('about'), subtitle: tSection('about_subtitle') },
   ] as const;
 
   return (
@@ -190,7 +193,7 @@ export default function MenuHome({ title }: { title: string }) {
                 <ListItem key={row.key} disablePadding divider>
                   <ListItemButton component={Link} href={row.href}>
                     <ListItemIcon>{row.icon}</ListItemIcon>
-                    <ListItemText primary={tSection(row.key)} secondary={tSection(`${row.key}_subtitle`)} />
+                    <ListItemText primary={row.title} secondary={row.subtitle} />
                     <ChevronRightIcon color="action" />
                   </ListItemButton>
                 </ListItem>

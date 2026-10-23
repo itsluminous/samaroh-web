@@ -1,6 +1,6 @@
 /**
  * Menu search (§4.4 parity): a static, localized index of every destination
- * reachable from the Menu tab — section pages, settings rows, the About
+ * reachable from the Menu tab — section pages (incl. Help), settings rows, the About
  * items, all 10 report names and the sign-out (or guest sign-in) affordance — filtered live by
  * substring plus the shared fuzzy matcher.
  *
@@ -92,6 +92,7 @@ const ENTRY_DEFS: readonly EntryDef[] = [
     keywordKeys: ['menu.section.members_subtitle'],
     visible: (g) => g.isOwner, // MenuHome hides (not disables) Members for non-owners.
   },
+  { id: 'help', labelKey: 'common.menu.help', sectionKey: 'menu.home.title', href: '/menu/help', keywordKeys: ['menu.help.subtitle'] },
   { id: 'about', labelKey: 'menu.section.about', sectionKey: 'menu.home.title', href: '/menu/about', keywordKeys: ['menu.section.about_subtitle'] },
   // Sign-out lives on the identity row of the menu home (real session only);
   // its guest-mode counterpart is the row's Sign in action (sign-in page).

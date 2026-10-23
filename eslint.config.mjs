@@ -14,6 +14,7 @@ const eslintConfig = [
       'out/**',
       'coverage/**',
       'messages/**',
+      'src/generated/**', // copied from shared/help by gen:help
       'shared/**', // git submodule — linted by its own repo
       'next-env.d.ts',
     ],

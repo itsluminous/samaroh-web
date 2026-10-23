@@ -22,6 +22,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useActionParam } from '@/lib/hooks/useActionParam';
 import { bookingsOnDate, dayTapAction, monthRange, todayIso } from '@/lib/booking/calendar';
 import { findBlockingBlocks, findConflicts } from '@/lib/booking/conflicts';
 import { computeDue, monthMoneySummary } from '@/lib/booking/due';
@@ -237,6 +238,22 @@ export default function BookingScreen() {
     // Runs once the business context is available; the param only changes
     // with navigation, which remounts the screen.
   }, [db, ctx]);
+
+  // Help → "Show me" deep links (src/lib/help/guide.ts): open the add form /
+  // block-dates dialog once the business context (and so permissions) is in.
+  // Permission-gated: a member who cannot create/edit just sees the calendar.
+  const canCreate = ctx?.permissions.create === true;
+  const canEdit = ctx?.permissions.edit === true;
+  useActionParam('new_booking', !!db && !!ctx, () => {
+    if (canCreate) {
+      setForm({ mode: 'add', booking: null, initialDate: null });
+    }
+  });
+  useActionParam('block_dates', !!db && !!ctx, () => {
+    if (canEdit) {
+      setBlockOpen(true);
+    }
+  });
 
   useEffect(() => {
     let active = true;

@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { useActionParam } from '@/lib/hooks/useActionParam';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import { useMembership } from '@/lib/permissions/useMembership';
 import {
@@ -50,7 +51,7 @@ export default function Masterlist() {
   const { supabase, businessId, loading: businessLoading, error: businessError } = useBusiness();
   // Owners always; members need inventory.manage_master_items (RLS enforces
   // the same rule server-side — this only hides the affordances).
-  const { isOwner, permissions } = useMembership();
+  const { isOwner, permissions, loading: membershipLoading } = useMembership();
   const canManageItems = isOwner || permissions.inventory.manage_master_items;
 
   const [items, setItems] = useState<MasterItemRecord[]>([]);
@@ -60,6 +61,14 @@ export default function Masterlist() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MasterItemRecord | null>(null);
+  // Help → "Show me" (Add item): open the add dialog once the business is
+  // known; ignored without manage_master_items (FAB hidden for them too).
+  useActionParam('add_item', !businessLoading && !membershipLoading && businessId !== null, () => {
+    if (canManageItems) {
+      setEditingItem(null);
+      setDialogOpen(true);
+    }
+  });
   const [deletingItem, setDeletingItem] = useState<MasterItemRecord | null>(null);
   const [deleteError, setDeleteError] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);

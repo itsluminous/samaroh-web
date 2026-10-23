@@ -176,6 +176,7 @@ describe('index coverage vs the rendered menu (owner, signed in)', () => {
       en.menu.section.settings,
       en.menu.section.reports,
       en.menu.section.members,
+      en.common.menu.help,
       en.menu.section.about,
       en.menu.identity.sign_out,
       en.settings.language.title,

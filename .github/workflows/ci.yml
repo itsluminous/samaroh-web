@@ -19,8 +19,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Generate i18n messages from shared catalog
-        run: npm run gen:i18n
+      - name: Generate i18n messages + help guide from shared
+        run: npm run gen
       - name: Lint (includes react/jsx-no-literals as error)
         run: npm run lint
       - name: Type-check

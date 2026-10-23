@@ -4,6 +4,67 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-10-23 — In-app Help from the single-source guide (Android parity)
+
+- **Source.** `shared/help/guide.json` (shared commit `f5cdcba`, schema v1:
+  screens → tasks → steps in en + hi, `deepLink` ids resolved by
+  `help/routes.json`, optional `permission` / `platforms`) is the ONLY source
+  of help text. `npm run gen:help` (`scripts/gen-help.mjs`) runs the shared
+  validator and copies `guide.json` + `routes.json` into the git-ignored
+  `src/generated/help/` — the help counterpart of `gen:i18n`; `npm run gen`
+  (predev/prebuild/pretest) runs both. No help prose lives in this repo.
+- **Entry points.** Menu home gets a Help row titled by the shared
+  `common.menu.help` key (the same key Android's Menu/kebab entry uses — added
+  to the BASE catalogs in shared `7a0bf0f`, not a fragment, so neither app can
+  re-declare it); web-only Help copy (`menu.help.*`) lives in the `web-menu`
+  fragment. Menu search indexes the row. The title bar carries a contextual
+  "Help for this screen" `?` button (`menu.help.for_this_screen`) that opens
+  `/menu/help?hl=<screenId>`; Android puts this entry in its kebab, but the web
+  kebab is a direct link to Menu by owner decision (2026-09-29), so the web
+  entry is its own button immediately left of the kebab on every width (the
+  kebab stays the last toolbar control). Hidden on the Help page itself.
+- **Page.** `/menu/help` (`HelpScreen`) renders the guide in the UI language
+  (`useLocale`) as sections per screen (`id="hl-<screenId>"`, so the shared
+  `useHighlightParam` scrolls/tints the section from `?hl=`), tasks as
+  collapsible rows with a step-count chip and the steps as a real `<ol>`
+  (numbering = order). Search is case-insensitive substring over screen
+  title/summary, task titles and step text in the current language, with the
+  shared fuzzy matcher as a typo fallback on task titles; matches render
+  expanded. Each section links to its public GitHub Pages page
+  (`site.pagePattern`) for sharing with someone who is not signed in.
+- **Visibility.** Web-platform entries only (android-only screens/tasks/steps
+  never render); permission-gated screens/tasks are HIDDEN, never greyed, for
+  a positively resolved non-owner lacking the capability (`canSeeHelpEntry`;
+  an unknown key hides rather than fails open). Degraded modes (Supabase
+  unconfigured, guest, membership loading/errored) fail open exactly like the
+  nav chrome (`visibility.ts`) — guest mode is the local owner anyway.
+- **"Show me".** Per task, navigates to `resolveWebRoute(task.deepLink)`:
+  routes.json's web path with `{arg}` segments dropped (the guide cannot know
+  the booking/party/item, so the parent list opens). Where Android opens a
+  sheet the web opens the same dialog: `SHOW_ME_ACTIONS` appends `?action=`
+  (`booking/form` → `new_booking`, `expenses/add_party` → `add_party`,
+  `booking_calendar/block_dates`, `inventory_stock/update_stock`,
+  `inventory_masterlist/add_item`); the owning screens consume it once via
+  `useActionParam` (window.location, not `useSearchParams`, same reasoning as
+  `useHighlightParam`), only when the member holds the capability, and strip
+  the param from the URL so reload/back does not reopen it. A task whose route
+  is `null` on the web shows no button (none exist today; the test guards it).
+- **Metadata.** `HelpLink` (in `AppShell`) renders `<link rel="help">` to the
+  public guide page of the current screen (`screenIdForPath`, index when the
+  route has no section) in the UI language — React 19 hoists it to `<head>`.
+- **Tests.** Jest `src/lib/help/__tests__/guide.test.ts` iterates the real
+  guide: every deepLink is a routes id, every web-platform deepLink resolves,
+  `{arg}` stripping, Show me actions, owner/viewer/booking.view filtering,
+  en/hi search + fuzzy, every web route maps to a screen id, URL builders;
+  `__tests__/help-page.test.tsx` renders en + hi (title, every section/task,
+  ordered steps, no cross-language leakage, public links), Show me hrefs,
+  hide-not-grey for a member, fail-open, search/clear, `?hl=` highlight, the
+  Menu row (position Members → Help → About), the shell button per route +
+  `rel=help`, no button on the Help page. Playwright `e2e/help.spec.ts`:
+  en/hi Menu → Help with all sections + search + rel=help; title-bar button
+  lands on the section in viewport; guest Show me opens the add-booking form
+  and consumes `?action=`.
+
 ## 2026-10-14 — Booking card: action row is a sticky footer of the drawer (Android ADR-107 parity)
 
 - **Bug.** `BookingDetail` is a bottom `Drawer` whose paper (`maxHeight: 88vh`,

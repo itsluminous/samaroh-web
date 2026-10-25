@@ -1,5 +1,8 @@
 // Locale-aware date/time formatting for the Booking section and invoices.
 // ISO date strings in, locale-formatted display strings out (Intl-backed).
+// Callers pass the UI locale; the Intl locale is derived via `intlLocale`
+// (hi-Latn → en-IN), so Hinglish gets Latin digits and English month names.
+import { intlLocale } from '@/lib/format/intlLocale';
 
 const EN_DASH = '\u2013';
 
@@ -8,7 +11,7 @@ export function formatDate(iso: string, locale: string): string {
   const y = Number(iso.slice(0, 4));
   const m = Number(iso.slice(5, 7));
   const d = Number(iso.slice(8, 10));
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -31,7 +34,7 @@ export function formatTime(time: string | null, locale: string): string | null {
   }
   const h = Number(time.slice(0, 2));
   const min = Number(time.slice(3, 5));
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
     hour: 'numeric',
     minute: '2-digit',
     timeZone: 'UTC',
@@ -40,14 +43,14 @@ export function formatTime(time: string | null, locale: string): string | null {
 
 /** Localized standalone month name for the calendar header / month picker. */
 export function formatMonthName(month0: number, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(
+  return new Intl.DateTimeFormat(intlLocale(locale), { month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(2000, month0, 1)),
   );
 }
 
 /** Localized narrow weekday names, Sunday first (matches the grid). */
 export function weekdayNarrowNames(locale: string): string[] {
-  const fmt = new Intl.DateTimeFormat(locale, { weekday: 'narrow', timeZone: 'UTC' });
+  const fmt = new Intl.DateTimeFormat(intlLocale(locale), { weekday: 'narrow', timeZone: 'UTC' });
   // 2023-01-01 was a Sunday.
   return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(Date.UTC(2023, 0, 1 + i))));
 }

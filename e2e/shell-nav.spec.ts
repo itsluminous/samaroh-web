@@ -1,14 +1,14 @@
 import { expect, test } from '@playwright/test';
-import { authConfigured, msg, type Locale } from './helpers';
+import { LOCALES, authConfigured, msg } from './helpers';
 
 // Hermetic-only: these routes need no session only while Supabase is
 // unconfigured; in authenticated mode the middleware redirects to /sign-in.
 test.skip(authConfigured, 'hermetic-only: route protection is active in authenticated mode');
 
-// App shell navigation in both locales: the 4 sections render in the nav,
+// App shell navigation in every locale: the 4 sections render in the nav,
 // and clicking through lands on localized pages (§1.2 — same 4 sections as
 // left-nav on desktop / bottom-nav on mobile).
-for (const locale of ['en', 'hi'] as Locale[]) {
+for (const locale of LOCALES) {
   test.describe(`shell nav (${locale})`, () => {
     test('renders the 4 sections and navigates to Menu', async ({ page }) => {
       await page.goto(`/${locale}/booking`);
@@ -44,11 +44,12 @@ for (const locale of ['en', 'hi'] as Locale[]) {
 
     test('language picker shows each language in its own script', async ({ page }) => {
       await page.goto(`/${locale}/menu/settings/language`);
-      // Own-script names are identical in both catalogs by design. Scope to
+      // Own-script names are identical in every catalog by design. Scope to
       // the main region — the app-bar locale switcher shows one of them too.
       const main = page.getByRole('main');
       await expect(main.getByText(msg(locale, 'settings.language.name_en'))).toBeVisible();
       await expect(main.getByText(msg(locale, 'settings.language.name_hi'))).toBeVisible();
+      await expect(main.getByText(msg(locale, 'settings.language.name_hi_latn'))).toBeVisible();
     });
   });
 }

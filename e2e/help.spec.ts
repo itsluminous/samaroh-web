@@ -1,6 +1,6 @@
 /**
  * Menu → Help (Android parity), hermetic:
- *   - Menu home has the Help row (shared `common.menu.help`) in both locales;
+ *   - Menu home has the Help row (shared `common.menu.help`) in all locales;
  *     the Help page lists the guide's screens in the UI language with search.
  *   - "Show me" on a task navigates to the task's route; for a sheet-style
  *     task (Add a booking) the web opens the same dialog via `?action=` —
@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { authConfigured, msg, type Locale } from './helpers';
+import { LOCALES, authConfigured, msg, type Locale } from './helpers';
 
 test.skip(authConfigured, 'hermetic-only: route protection is active in authenticated mode');
 
@@ -42,7 +42,7 @@ const webScreens = guide.screens.filter((s) => !s.platforms || s.platforms.inclu
 const calendar = guide.screens.find((s) => s.id === 'booking_calendar')!;
 const addBooking = calendar.tasks.find((t) => t.id === 'add_booking')!;
 
-for (const locale of ['en', 'hi'] as Locale[]) {
+for (const locale of LOCALES) {
   test(`${locale}: Menu → Help lists the guide screens, search narrows, rel=help metadata`, async ({ page }) => {
     await page.goto(`/${locale}/menu`);
     // Scope to <main>: the title bar's "Help for this screen" link also contains the word.

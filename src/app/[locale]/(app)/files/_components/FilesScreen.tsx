@@ -66,10 +66,11 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { type ChangeEvent, type DragEvent, type MouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MetadataText from '@/components/MetadataText';
 import { useRouter } from '@/i18n/navigation';
+import { useAppFormatter } from '@/lib/format/useAppFormatter';
 import { driveDeleteFileBestEffort, getDriveAccessToken, hasDriveToken, isDriveConfigured } from '@/lib/google/drive';
 import { isLocalClient } from '@/lib/guest/localClient';
 import { driveDownloadUrl, driveViewUrl } from '@/lib/images/drive';
@@ -156,7 +157,7 @@ export default function FilesScreen({ folderId }: { folderId: string | null }) {
   const tCommon = useTranslations('common');
   const tMenuSearch = useTranslations('menu.search');
   const tError = useTranslations('expenses.error');
-  const format = useFormatter();
+  const format = useAppFormatter();
   const router = useRouter();
   const {
     supabase,

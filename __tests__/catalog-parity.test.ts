@@ -34,8 +34,8 @@ function flattenKeys(obj: Record<string, unknown>, prefix = ''): string[] {
 describe('shared string catalog', () => {
   const locales = catalogLocales();
 
-  it('ships the v1 locales', () => {
-    expect(locales).toEqual(expect.arrayContaining(['en', 'hi']));
+  it('ships exactly the three app locales (en, hi, Hinglish hi-Latn)', () => {
+    expect(locales).toEqual(['en', 'hi', 'hi-Latn']);
   });
 
   it('has exact key parity across all locales', () => {

@@ -16,13 +16,14 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { computeLedger, computeNetBalance, type ExpenseDirection } from '@/lib/expenses/ledger';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import MetadataText from '@/components/MetadataText';
 import { formatAmount } from '@/lib/format/amount';
+import { useAppFormatter } from '@/lib/format/useAppFormatter';
 import { useMembership } from '@/lib/permissions/useMembership';
 import { partyInitials, toLedgerEntry } from '../_lib/view';
 import {
@@ -46,7 +47,7 @@ import EntryDialog from './EntryDialog';
 export default function PartyLedger({ partyId }: { partyId: string }) {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
-  const format = useFormatter();
+  const format = useAppFormatter();
   const router = useRouter();
   const {
     supabase,

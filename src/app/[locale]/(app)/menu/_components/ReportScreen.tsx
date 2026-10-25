@@ -28,6 +28,7 @@ import { fetchCurrentInventory } from '@/app/[locale]/(app)/inventory/_lib/queri
 import { isBuiltInEventType } from '@/lib/booking/eventTypes';
 import { fetchEventTypes, presetKindForType } from '@/lib/booking/eventTypePresets';
 import { formatAmount } from '@/lib/format/amount';
+import { intlLocale } from '@/lib/format/intlLocale';
 import { useMembership } from '@/lib/permissions/useMembership';
 import {
   collectionEfficiency,
@@ -537,11 +538,11 @@ export default function ReportScreen({ reportKey }: { reportKey: ReportKey }) {
   const [error, setError] = useState<string | null>(null);
 
   const monthLabel = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(locale, { month: 'short', year: '2-digit', timeZone: 'UTC' });
+    const fmt = new Intl.DateTimeFormat(intlLocale(locale), { month: 'short', year: '2-digit', timeZone: 'UTC' });
     return (month: string) => fmt.format(new Date(`${month}-01T00:00:00Z`));
   }, [locale]);
   const percent = useMemo(() => {
-    const fmt = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
+    const fmt = new Intl.NumberFormat(intlLocale(locale), { style: 'percent', maximumFractionDigits: 0 });
     return (v: number) => fmt.format(v);
   }, [locale]);
 

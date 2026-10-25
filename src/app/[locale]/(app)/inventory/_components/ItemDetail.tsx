@@ -28,12 +28,13 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import MetadataText from '@/components/MetadataText';
 import { formatAmount, formatIndianNumber } from '@/lib/format/amount';
+import { useAppFormatter } from '@/lib/format/useAppFormatter';
 import { useBusiness } from '@/lib/hooks/useBusiness';
 import {
   computeCurrentStock,
@@ -77,7 +78,7 @@ interface ItemDetailProps {
 export default function ItemDetail({ itemId }: ItemDetailProps) {
   const t = useTranslations('inventory');
   const tCommon = useTranslations('common');
-  const format = useFormatter();
+  const format = useAppFormatter();
   const router = useRouter();
   const { supabase, businessId, userId, loading: businessLoading, error: businessError } =
     useBusiness();

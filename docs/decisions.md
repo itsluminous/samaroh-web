@@ -4,6 +4,60 @@ Contract clarifications and notable implementation decisions, newest first.
 (The product spec stays the source of truth; entries here record how this
 repo interprets it where the spec leaves web-specific latitude.)
 
+## 2026-10-25 — Hinglish (`hi-Latn`) as the third UI language
+
+- **Locale tag & routing.** Shared `df242d0` adds `strings/catalog.hi-Latn.json`
+  (1097 keys, full parity) and the `hi-Latn` guide language (shared
+  `docs/hinglish.md` holds the tag decision, style guide and terminology).
+  `routing.locales` is `['en', 'hi', 'hi-Latn']` (`localePrefix: 'always'`,
+  routes `/hi-Latn/…`, NEXT_LOCALE cookie `hi-Latn`). `gen:i18n` discovers the
+  catalog and emits `messages/hi-Latn.json`; nothing in this repo lists locales
+  by hand except `routing.ts`. Locale detection on a pathname is a WHOLE-SEGMENT
+  match (`src/i18n/pathLocale.ts`): `/hi-Latn/booking` is `hi-Latn`, never `hi`
+  — the `startsWith('hi')` class of bug the shared doc warns about.
+- **Document metadata.** `<html lang>` is the routed tag (`hi-Latn`). The
+  next-intl middleware already sends `Link: …; rel="alternate"; hreflang=…` for
+  every locale + `x-default`; `AlternateLinks` (mounted in the `[locale]`
+  layout) mirrors them into the DOM as `<link rel="alternate" hreflang>` for the
+  same page under each prefix (query string dropped — `?hl=`/`?action=` are view
+  state). The web manifest is brand-only (`Samaroh`, non-translatable) and stays
+  unlocalized; page `<title>` already comes from `common.app_name` per locale.
+- **Language switcher.** Rows come from `routing.locales`; the own-script label
+  key is `settings.language.name_<localeKeySuffix>` (`hi-Latn` → `name_hi_latn`
+  = "Hinglish", identical in every catalog like `name_en`/`name_hi`). Selection
+  is an exact tag match. The Settings row's secondary text uses the same suffix
+  instead of a `locale === 'hi'` ternary; menu search indexes `name_hi_latn`.
+- **Dates & numbers under hi-Latn = `en-IN`.** Hinglish users write dates and
+  numbers as Indian English (Latin digits, "10 Jul 2026", "S M T…" weekdays,
+  12-hour "2:30 pm", Indian grouping). ICU's own `hi-Latn` data romanises the
+  Hindi names instead ("Ra So Ma…") and browser coverage of the tag is uneven,
+  so every `Intl.*` call maps the UI locale through `intlLocale()`
+  (`src/lib/format/intlLocale.ts`: `hi-Latn` → `en-IN`, others unchanged) —
+  `booking/dates.ts`, ReportScreen, SyncStatusScreen — and `useAppFormatter()`
+  (`src/lib/format/useAppFormatter.ts`) replaces next-intl's `useFormatter` at
+  every call site (`createFormatter` with the mapped locale + provider time
+  zone). Rupee amounts were already locale-independent (`formatAmount`). New
+  formatting code must use these two entry points, never `useFormatter` or a
+  raw `Intl.*(locale)`. Messages themselves (plural selection) still run under
+  `hi-Latn`; placeholders/plural shapes are identical to `en` by catalog rule.
+- **Help.** `HelpLang` is now `AppLocale`; `HelpStep` is `Localized & {keys?,
+  platforms?}` so the guide's `'hi-Latn'` text keys type-check. Nothing else
+  changed: the Help page, search, "Help for this screen" and `<link rel="help">`
+  index guide text by `useLocale()`, so Hinglish works end to end
+  (`https://itsluminous.github.io/samaroh-shared/help/hi-Latn/<screen>.html`).
+- **Invoice.** PDF/text receipt follow the UI language already (labels via
+  `t()`, dates via `formatDate(…, locale)`); Hinglish renders with the Latin
+  glyphs of the embedded Mukta fonts (Devanagari coverage stays for `hi`).
+- **Tests.** `__tests__/hinglish-locale.test.tsx` (routing/segment detection,
+  bundle parity + Latin-script guard, switcher exact-match + navigation,
+  Settings row, `intlLocale`/`useAppFormatter`/booking dates, Help search +
+  rel=help, receipt), `__tests__/middleware-locales.test.ts` (node env: all
+  three prefixes served, hreflang Link header, cookie-driven root redirect),
+  `help-page.test` and `catalog-parity.test` loop/assert the third locale;
+  Playwright `e2e/hinglish.spec.ts` (switch → `/hi-Latn`, lang/hreflang,
+  guest booking page in Hinglish, Help in hi-Latn), `help.spec`/`shell-nav.spec`
+  run for all `LOCALES`.
+
 ## 2026-10-23 — In-app Help from the single-source guide (Android parity)
 
 - **Source.** `shared/help/guide.json` (shared commit `f5cdcba`, schema v1:

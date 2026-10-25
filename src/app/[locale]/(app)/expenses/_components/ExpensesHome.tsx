@@ -17,9 +17,10 @@ import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { useAppFormatter } from '@/lib/format/useAppFormatter';
 import { useActionParam } from '@/lib/hooks/useActionParam';
 import { computeNetBalance, computeTotals } from '@/lib/expenses/ledger';
 import {
@@ -56,7 +57,7 @@ interface PartyListRow {
 export default function ExpensesHome() {
   const t = useTranslations('expenses');
   const tCommon = useTranslations('common');
-  const format = useFormatter();
+  const format = useAppFormatter();
   const router = useRouter();
   const {
     supabase,

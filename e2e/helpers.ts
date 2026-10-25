@@ -1,12 +1,15 @@
 /**
  * e2e helpers: expected UI strings come from the generated next-intl
- * catalogs (messages/{en,hi}.json) so the tests never hardcode copy and
+ * catalogs (messages/{en,hi,hi-Latn}.json) so the tests never hardcode copy and
  * stay in lockstep with the shared string catalog.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export type Locale = 'en' | 'hi';
+export type Locale = 'en' | 'hi' | 'hi-Latn';
+
+/** Every app locale, in routing order (mirrors src/i18n/routing.ts). */
+export const LOCALES: readonly Locale[] = ['en', 'hi', 'hi-Latn'];
 
 /**
  * True when the suite runs in authenticated mode (E2E_* env set — see

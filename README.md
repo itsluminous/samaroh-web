@@ -33,7 +33,7 @@ are added from the Android app; the web dialogs show a localized
 ## Tech
 
 Next.js 15 (App Router) · TypeScript (strict) · MUI v6 (Material-You-like theme,
-light/dark/system) · next-intl (en + hi, generated from the shared string catalog) ·
+light/dark/system) · next-intl (en + hi + hi-Latn Hinglish, generated from the shared string catalog) ·
 Supabase (Postgres + Auth + Storage, RLS) · Dexie (offline outbox) · PWA (hand-rolled
 service worker) · Jest + React Testing Library · Playwright (e2e).
 
@@ -76,7 +76,7 @@ implementation decisions.
 
 `npx playwright test` runs hermetically: the Playwright web server builds and starts the
 app **without** Supabase env vars, so no test data or cleanup is involved. Covered: shell
-navigation in en + hi, settings/language/sync pages, sign-in form, booking page, and an
+navigation in en + hi + hi-Latn, settings/language/sync pages, sign-in form, booking page, and an
 offline smoke test that reloads the app from the service-worker cache. To also exercise
 the signed-in booking calendar, provide `E2E_SUPABASE_URL`, `E2E_SUPABASE_ANON_KEY`,
 `E2E_EMAIL`, `E2E_PASSWORD`. In CI the e2e job is separate from the required quality
@@ -111,12 +111,13 @@ gate (see `.github/workflows/ci.yml`).
 ## Screenshots
 
 <!-- TODO: add screenshots (booking calendar, party ledger, inventory item detail,
-reports, guest banner, sync indicator) in en + hi, desktop + mobile widths. -->
+reports, guest banner, sync indicator) in en + hi + hi-Latn, desktop + mobile widths. -->
 
 ## i18n
 
-Every user-visible string comes from `shared/strings/catalog.{en,hi}.json` via
-next-intl. Locale routing is `/{en|hi}/…` with cookie persistence, a switcher in the
+Every user-visible string comes from `shared/strings/catalog.{en,hi,hi-Latn}.json` via
+next-intl (`hi-Latn` = Hinglish, see shared `docs/hinglish.md`). Locale routing is
+`/{en|hi|hi-Latn}/…` with cookie persistence, a switcher in the
 app bar, and a full-screen picker under Menu → Settings → Language (each language shown
 in its own script). New strings are added in the `samaroh-shared` repo only.
 

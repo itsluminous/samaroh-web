@@ -116,7 +116,7 @@ const ENTRY_DEFS: readonly EntryDef[] = [
     labelKey: 'settings.language.title',
     sectionKey: 'menu.section.settings',
     href: '/menu/settings/language',
-    keywordKeys: ['settings.language.name_en', 'settings.language.name_hi'],
+    keywordKeys: ['settings.language.name_en', 'settings.language.name_hi', 'settings.language.name_hi_latn'],
   },
   {
     id: 'theme',

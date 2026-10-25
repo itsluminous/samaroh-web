@@ -13,21 +13,26 @@
  *     segments the guide cannot know are dropped so the parent list screen
  *     opens (e.g. `/expenses/{partyId}` → `/expenses`).
  */
+import type { AppLocale } from '@/i18n/routing';
 import type { MemberPermissions, PermissionModule } from '@/lib/permissions/permissions';
 import { findSimilarItems } from '@/lib/fuzzy';
 import guideJson from '@/generated/help/guide.json';
 import routesJson from '@/generated/help/routes.json';
 
-export type HelpLang = 'en' | 'hi';
+/**
+ * Guide languages = app locales (`en` | `hi` | `hi-Latn`): the shared validator
+ * enforces that every screen/task/step carries all three, so the UI locale can
+ * index guide text directly (`title[lang]`). Help pages on GitHub Pages live
+ * under `{baseUrl}{lang}/` with the same tag.
+ */
+export type HelpLang = AppLocale;
 export type HelpPlatform = 'android' | 'web';
 export type Localized = Record<HelpLang, string>;
 
-export interface HelpStep {
-  en: string;
-  hi: string;
+export type HelpStep = Localized & {
   keys?: string[];
   platforms?: HelpPlatform[];
-}
+};
 
 export interface HelpTask {
   id: string;

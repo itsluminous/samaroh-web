@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { hasLocale, NextIntlClientProvider } from 'next-intl';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import type { ReactNode } from 'react';
+import AlternateLinks from '@/components/AlternateLinks';
 import AppTheme from '@/components/AppTheme';
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
 import { routing } from '@/i18n/routing';
@@ -55,12 +56,14 @@ export default async function LocaleLayout(props: {
   }
   setRequestLocale(locale);
 
+  // `lang` is the BCP-47 tag as routed (`en` / `hi` / `hi-Latn`).
   return (
     <html lang={locale} suppressHydrationWarning>
       <body>
         <InitColorSchemeScript attribute="class" />
         <AppRouterCacheProvider options={{ enableCssLayer: false }}>
           <NextIntlClientProvider>
+            <AlternateLinks />
             <AppTheme>{props.children}</AppTheme>
           </NextIntlClientProvider>
         </AppRouterCacheProvider>

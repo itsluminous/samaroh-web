@@ -24,6 +24,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useLocale, useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
+import { intlLocale } from '@/lib/format/intlLocale';
 import type { OutboxItem } from '@/lib/outbox/db';
 import { useOutbox } from '@/lib/outbox/useOutbox';
 import { useMembership } from '@/lib/permissions/useMembership';
@@ -38,7 +39,7 @@ export default function SyncStatusScreen() {
   const [confirmDiscard, setConfirmDiscard] = useState<OutboxItem | null>(null);
 
   const timeFormat = useMemo(
-    () => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }),
+    () => new Intl.DateTimeFormat(intlLocale(locale), { dateStyle: 'medium', timeStyle: 'short' }),
     [locale],
   );
 

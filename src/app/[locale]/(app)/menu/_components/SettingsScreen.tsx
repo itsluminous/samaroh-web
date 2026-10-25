@@ -38,6 +38,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import type { ChangeEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from '@/i18n/navigation';
+import { localeKeySuffix } from '@/i18n/routing';
 import BusinessLogoAvatar from './BusinessLogoAvatar';
 import { highlightSx, useHighlightParam } from '@/lib/hooks/useHighlightParam';
 import {
@@ -81,7 +82,7 @@ export default function SettingsScreen() {
               </ListItemIcon>
               <ListItemText
                 primary={t('settings.language.title')}
-                secondary={locale === 'hi' ? t('settings.language.name_hi') : t('settings.language.name_en')}
+                secondary={t(`settings.language.name_${localeKeySuffix(locale)}`)}
               />
               <ChevronRightIcon color="action" />
             </ListItemButton>

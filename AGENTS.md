@@ -10,7 +10,7 @@ in `docs/decisions.md`.
 ### 1. i18n — NEVER hardcode a user-visible string
 - Every user-visible string comes from the shared catalog
   (`shared/strings/catalog.<locale>.json`) via next-intl.
-- To add a string: add the key to **both** locale files in the `samaroh-shared` repo
+- To add a string: add the key to **all three** locale files (`en`, `hi`, `hi-Latn` = Hinglish) in the `samaroh-shared` repo
   (in your feature's namespace, e.g. `booking.*`), commit there, bump the submodule
   here, then run `npm run gen:i18n`.
 - Generated `messages/*.json` files are **git-ignored** — never edit or commit them.
@@ -19,7 +19,9 @@ in `docs/decisions.md`.
   accessible names such as `aria-label` and Tooltip `title` must still be `t()` values).
 - Locale-aware formatting everywhere; Indian digit grouping for ₹ amounts
   (₹1,06,51,161) via the shared amount-formatting conventions — never raw
-  `toLocaleString()` calls scattered around.
+  `toLocaleString()` calls scattered around. Dates/numbers go through
+  `intlLocale()` / `useAppFormatter()` (`src/lib/format/`) so Hinglish
+  (`hi-Latn`) formats as `en-IN` — never `useFormatter` or `Intl.X(locale)` directly.
 
 ### 2. Legal hygiene — NEVER name third-party reference products
 - Zero references to the third-party products studied as design references — in code,
@@ -50,7 +52,7 @@ in `docs/decisions.md`.
 ## Commands
 | Command | Purpose |
 |---|---|
-| `npm run gen:i18n` | Generate `messages/{en,hi}.json` from the shared catalog |
+| `npm run gen:i18n` | Generate `messages/{en,hi,hi-Latn}.json` from the shared catalog |
 | `npm run gen:help` | Validate `shared/help/guide.json` (shared validator) and copy it + `routes.json` into the git-ignored `src/generated/help/` |
 | `npm run gen` | Both of the above (auto-runs before dev/build/test) |
 | `npm run dev` | Dev server |
@@ -78,7 +80,12 @@ client creation is guarded (`src/lib/supabase/env.ts` returns null → auth feat
 degrade gracefully, middleware skips protection). Never remove that guard.
 
 ## Architecture map
-- `src/i18n/` — next-intl routing (`en`, `hi`; cookie-persisted), request config, navigation helpers.
+- `src/i18n/` — next-intl routing (`en`, `hi`, `hi-Latn` = Hinglish; cookie-persisted), request
+  config, navigation helpers, `pathLocale.ts` (whole-segment locale detection — never
+  `startsWith('hi')`), `localeKeySuffix` (`hi-Latn` → `name_hi_latn` catalog keys).
+- `src/lib/format/` — `amount.ts` (₹, Indian grouping), `intlLocale.ts` (UI locale → Intl
+  locale: `hi-Latn` formats as `en-IN`), `useAppFormatter.ts` (use INSTEAD of next-intl's
+  `useFormatter`). Every `Intl.*` call must go through `intlLocale()`.
 - `src/middleware.ts` — i18n negotiation + Supabase session refresh + route protection
   (public: `/sign-in`; everything else needs a session when Supabase is configured;
   guest cookie passes through).
@@ -171,7 +178,7 @@ No two concurrent agents edit the same directory. Shared components
   directory; pure-logic unit tests may colocate next to their module under
   `src/**/__tests__/`. Don't mix a third convention.
 - **Fragments per namespace**: new string keys go in the shared repo's
-  `strings/fragments/<namespace>.{en,hi}.json` (web-specific keys in the `web-*`
+  `strings/fragments/<namespace>.{en,hi,hi-Latn}.json` (web-specific keys in the `web-*`
   fragments). Never edit another feature's fragment or the base catalog.
 - **Decision log**: web-specific contract interpretations (offline scope, reports
   semantics, guest mode, deploy ordering for shared migrations) are recorded in

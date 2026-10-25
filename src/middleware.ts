@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import createIntlMiddleware from 'next-intl/middleware';
+import { stripLocale, localeOf } from '@/i18n/pathLocale';
 import { routing } from '@/i18n/routing';
 import { GUEST_COOKIE } from '@/lib/guest/guest';
 import { getSupabaseEnv } from '@/lib/supabase/env';
@@ -10,27 +11,6 @@ const handleI18n = createIntlMiddleware(routing);
 
 // Paths (locale-stripped) that are reachable without a session.
 const PUBLIC_PATHS = ['/sign-in'];
-
-function stripLocale(pathname: string): string {
-  for (const locale of routing.locales) {
-    if (pathname === `/${locale}`) {
-      return '/';
-    }
-    if (pathname.startsWith(`/${locale}/`)) {
-      return pathname.slice(locale.length + 1);
-    }
-  }
-  return pathname;
-}
-
-function localeOf(pathname: string): string {
-  for (const locale of routing.locales) {
-    if (pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)) {
-      return locale;
-    }
-  }
-  return routing.defaultLocale;
-}
 
 export default async function middleware(request: NextRequest) {
   // 1. Locale negotiation / redirect / rewrite + NEXT_LOCALE cookie persistence.

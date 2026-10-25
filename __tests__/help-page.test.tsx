@@ -1,6 +1,6 @@
 /**
  * Menu → Help page (Android parity) rendered through the real catalogs:
- *   1. en + hi — title (shared `common.menu.help`), screen titles, task titles
+ *   1. en + hi + hi-Latn — title (shared `common.menu.help`), screen titles, task titles
  *      and numbered steps come out in the UI language; nothing hardcoded.
  *   2. "Show me" per task links to the task's web route (dialog-opening
  *      ?action= for sheet-style tasks); android-only tasks never render;
@@ -19,10 +19,11 @@ import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import theme from '@/theme/theme';
 import en from '../messages/en.json';
 import hi from '../messages/hi.json';
+import hiLatn from '../messages/hi-Latn.json';
 import HelpScreen from '@/app/[locale]/(app)/menu/_components/HelpScreen';
 import MenuHome from '@/app/[locale]/(app)/menu/_components/MenuHome';
 import AppShell from '@/components/AppShell';
-import { HELP_GUIDE, filterGuideForWeb, publicHelpUrl } from '@/lib/help/guide';
+import { HELP_GUIDE, filterGuideForWeb, publicHelpUrl, type HelpLang } from '@/lib/help/guide';
 import { emptyPermissions } from '@/lib/permissions/permissions';
 
 const mockUseMembership = jest.fn();
@@ -69,7 +70,7 @@ function membership(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function withProviders(ui: React.ReactElement, locale: 'en' | 'hi' = 'en', messages: Messages = en) {
+function withProviders(ui: React.ReactElement, locale: HelpLang = 'en', messages: Messages = en) {
   return render(
     <ThemeProvider theme={theme}>
       <NextIntlClientProvider locale={locale} messages={messages}>
@@ -102,6 +103,7 @@ describe('Help page renders the guide in the UI language', () => {
   for (const [locale, messages] of [
     ['en', en],
     ['hi', hi as Messages],
+    ['hi-Latn', hiLatn as Messages],
   ] as const) {
     it(`${locale}: title, every visible screen + task title, numbered steps`, () => {
       withProviders(<HelpScreen title={messages.common.menu.help} />, locale, messages);
@@ -134,9 +136,12 @@ describe('Help page renders the guide in the UI language', () => {
         .map((li) => li.textContent);
       expect(items).toEqual(recordPayment.steps.map((step) => step[locale]));
       expect(within(panel).getByRole('list').tagName).toBe('OL');
-      // No other-language leakage: the hi page never shows the en step text.
-      const other = locale === 'en' ? 'hi' : 'en';
-      expect(items).not.toContain(recordPayment.steps[0]![other]);
+      // No other-language leakage: a page never shows another language's step text.
+      for (const other of HELP_GUIDE.languages as HelpLang[]) {
+        if (other !== locale) {
+          expect(items).not.toContain(recordPayment.steps[0]![other]);
+        }
+      }
     });
   }
 
@@ -264,17 +269,23 @@ describe('entry points', () => {
     });
   }
 
-  it('app shell on the Help page itself: no contextual button, rel=help points at the index', () => {
-    mockPathname = '/menu/help';
-    withProviders(
-      <AppShell>
-        <div />
-      </AppShell>,
-      'hi',
-      hi as Messages,
-    );
-    expect(screen.queryByLabelText(hi.menu.help.for_this_screen)).not.toBeInTheDocument();
-    const link = document.head.querySelector('link[rel="help"]') ?? document.querySelector('link[rel="help"]');
-    expect(link).toHaveAttribute('href', publicHelpUrl('hi', null));
-  });
+  for (const [locale, messages] of [
+    ['hi', hi as Messages],
+    ['hi-Latn', hiLatn as Messages],
+  ] as const) {
+    it(`app shell on the Help page itself (${locale}): no contextual button, rel=help points at the ${locale} index`, () => {
+      mockPathname = '/menu/help';
+      withProviders(
+        <AppShell>
+          <div />
+        </AppShell>,
+        locale,
+        messages,
+      );
+      expect(screen.queryByLabelText(messages.menu.help.for_this_screen)).not.toBeInTheDocument();
+      const link = document.head.querySelector('link[rel="help"]') ?? document.querySelector('link[rel="help"]');
+      expect(link).toHaveAttribute('href', publicHelpUrl(locale, null));
+      expect(link).toHaveAttribute('href', `${HELP_GUIDE.site.baseUrl}${locale}/index.html`);
+    });
+  }
 });

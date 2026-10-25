@@ -36,9 +36,9 @@ function onWeb(platforms?: string[]) {
 }
 
 describe('deepLink resolution over the real guide', () => {
-  it('the copied guide is schema version 1 with en + hi', () => {
+  it('the copied guide is schema version 1 with en + hi + hi-Latn', () => {
     expect(HELP_GUIDE.version).toBe(1);
-    expect(HELP_GUIDE.languages).toEqual(expect.arrayContaining(['en', 'hi']));
+    expect(HELP_GUIDE.languages).toEqual(['en', 'hi', 'hi-Latn']);
     expect(HELP_GUIDE.screens.length).toBeGreaterThan(0);
   });
 

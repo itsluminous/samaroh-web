@@ -16,9 +16,10 @@ import Snackbar from '@mui/material/Snackbar';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
+import { useAppFormatter } from '@/lib/format/useAppFormatter';
 import { useActionParam } from '@/lib/hooks/useActionParam';
 import MaskedAmount, { maskAmount } from '@/components/MaskedAmount';
 import MetadataText from '@/components/MetadataText';
@@ -52,7 +53,7 @@ import RecordTransactionDialog from './RecordTransactionDialog';
 export default function CurrentStockList() {
   const t = useTranslations('inventory');
   const tCommon = useTranslations('common');
-  const format = useFormatter();
+  const format = useAppFormatter();
   const router = useRouter();
   const {
     supabase,
